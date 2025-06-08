@@ -1,0 +1,8 @@
+[package]
+name = "ash-sdl-vulkan-tutorial"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+ash = "0.38.0"
+sdl3 = { version = "0.14.29", features = ["ash"] }
