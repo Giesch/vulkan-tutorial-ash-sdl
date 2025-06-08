@@ -5,4 +5,5 @@ edition = "2024"
 
 [dependencies]
 ash = "0.38.0"
+glam = "0.30.3"
 sdl3 = { version = "0.14.29", features = ["ash"] }

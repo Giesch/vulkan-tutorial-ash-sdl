@@ -2,14 +2,12 @@ use std::time::Duration;
 
 use sdl3::event::Event;
 use sdl3::keyboard::Keycode;
-use sdl3::EventPump;
-
 use sdl3::sys::timer::SDL_DelayPrecise;
+use sdl3::EventPump;
 
 const WINDOW_TITLE: &str = "Basic Window";
 const WINDOW_WIDTH: u32 = 800;
 const WINDOW_HEIGHT: u32 = 600;
-
 const FRAME_DELAY: Duration = Duration::from_millis(15);
 
 type BoxError = Box<dyn std::error::Error>;
@@ -24,7 +22,8 @@ fn main() -> Result<(), BoxError> {
         .position_centered()
         .build()?;
 
-    let mut app = App::default();
+    let mut app = App { quit: false };
+
     let mut event_pump = sdl.event_pump()?;
     loop {
         app.handle_events(&mut event_pump);
@@ -38,7 +37,6 @@ fn main() -> Result<(), BoxError> {
     Ok(())
 }
 
-#[derive(Default, Debug)]
 struct App {
     quit: bool,
 }
