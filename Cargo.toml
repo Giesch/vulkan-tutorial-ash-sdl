@@ -7,3 +7,9 @@ edition = "2024"
 ash = { version = "0.38.0", features = ["linked"] }
 glam = "0.30.3"
 sdl3 = { version = "0.14.29", features = ["ash"] }
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
