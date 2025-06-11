@@ -15,6 +15,8 @@ pub struct Renderer {
     instance: ash::Instance,
     debug_ext: vk::DebugUtilsMessengerEXT,
     debug_loader: ash::ext::debug_utils::Instance,
+    device: ash::Device,
+    queue: vk::Queue,
 }
 
 impl Renderer {
@@ -80,7 +82,10 @@ impl Renderer {
             &debug_create_info,
         );
 
-        let chosen_device = choose_physical_device(&instance)?;
+        let (physical_device, graphics_index) = choose_physical_device(&instance)?;
+        let device = create_logical_device(&instance, physical_device, graphics_index)?;
+
+        let queue = unsafe { device.get_device_queue(graphics_index.0, 0) };
 
         // let surface = window.vulkan_create_surface(instance.handle())?;
 
@@ -89,12 +94,16 @@ impl Renderer {
             instance,
             debug_ext,
             debug_loader,
+            device,
+            queue,
         })
     }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
+        unsafe { self.device.destroy_device(None) };
+
         if ENABLE_VALIDATION {
             unsafe {
                 self.debug_loader
@@ -185,41 +194,41 @@ fn vk_str_bytes(vk_str: &[c_char]) -> Vec<u8> {
         .collect()
 }
 
-struct QueueFamilyIndicies {
-    /// the index of the first queue family that supports graphics
-    graphics_family: Option<u32>,
-}
+#[derive(Clone, Copy)]
+struct GraphicsFamilyIndex(pub u32);
 
-impl QueueFamilyIndicies {
-    fn find(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> Self {
-        let mut indicies = Self {
-            graphics_family: None,
-        };
-
+impl GraphicsFamilyIndex {
+    /// returns the index of the first queue family that supports graphics
+    fn find(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> Option<Self> {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
         for (i, family) in queue_families.iter().enumerate() {
             if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                indicies.graphics_family = Some(i as u32);
-                return indicies;
+                return Some(Self(i as u32));
             }
         }
 
-        indicies
+        None
     }
 }
 
-fn choose_physical_device(instance: &ash::Instance) -> Result<vk::PhysicalDevice, BoxError> {
-    let mut physical_devices: Vec<vk::PhysicalDevice> =
+fn choose_physical_device(
+    instance: &ash::Instance,
+) -> Result<(vk::PhysicalDevice, GraphicsFamilyIndex), BoxError> {
+    let physical_devices: Vec<vk::PhysicalDevice> =
         unsafe { instance.enumerate_physical_devices()? };
 
-    physical_devices.retain(|physical_device| {
-        let indicies = QueueFamilyIndicies::find(&instance, *physical_device);
-        indicies.graphics_family.is_some()
-    });
+    let mut devices_with_indicies: Vec<(vk::PhysicalDevice, GraphicsFamilyIndex)> =
+        physical_devices
+            .into_iter()
+            .filter_map(|pd| {
+                let graphics_index = GraphicsFamilyIndex::find(&instance, pd)?;
+                Some((pd, graphics_index))
+            })
+            .collect();
 
-    physical_devices.sort_by_key(|physical_device| {
+    devices_with_indicies.sort_by_key(|(physical_device, _indicies)| {
         let props: vk::PhysicalDeviceProperties =
             unsafe { instance.get_physical_device_properties(*physical_device) };
 
@@ -233,9 +242,31 @@ fn choose_physical_device(instance: &ash::Instance) -> Result<vk::PhysicalDevice
         }
     });
 
-    let Some(chosen_device) = physical_devices.into_iter().next() else {
+    let Some(chosen_device) = devices_with_indicies.into_iter().next() else {
         return Err("no graphics device availble".into());
     };
 
     Ok(chosen_device)
+}
+
+fn create_logical_device(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    graphics_index: GraphicsFamilyIndex,
+) -> Result<ash::Device, BoxError> {
+    let queue_priorities = [1.0];
+    let queue_create_info = vk::DeviceQueueCreateInfo::default()
+        .queue_family_index(graphics_index.0)
+        .queue_priorities(&queue_priorities);
+
+    let features = vk::PhysicalDeviceFeatures::default();
+
+    let binding = [queue_create_info];
+    let create_info = vk::DeviceCreateInfo::default()
+        .queue_create_infos(&binding)
+        .enabled_features(&features);
+
+    let device = unsafe { instance.create_device(physical_device, &create_info, None)? };
+
+    Ok(device)
 }
