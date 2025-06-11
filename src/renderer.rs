@@ -1,6 +1,9 @@
 use std::ffi::{c_char, CString};
 
-use ash::{vk, Entry};
+use ash::{
+    vk::{self, PhysicalDeviceType},
+    Entry,
+};
 use sdl3::video::Window;
 
 use super::BoxError;
@@ -77,6 +80,8 @@ impl Renderer {
             &debug_create_info,
         );
 
+        let chosen_device = choose_physical_device(&instance)?;
+
         // let surface = window.vulkan_create_surface(instance.handle())?;
 
         Ok(Self {
@@ -151,7 +156,6 @@ fn check_required_extensions(entry: &Entry) -> Result<(), BoxError> {
         required_extensions.push(ash::ext::debug_utils::NAME);
     }
 
-    // checking for available extensions:
     let available_extensions = unsafe { entry.enumerate_instance_extension_properties(None)? };
 
     for required_ext in &required_extensions {
@@ -179,4 +183,59 @@ fn vk_str_bytes(vk_str: &[c_char]) -> Vec<u8> {
         .map(|byte| *byte as u8)
         .take_while(|byte| *byte != b'\0')
         .collect()
+}
+
+struct QueueFamilyIndicies {
+    /// the index of the first queue family that supports graphics
+    graphics_family: Option<u32>,
+}
+
+impl QueueFamilyIndicies {
+    fn find(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> Self {
+        let mut indicies = Self {
+            graphics_family: None,
+        };
+
+        let queue_families =
+            unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
+
+        for (i, family) in queue_families.iter().enumerate() {
+            if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                indicies.graphics_family = Some(i as u32);
+                return indicies;
+            }
+        }
+
+        indicies
+    }
+}
+
+fn choose_physical_device(instance: &ash::Instance) -> Result<vk::PhysicalDevice, BoxError> {
+    let mut physical_devices: Vec<vk::PhysicalDevice> =
+        unsafe { instance.enumerate_physical_devices()? };
+
+    physical_devices.retain(|physical_device| {
+        let indicies = QueueFamilyIndicies::find(&instance, *physical_device);
+        indicies.graphics_family.is_some()
+    });
+
+    physical_devices.sort_by_key(|physical_device| {
+        let props: vk::PhysicalDeviceProperties =
+            unsafe { instance.get_physical_device_properties(*physical_device) };
+
+        match props.device_type {
+            PhysicalDeviceType::DISCRETE_GPU => 0,
+            PhysicalDeviceType::INTEGRATED_GPU => 1,
+            PhysicalDeviceType::VIRTUAL_GPU => 2,
+            PhysicalDeviceType::CPU => 3,
+            PhysicalDeviceType::OTHER => 4,
+            _ => 5,
+        }
+    });
+
+    let Some(chosen_device) = physical_devices.into_iter().next() else {
+        return Err("no graphics device availble".into());
+    };
+
+    Ok(chosen_device)
 }

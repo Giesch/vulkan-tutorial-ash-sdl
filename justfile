@@ -1,3 +1,5 @@
-# run with Pop OS env vars for Nvidia GPU
+check:
+    bacon check-all
+
 run:
-    __GLX_VENDOR_LIBRARY_NAME=nvidia __NV_PRIME_RENDER_OFFLOAD=1 cargo run
+    cargo run
