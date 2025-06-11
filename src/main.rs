@@ -17,6 +17,7 @@ fn main() -> Result<(), BoxError> {
         .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
         .resizable()
         .position_centered()
+        .vulkan()
         .build()?;
 
     let renderer = Renderer::init(&window)?;
