@@ -53,7 +53,7 @@ pub fn maybe_create_debug_messager_extension(
 
     let extension = unsafe {
         loader
-            .create_debug_utils_messenger(&messenger_create_info, None)
+            .create_debug_utils_messenger(messenger_create_info, None)
             .expect("Debug Utils Callback")
     };
 

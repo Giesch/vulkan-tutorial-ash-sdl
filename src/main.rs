@@ -21,6 +21,7 @@ fn main() -> Result<(), BoxError> {
         .build()?;
 
     let renderer = Renderer::init(&window)?;
+
     let mut app = App {
         quit: false,
         renderer,
