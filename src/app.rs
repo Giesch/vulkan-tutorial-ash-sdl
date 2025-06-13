@@ -10,6 +10,7 @@ pub struct App {
 }
 
 impl App {
+    // https://wiki.libsdl.org/SDL3/SDL_EventType
     pub fn handle_events(&mut self, event_pump: &mut EventPump) {
         for event in event_pump.poll_iter() {
             match event {

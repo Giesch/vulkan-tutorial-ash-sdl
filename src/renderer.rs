@@ -8,6 +8,14 @@ use sdl3::video::Window;
 use super::BoxError;
 
 mod debug;
+mod platform;
+
+// TODO replace this with env var
+// https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
+// use separate config option for logging; maybe tracing env vars
+const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
+
+// TODO load all extensions / device extensions at the start
 
 pub struct Renderer {
     entry: ash::Entry,
@@ -18,11 +26,12 @@ pub struct Renderer {
     device: ash::Device,
     graphics_queue: vk::Queue,
     presentation_queue: vk::Queue,
-    swapchain_ext: ash::khr::swapchain::Device,
-    swapchain_image_format: vk::Format,
-    swapchain_extent: vk::Extent2D,
+    swapchain_device_ext: ash::khr::swapchain::Device,
+    image_format: vk::Format,
+    image_extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<vk::Image>,
+    swapchain_image_views: Vec<vk::ImageView>,
 }
 
 impl Renderer {
@@ -52,18 +61,11 @@ impl Renderer {
             enabled_extension_names.push(ash::ext::debug_utils::NAME.as_ptr());
         }
 
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        {
-            use ash::khr;
-            enabled_extension_names.push(khr::portability_enumeration::NAME.as_ptr());
-            enabled_extension_names.push(khr::get_physical_device_properties2::NAME.as_ptr());
+        for platform_instance_ext in platform::ADDITIONAL_INSTANCE_EXTENSIONS {
+            enabled_extension_names.push(platform_instance_ext.as_ptr());
         }
 
-        let create_flags = if cfg!(any(target_os = "macos", target_os = "ios")) {
-            vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR
-        } else {
-            vk::InstanceCreateFlags::default()
-        };
+        let create_flags = platform::instance_create_flags();
 
         let mut enabled_layer_names = vec![];
         for layer_name in get_required_layers() {
@@ -100,17 +102,49 @@ impl Renderer {
         let presentation_queue =
             unsafe { device.get_device_queue(queue_family_indices.presentation, 0) };
 
-        let (swapchain_ext, swapchain, swapchain_image_format, swapchain_extent) =
-            create_swapchain(
-                &instance,
-                &device,
-                window,
-                &surface_ext,
-                surface,
-                physical_device,
-            )?;
+        let CreatedSwapchain {
+            swapchain_device_ext,
+            swapchain,
+            image_format,
+            image_extent,
+        } = create_swapchain(
+            &instance,
+            &device,
+            window,
+            &surface_ext,
+            surface,
+            physical_device,
+        )?;
 
-        let swapchain_images = unsafe { swapchain_ext.get_swapchain_images(swapchain)? };
+        let swapchain_images = unsafe { swapchain_device_ext.get_swapchain_images(swapchain)? };
+
+        let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
+        for image in &swapchain_images {
+            let components = vk::ComponentMapping::default()
+                .r(vk::ComponentSwizzle::IDENTITY)
+                .g(vk::ComponentSwizzle::IDENTITY)
+                .b(vk::ComponentSwizzle::IDENTITY)
+                .a(vk::ComponentSwizzle::IDENTITY);
+
+            let subresource_range = vk::ImageSubresourceRange::default()
+                .aspect_mask(vk::ImageAspectFlags::COLOR)
+                .base_mip_level(0)
+                .level_count(1)
+                .base_array_layer(0)
+                .layer_count(1);
+
+            let create_info = vk::ImageViewCreateInfo::default()
+                .image(*image)
+                .view_type(vk::ImageViewType::TYPE_2D)
+                .format(image_format)
+                .components(components)
+                .subresource_range(subresource_range);
+
+            let image_view = unsafe { device.create_image_view(&create_info, None)? };
+            swapchain_image_views.push(image_view);
+        }
+
+        // TODO create graphics pipeline
 
         Ok(Self {
             entry,
@@ -121,11 +155,12 @@ impl Renderer {
             device,
             graphics_queue,
             presentation_queue,
-            swapchain_ext,
-            swapchain_image_format,
-            swapchain_extent,
+            swapchain_device_ext,
+            image_format,
+            image_extent,
             swapchain,
             swapchain_images,
+            swapchain_image_views,
         })
     }
 }
@@ -133,13 +168,19 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.swapchain_ext.destroy_swapchain(self.swapchain, None);
+            for image_view in &self.swapchain_image_views {
+                self.device.destroy_image_view(*image_view, None);
+            }
+
+            // NOTE this also frees the images
+            self.swapchain_device_ext
+                .destroy_swapchain(self.swapchain, None);
 
             self.device.destroy_device(None);
 
             // NOTE This must be called before dropping the sdl window,
             // which means that the Renderer must be dropped before the window.
-            // That should happen by default, since we require a window in init,
+            // That should happen by default, since Renderer::init requires a window,
             // and rust drops things in reverse order.
             SDL_Vulkan_DestroySurface(self.instance.handle(), self.surface, std::ptr::null());
 
@@ -152,8 +193,6 @@ impl Drop for Renderer {
         }
     }
 }
-
-const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 fn get_required_layers() -> Vec<&'static std::ffi::CStr> {
     if ENABLE_VALIDATION {
@@ -187,19 +226,9 @@ fn check_required_layers(entry: &ash::Entry) -> Result<(), BoxError> {
 }
 
 fn check_required_extensions(entry: &ash::Entry) -> Result<(), BoxError> {
-    let mut required_extensions = vec![ash::khr::surface::NAME];
+    let mut required_extensions = vec![ash::khr::surface::NAME, platform::OS_SURFACE_EXT];
 
-    if cfg!(target_os = "linux") {
-        required_extensions.push(ash::khr::xlib_surface::NAME);
-    }
-    if cfg!(target_os = "macos") {
-        required_extensions.push(ash::mvk::macos_surface::NAME);
-    }
-    if cfg!(target_os = "windows") {
-        required_extensions.push(ash::khr::win32_surface::NAME);
-    }
-
-    if cfg!(debug_assertions) {
+    if ENABLE_VALIDATION {
         required_extensions.push(ash::ext::debug_utils::NAME);
     }
 
@@ -403,6 +432,13 @@ fn choose_swap_extent(window: &Window, capabilities: &vk::SurfaceCapabilitiesKHR
     vk::Extent2D { width, height }
 }
 
+struct CreatedSwapchain {
+    swapchain_device_ext: ash::khr::swapchain::Device,
+    swapchain: vk::SwapchainKHR,
+    image_format: vk::Format,
+    image_extent: vk::Extent2D,
+}
+
 fn create_swapchain(
     instance: &ash::Instance,
     device: &ash::Device,
@@ -410,21 +446,13 @@ fn create_swapchain(
     surface_ext: &ash::khr::surface::Instance,
     surface: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
-) -> Result<
-    (
-        ash::khr::swapchain::Device,
-        vk::SwapchainKHR,
-        vk::Format,
-        vk::Extent2D,
-    ),
-    BoxError,
-> {
+) -> Result<CreatedSwapchain, BoxError> {
     let swapchain_support = SwapChainSupportDetails::query(surface_ext, surface, physical_device)?;
 
     // TODO avoid this unwrap; get this during the empty check
     let surface_format = choose_swap_surface_format(&swapchain_support.formats).unwrap();
     let present_mode = choose_swap_present_mode(&swapchain_support.present_modes);
-    let extent = choose_swap_extent(window, &swapchain_support.capabilities);
+    let image_extent = choose_swap_extent(window, &swapchain_support.capabilities);
 
     // the number of images in the swapchain
     // going too low can result in the application blocking on the GPU
@@ -443,7 +471,7 @@ fn create_swapchain(
         .min_image_count(image_count)
         .image_format(surface_format.format)
         .image_color_space(surface_format.color_space)
-        .image_extent(extent)
+        .image_extent(image_extent)
         .image_array_layers(1) // only not one for stereoscopic 3D (VR?)
         .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT); // this would be a memory op instead, if post-processing
 
@@ -478,12 +506,12 @@ fn create_swapchain(
 
     let swapchain = unsafe { swapchain_device_ext.create_swapchain(&create_info, None)? };
 
-    Ok((
+    Ok(CreatedSwapchain {
         swapchain_device_ext,
         swapchain,
-        surface_format.format,
-        extent,
-    ))
+        image_format: surface_format.format,
+        image_extent,
+    })
 }
 
 fn create_logical_device(
