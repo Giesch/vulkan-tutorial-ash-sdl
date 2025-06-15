@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use ash::vk;
@@ -34,6 +35,7 @@ pub struct Renderer {
     swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
+    render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
 }
 
@@ -147,7 +149,7 @@ impl Renderer {
             swapchain_image_views.push(image_view);
         }
 
-        // TODO create graphics pipeline
+        let render_pass = create_render_pass(&device, image_format)?;
 
         let pipeline_layout = create_graphics_pipeline(&device)?;
 
@@ -166,6 +168,7 @@ impl Renderer {
             swapchain,
             swapchain_images,
             swapchain_image_views,
+            render_pass,
             pipeline_layout,
         })
     }
@@ -174,6 +177,10 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
+
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
 
@@ -588,6 +595,40 @@ impl SwapChainSupportDetails {
     }
 }
 
+fn create_render_pass(
+    device: &ash::Device,
+    swapchain_format: vk::Format,
+) -> Result<vk::RenderPass, BoxError> {
+    let color_attachment = vk::AttachmentDescription::default()
+        .format(swapchain_format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+    let attachments = [color_attachment];
+
+    let color_attachment_ref = vk::AttachmentReference::default()
+        .attachment(0)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+    let attachment_refs = [color_attachment_ref];
+
+    let subpass = vk::SubpassDescription::default()
+        .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
+        // NOTE the index in this array is the one referred to by
+        // 'layout(location = 0) out' in the frag shader
+        .color_attachments(&attachment_refs);
+    let subpasses = [subpass];
+
+    let render_pass_create_info = vk::RenderPassCreateInfo::default()
+        .attachments(&attachments)
+        .subpasses(&subpasses);
+
+    let render_pass = unsafe { device.create_render_pass(&render_pass_create_info, None)? };
+
+    Ok(render_pass)
+}
+
 fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
     let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
     let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
@@ -647,6 +688,8 @@ fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, 
 
     let pipeline_layout = vk::PipelineLayout::default();
 
+    // TODO
+
     unsafe { device.destroy_shader_module(frag_shader, None) };
     unsafe { device.destroy_shader_module(vert_shader, None) };
 
@@ -664,7 +707,7 @@ fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
     .iter()
     .collect();
 
-    let mut spv_file = File::open(&shader_path)?;
+    let mut spv_file = BufReader::new(File::open(&shader_path)?);
     let vk_bytes = ash::util::read_spv(&mut spv_file)?;
 
     Ok(vk_bytes)
