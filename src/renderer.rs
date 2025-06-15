@@ -39,6 +39,8 @@ pub struct Renderer {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
+    command_pool: vk::CommandPool,
+    command_buffer: vk::CommandBuffer,
 }
 
 impl Renderer {
@@ -158,6 +160,9 @@ impl Renderer {
         let swapchain_framebuffers =
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
 
+        let command_pool = create_command_pool(&device, &queue_family_indices)?;
+        let command_buffer = create_command_buffer(&device, command_pool)?;
+
         Ok(Self {
             entry,
             instance,
@@ -177,13 +182,87 @@ impl Renderer {
             pipeline_layout,
             pipeline,
             swapchain_framebuffers,
+            command_pool,
+            command_buffer,
         })
+    }
+
+    fn record_command_buffer(&mut self, image_index: usize) -> Result<(), BoxError> {
+        let begin_info = vk::CommandBufferBeginInfo::default();
+        unsafe {
+            self.device
+                .begin_command_buffer(self.command_buffer, &begin_info)?;
+        }
+
+        let framebuffer = self.swapchain_framebuffers[image_index];
+        let render_area = vk::Rect2D::default()
+            .offset(vk::Offset2D::default())
+            .extent(self.image_extent);
+        let clear_color = vk::ClearValue {
+            color: vk::ClearColorValue {
+                float32: [0.0, 0.0, 0.0, 1.0],
+            },
+        };
+        let clear_values = [clear_color];
+        let render_pass_begin = vk::RenderPassBeginInfo::default()
+            .render_pass(self.render_pass)
+            .framebuffer(framebuffer)
+            .render_area(render_area)
+            .clear_values(&clear_values);
+
+        unsafe {
+            self.device.cmd_begin_render_pass(
+                self.command_buffer,
+                &render_pass_begin,
+                vk::SubpassContents::INLINE,
+            );
+        }
+
+        unsafe {
+            self.device.cmd_bind_pipeline(
+                self.command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline,
+            );
+        }
+
+        let viewport = vk::Viewport::default()
+            .x(0.0)
+            .y(0.0)
+            .width(self.image_extent.width as f32)
+            .height(self.image_extent.height as f32)
+            .min_depth(0.0)
+            .max_depth(1.0);
+        let viewports = [viewport];
+        unsafe {
+            self.device
+                .cmd_set_viewport(self.command_buffer, 0, &viewports);
+        }
+
+        let scissor = vk::Rect2D::default()
+            .offset(vk::Offset2D::default())
+            .extent(self.image_extent);
+        let scissors = [scissor];
+        unsafe {
+            self.device
+                .cmd_set_scissor(self.command_buffer, 0, &scissors);
+        }
+
+        unsafe { self.device.cmd_draw(self.command_buffer, 3, 1, 0, 0) };
+
+        unsafe { self.device.cmd_end_render_pass(self.command_buffer) };
+
+        unsafe { self.device.end_command_buffer(self.command_buffer)? };
+
+        Ok(())
     }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_command_pool(self.command_pool, None);
+
             for framebuffer in &self.swapchain_framebuffers {
                 self.device.destroy_framebuffer(*framebuffer, None);
             }
@@ -639,6 +718,23 @@ fn create_render_pass(
     Ok(render_pass)
 }
 
+/// usage: read_shader_spv("triangle.vert.spv");
+fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
+    let shader_path: PathBuf = [
+        std::env!("CARGO_MANIFEST_DIR"),
+        "shaders",
+        "compiled",
+        shader_name,
+    ]
+    .iter()
+    .collect();
+
+    let mut spv_file = BufReader::new(File::open(&shader_path)?);
+    let vk_bytes = ash::util::read_spv(&mut spv_file)?;
+
+    Ok(vk_bytes)
+}
+
 fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
@@ -757,19 +853,29 @@ fn create_framebuffers(
     Ok(framebuffers)
 }
 
-/// usage: read_shader_spv("triangle.vert.spv");
-fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
-    let shader_path: PathBuf = [
-        std::env!("CARGO_MANIFEST_DIR"),
-        "shaders",
-        "compiled",
-        shader_name,
-    ]
-    .iter()
-    .collect();
+fn create_command_pool(
+    device: &ash::Device,
+    queue_family_indicies: &QueueFamilyIndices,
+) -> Result<vk::CommandPool, BoxError> {
+    let pool_info = vk::CommandPoolCreateInfo::default()
+        .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
+        .queue_family_index(queue_family_indicies.graphics);
 
-    let mut spv_file = BufReader::new(File::open(&shader_path)?);
-    let vk_bytes = ash::util::read_spv(&mut spv_file)?;
+    let command_pool = unsafe { device.create_command_pool(&pool_info, None)? };
 
-    Ok(vk_bytes)
+    Ok(command_pool)
+}
+
+fn create_command_buffer(
+    device: &ash::Device,
+    command_pool: vk::CommandPool,
+) -> Result<vk::CommandBuffer, BoxError> {
+    let alloc_info = vk::CommandBufferAllocateInfo::default()
+        .command_pool(command_pool)
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_buffer_count(1);
+
+    let buffers = unsafe { device.allocate_command_buffers(&alloc_info)? };
+
+    Ok(buffers[0])
 }
