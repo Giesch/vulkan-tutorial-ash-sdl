@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 use std::ffi::{c_char, CStr, CString};
+use std::fs::File;
+use std::path::PathBuf;
 
-use ash::vk::{self};
+use ash::vk;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
@@ -32,6 +34,7 @@ pub struct Renderer {
     swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
+    pipeline_layout: vk::PipelineLayout,
 }
 
 impl Renderer {
@@ -146,8 +149,7 @@ impl Renderer {
 
         // TODO create graphics pipeline
 
-        let vert_shader_code = include_bytes!("../shaders/compiled/triangle.vert.spv");
-        let frag_shader_code = include_bytes!("../shaders/compiled/triangle.frag.spv");
+        let pipeline_layout = create_graphics_pipeline(&device)?;
 
         Ok(Self {
             entry,
@@ -164,6 +166,7 @@ impl Renderer {
             swapchain,
             swapchain_images,
             swapchain_image_views,
+            pipeline_layout,
         })
     }
 }
@@ -171,6 +174,9 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.device
+                .destroy_pipeline_layout(self.pipeline_layout, None);
+
             for image_view in &self.swapchain_image_views {
                 self.device.destroy_image_view(*image_view, None);
             }
@@ -580,4 +586,86 @@ impl SwapChainSupportDetails {
             present_modes,
         })
     }
+}
+
+fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
+    let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
+    let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
+
+    let vert_create_info = vk::ShaderModuleCreateInfo::default().code(&vert_shader_spv);
+    let frag_create_info = vk::ShaderModuleCreateInfo::default().code(&frag_shader_spv);
+
+    let vert_shader = unsafe { device.create_shader_module(&vert_create_info, None)? };
+    let frag_shader = unsafe { device.create_shader_module(&frag_create_info, None)? };
+
+    let vert_create_info = vk::PipelineShaderStageCreateInfo::default()
+        .stage(vk::ShaderStageFlags::VERTEX)
+        .module(vert_shader)
+        .name(c"main");
+    let frag_create_info = vk::PipelineShaderStageCreateInfo::default()
+        .stage(vk::ShaderStageFlags::FRAGMENT)
+        .module(frag_shader)
+        .name(c"main");
+    let shader_stages = [vert_create_info, frag_create_info];
+
+    let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
+    let dynamic_state_create_info =
+        vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
+
+    let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
+
+    let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+        .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
+        .primitive_restart_enable(false);
+
+    // relying on dynamic state to fill these in during draw
+    let mut viewport_state = vk::PipelineViewportStateCreateInfo::default();
+    viewport_state.viewport_count = 1;
+    viewport_state.scissor_count = 1;
+
+    let rasterizer_state = vk::PipelineRasterizationStateCreateInfo::default()
+        .depth_clamp_enable(false)
+        .rasterizer_discard_enable(false)
+        .polygon_mode(vk::PolygonMode::FILL)
+        .line_width(1.0)
+        .cull_mode(vk::CullModeFlags::BACK)
+        .front_face(vk::FrontFace::CLOCKWISE)
+        .depth_bias_enable(false);
+
+    let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
+        .sample_shading_enable(false)
+        .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+
+    // color blend per attached framebuffer
+    let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
+        .blend_enable(false)
+        .color_write_mask(vk::ColorComponentFlags::RGBA);
+    // global color blending
+    let color_blend_create_info = vk::PipelineColorBlendStateCreateInfo::default()
+        .logic_op_enable(false)
+        .attachments(&[color_blend_attachment]);
+
+    let pipeline_layout = vk::PipelineLayout::default();
+
+    unsafe { device.destroy_shader_module(frag_shader, None) };
+    unsafe { device.destroy_shader_module(vert_shader, None) };
+
+    Ok(pipeline_layout)
+}
+
+/// usage: read_shader_spv("triangle.vert.spv");
+fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
+    let shader_path: PathBuf = [
+        std::env!("CARGO_MANIFEST_DIR"),
+        "shaders",
+        "compiled",
+        shader_name,
+    ]
+    .iter()
+    .collect();
+
+    let mut spv_file = File::open(&shader_path)?;
+    let vk_bytes = ash::util::read_spv(&mut spv_file)?;
+
+    Ok(vk_bytes)
 }

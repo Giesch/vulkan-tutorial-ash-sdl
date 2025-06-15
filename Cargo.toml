@@ -2,6 +2,7 @@
 name = "ash-sdl-vulkan-tutorial"
 version = "0.1.0"
 edition = "2024"
+default-run = "ash-sdl-vulkan-tutorial"
 
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"] }
