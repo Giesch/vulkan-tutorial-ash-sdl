@@ -146,6 +146,9 @@ impl Renderer {
 
         // TODO create graphics pipeline
 
+        let vert_shader_code = include_bytes!("../shaders/compiled/triangle.vert.spv");
+        let frag_shader_code = include_bytes!("../shaders/compiled/triangle.frag.spv");
+
         Ok(Self {
             entry,
             instance,
