@@ -18,7 +18,7 @@ mod platform;
 // use separate config option for logging; maybe tracing env vars
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
-// TODO load all extensions / device extensions at the start
+// TODO load all extensions / device extensions at the start (if possible?)
 
 pub struct Renderer {
     entry: ash::Entry,
@@ -38,6 +38,7 @@ pub struct Renderer {
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
+    swapchain_framebuffers: Vec<vk::Framebuffer>,
 }
 
 impl Renderer {
@@ -154,6 +155,9 @@ impl Renderer {
 
         let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, render_pass)?;
 
+        let swapchain_framebuffers =
+            create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
+
         Ok(Self {
             entry,
             instance,
@@ -172,6 +176,7 @@ impl Renderer {
             render_pass,
             pipeline_layout,
             pipeline,
+            swapchain_framebuffers,
         })
     }
 }
@@ -179,6 +184,10 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            for framebuffer in &self.swapchain_framebuffers {
+                self.device.destroy_framebuffer(*framebuffer, None);
+            }
+
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
@@ -720,6 +729,32 @@ fn create_graphics_pipeline(
     unsafe { device.destroy_shader_module(vert_shader, None) };
 
     Ok((pipeline_layout, graphics_pipeline))
+}
+
+fn create_framebuffers(
+    device: &ash::Device,
+    render_pass: vk::RenderPass,
+    swapchain_image_views: &[vk::ImageView],
+    image_extent: vk::Extent2D,
+) -> Result<Vec<vk::Framebuffer>, BoxError> {
+    let mut framebuffers = Vec::with_capacity(swapchain_image_views.len());
+
+    for image_view in swapchain_image_views {
+        let attachments = [*image_view];
+
+        let framebuffer_info = vk::FramebufferCreateInfo::default()
+            .render_pass(render_pass)
+            .attachments(&attachments)
+            .width(image_extent.width)
+            .height(image_extent.height)
+            .layers(1);
+
+        let framebuffer = unsafe { device.create_framebuffer(&framebuffer_info, None)? };
+
+        framebuffers.push(framebuffer);
+    }
+
+    Ok(framebuffers)
 }
 
 /// usage: read_shader_spv("triangle.vert.spv");
