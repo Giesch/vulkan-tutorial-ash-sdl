@@ -37,6 +37,7 @@ pub struct Renderer {
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
     pipeline_layout: vk::PipelineLayout,
+    pipeline: vk::Pipeline,
 }
 
 impl Renderer {
@@ -151,7 +152,7 @@ impl Renderer {
 
         let render_pass = create_render_pass(&device, image_format)?;
 
-        let pipeline_layout = create_graphics_pipeline(&device)?;
+        let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, render_pass)?;
 
         Ok(Self {
             entry,
@@ -170,6 +171,7 @@ impl Renderer {
             swapchain_image_views,
             render_pass,
             pipeline_layout,
+            pipeline,
         })
     }
 }
@@ -177,12 +179,11 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
-            self.device.destroy_render_pass(self.render_pass, None);
 
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device.destroy_render_pass(self.render_pass, None);
 
             for image_view in &self.swapchain_image_views {
                 self.device.destroy_image_view(*image_view, None);
@@ -629,7 +630,10 @@ fn create_render_pass(
     Ok(render_pass)
 }
 
-fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
+fn create_graphics_pipeline(
+    device: &ash::Device,
+    render_pass: vk::RenderPass,
+) -> Result<(vk::PipelineLayout, vk::Pipeline), BoxError> {
     let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
     let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
 
@@ -647,15 +651,15 @@ fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, 
         .stage(vk::ShaderStageFlags::FRAGMENT)
         .module(frag_shader)
         .name(c"main");
-    let shader_stages = [vert_create_info, frag_create_info];
+    let stages = [vert_create_info, frag_create_info];
 
     let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
-    let dynamic_state_create_info =
+    let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    let vertex_input = vk::PipelineVertexInputStateCreateInfo::default();
+    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default();
 
-    let input_assembly = vk::PipelineInputAssemblyStateCreateInfo::default()
+    let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
         .primitive_restart_enable(false);
 
@@ -664,7 +668,7 @@ fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, 
     viewport_state.viewport_count = 1;
     viewport_state.scissor_count = 1;
 
-    let rasterizer_state = vk::PipelineRasterizationStateCreateInfo::default()
+    let rasterization_state = vk::PipelineRasterizationStateCreateInfo::default()
         .depth_clamp_enable(false)
         .rasterizer_discard_enable(false)
         .polygon_mode(vk::PolygonMode::FILL)
@@ -673,7 +677,7 @@ fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, 
         .front_face(vk::FrontFace::CLOCKWISE)
         .depth_bias_enable(false);
 
-    let multisampling = vk::PipelineMultisampleStateCreateInfo::default()
+    let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
         .sample_shading_enable(false)
         .rasterization_samples(vk::SampleCountFlags::TYPE_1);
 
@@ -681,19 +685,41 @@ fn create_graphics_pipeline(device: &ash::Device) -> Result<vk::PipelineLayout, 
     let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
         .blend_enable(false)
         .color_write_mask(vk::ColorComponentFlags::RGBA);
+    let color_attachments = [color_blend_attachment];
     // global color blending
-    let color_blend_create_info = vk::PipelineColorBlendStateCreateInfo::default()
+    let color_blend_state = vk::PipelineColorBlendStateCreateInfo::default()
         .logic_op_enable(false)
-        .attachments(&[color_blend_attachment]);
+        .attachments(&color_attachments);
 
-    let pipeline_layout = vk::PipelineLayout::default();
+    // handle not struct; to be used later
+    let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::default();
+    let pipeline_layout =
+        unsafe { device.create_pipeline_layout(&pipeline_layout_create_info, None)? };
 
-    // TODO
+    let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
+        .stages(&stages)
+        .vertex_input_state(&vertex_input_state)
+        .input_assembly_state(&input_assembly_state)
+        .viewport_state(&viewport_state)
+        .rasterization_state(&rasterization_state)
+        .multisample_state(&multisample_state)
+        .color_blend_state(&color_blend_state)
+        .dynamic_state(&dynamic_state)
+        .layout(pipeline_layout)
+        .render_pass(render_pass)
+        .subpass(0);
+
+    let graphics_pipelines = unsafe {
+        device
+            .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
+            .map_err(|e| format!("failed to create graphics pipelines: {e:?}"))?
+    };
+    let graphics_pipeline = graphics_pipelines[0];
 
     unsafe { device.destroy_shader_module(frag_shader, None) };
     unsafe { device.destroy_shader_module(vert_shader, None) };
 
-    Ok(pipeline_layout)
+    Ok((pipeline_layout, graphics_pipeline))
 }
 
 /// usage: read_shader_spv("triangle.vert.spv");
