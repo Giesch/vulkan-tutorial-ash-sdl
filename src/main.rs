@@ -15,7 +15,6 @@ fn main() -> Result<(), BoxError> {
 
     let window = video_subsystem
         .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
-        .resizable()
         .position_centered()
         .vulkan()
         .build()?;
@@ -38,6 +37,8 @@ fn main() -> Result<(), BoxError> {
 
         unsafe { SDL_DelayPrecise(FRAME_DELAY.as_nanos() as u64) };
     }
+
+    app.renderer.drain_gpu()?;
 
     Ok(())
 }

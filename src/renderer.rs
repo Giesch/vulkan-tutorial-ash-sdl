@@ -18,6 +18,8 @@ mod platform;
 // use separate config option for logging; maybe tracing env vars
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
+const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
 // TODO load all extensions / device extensions at the start (if possible?)
 
 pub struct Renderer {
@@ -40,10 +42,14 @@ pub struct Renderer {
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     command_pool: vk::CommandPool,
-    command_buffer: vk::CommandBuffer,
-    image_available: vk::Semaphore,
-    render_finished: vk::Semaphore,
-    frame_in_flight: vk::Fence,
+    command_buffers: Vec<vk::CommandBuffer>,
+    /// image semaphores indexed by current_frame
+    image_available: Vec<vk::Semaphore>,
+    /// render finished semaphores indexed by image_index
+    render_finished: Vec<vk::Semaphore>,
+    /// frame fences indexed by current frame
+    frames_in_flight: Vec<vk::Fence>,
+    current_frame: usize,
 }
 
 impl Renderer {
@@ -164,13 +170,10 @@ impl Renderer {
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
-        let command_buffer = create_command_buffer(&device, command_pool)?;
+        let command_buffers = create_command_buffers(&device, command_pool)?;
 
-        let image_available = unsafe { device.create_semaphore(&Default::default(), None)? };
-        let render_finished = unsafe { device.create_semaphore(&Default::default(), None)? };
-        let fence_create_info =
-            vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
-        let in_flight = unsafe { device.create_fence(&fence_create_info, None)? };
+        let (image_available, render_finished, frames_in_flight) =
+            create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
             entry,
@@ -192,18 +195,21 @@ impl Renderer {
             pipeline,
             swapchain_framebuffers,
             command_pool,
-            command_buffer,
+            command_buffers,
             image_available,
             render_finished,
-            frame_in_flight: in_flight,
+            frames_in_flight,
+            current_frame: 0,
         })
     }
 
     fn record_command_buffer(&mut self, image_index: u32) -> Result<(), BoxError> {
+        let command_buffer = self.command_buffers[self.current_frame];
+
         let begin_info = vk::CommandBufferBeginInfo::default();
         unsafe {
             self.device
-                .begin_command_buffer(self.command_buffer, &begin_info)?;
+                .begin_command_buffer(command_buffer, &begin_info)?;
         }
 
         let framebuffer = self.swapchain_framebuffers[image_index as usize];
@@ -224,7 +230,7 @@ impl Renderer {
 
         unsafe {
             self.device.cmd_begin_render_pass(
-                self.command_buffer,
+                command_buffer,
                 &render_pass_begin,
                 vk::SubpassContents::INLINE,
             );
@@ -232,7 +238,7 @@ impl Renderer {
 
         unsafe {
             self.device.cmd_bind_pipeline(
-                self.command_buffer,
+                command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
                 self.pipeline,
             );
@@ -247,30 +253,28 @@ impl Renderer {
             .max_depth(1.0);
         let viewports = [viewport];
         unsafe {
-            self.device
-                .cmd_set_viewport(self.command_buffer, 0, &viewports);
+            self.device.cmd_set_viewport(command_buffer, 0, &viewports);
         }
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(self.image_extent);
         let scissors = [scissor];
-        unsafe {
-            self.device
-                .cmd_set_scissor(self.command_buffer, 0, &scissors);
-        }
+        unsafe { self.device.cmd_set_scissor(command_buffer, 0, &scissors) };
 
-        unsafe { self.device.cmd_draw(self.command_buffer, 3, 1, 0, 0) };
+        unsafe { self.device.cmd_draw(command_buffer, 3, 1, 0, 0) };
 
-        unsafe { self.device.cmd_end_render_pass(self.command_buffer) };
+        unsafe { self.device.cmd_end_render_pass(command_buffer) };
 
-        unsafe { self.device.end_command_buffer(self.command_buffer)? };
+        unsafe { self.device.end_command_buffer(command_buffer)? };
 
         Ok(())
     }
 
     pub fn draw_frame(&mut self) -> Result<(), BoxError> {
-        let fences = [self.frame_in_flight];
+        let command_buffer = self.command_buffers[self.current_frame];
+
+        let fences = [self.frames_in_flight[self.current_frame]];
         unsafe { self.device.wait_for_fences(&fences, true, u64::MAX)? };
         unsafe { self.device.reset_fences(&fences)? };
 
@@ -278,29 +282,33 @@ impl Renderer {
             self.swapchain_device_ext.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
-                self.image_available,
+                // FIXME need to know the current frame index or current image index
+                self.image_available[self.current_frame],
                 vk::Fence::null(),
             )?
         };
 
         unsafe {
             self.device
-                .reset_command_buffer(self.command_buffer, Default::default())?;
+                .reset_command_buffer(command_buffer, Default::default())?;
         }
         self.record_command_buffer(image_index)?;
 
-        let wait_semaphores = [self.image_available];
+        let wait_semaphores = [self.image_available[self.current_frame]];
         let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let command_buffers = [self.command_buffer];
-        let signal_semaphores = [self.render_finished];
+        let signal_semaphores = [self.render_finished[image_index as usize]];
+        let submit_command_buffers = [command_buffer];
         let submit_info = vk::SubmitInfo::default()
             .wait_semaphores(&wait_semaphores)
             .wait_dst_stage_mask(&wait_dst_stage_mask)
-            .command_buffers(&command_buffers)
+            .command_buffers(&submit_command_buffers)
             .signal_semaphores(&signal_semaphores);
         unsafe {
-            self.device
-                .queue_submit(self.graphics_queue, &[submit_info], self.frame_in_flight)?;
+            self.device.queue_submit(
+                self.graphics_queue,
+                &[submit_info],
+                self.frames_in_flight[self.current_frame],
+            )?;
         }
 
         let swapchains = [self.swapchain];
@@ -314,6 +322,13 @@ impl Renderer {
                 .queue_present(self.presentation_queue, &present_info)?;
         }
 
+        self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        Ok(())
+    }
+
+    pub fn drain_gpu(self) -> Result<(), BoxError> {
+        unsafe { self.device.device_wait_idle()? };
         Ok(())
     }
 }
@@ -321,9 +336,15 @@ impl Renderer {
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
-            self.device.destroy_fence(self.frame_in_flight, None);
-            self.device.destroy_semaphore(self.render_finished, None);
-            self.device.destroy_semaphore(self.image_available, None);
+            for fence in &self.frames_in_flight {
+                self.device.destroy_fence(*fence, None);
+            }
+            for semaphore in &self.render_finished {
+                self.device.destroy_semaphore(*semaphore, None);
+            }
+            for semaphore in &self.image_available {
+                self.device.destroy_semaphore(*semaphore, None);
+            }
 
             self.device.destroy_command_pool(self.command_pool, None);
 
@@ -779,6 +800,7 @@ fn create_render_pass(
     let subpass_dep = vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .dst_subpass(0)
+        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
         .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
         .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
     let dependencies = [subpass_dep];
@@ -941,16 +963,43 @@ fn create_command_pool(
     Ok(command_pool)
 }
 
-fn create_command_buffer(
+fn create_command_buffers(
     device: &ash::Device,
     command_pool: vk::CommandPool,
-) -> Result<vk::CommandBuffer, BoxError> {
+) -> Result<Vec<vk::CommandBuffer>, BoxError> {
     let alloc_info = vk::CommandBufferAllocateInfo::default()
         .command_pool(command_pool)
         .level(vk::CommandBufferLevel::PRIMARY)
-        .command_buffer_count(1);
+        .command_buffer_count(MAX_FRAMES_IN_FLIGHT as u32);
 
     let buffers = unsafe { device.allocate_command_buffers(&alloc_info)? };
 
-    Ok(buffers[0])
+    Ok(buffers)
+}
+
+fn create_sync_objects(
+    device: &ash::Device,
+    swapchain_images: &[vk::Image],
+) -> Result<(Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>), BoxError> {
+    let mut image_available = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+    for _frame in 0..MAX_FRAMES_IN_FLIGHT {
+        let semaphore = unsafe { device.create_semaphore(&Default::default(), None)? };
+        image_available.push(semaphore);
+    }
+
+    let mut render_finished = Vec::with_capacity(swapchain_images.len());
+    for _image in swapchain_images {
+        let semaphore = unsafe { device.create_semaphore(&Default::default(), None)? };
+        render_finished.push(semaphore);
+    }
+
+    let mut frames_in_flight = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+    for _frame in 0..MAX_FRAMES_IN_FLIGHT {
+        let fence_create_info =
+            vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+        let fence = unsafe { device.create_fence(&fence_create_info, None)? };
+        frames_in_flight.push(fence);
+    }
+
+    Ok((image_available, render_finished, frames_in_flight))
 }
