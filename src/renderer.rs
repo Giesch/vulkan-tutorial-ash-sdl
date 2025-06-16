@@ -41,6 +41,9 @@ pub struct Renderer {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     command_pool: vk::CommandPool,
     command_buffer: vk::CommandBuffer,
+    image_available: vk::Semaphore,
+    render_finished: vk::Semaphore,
+    frame_in_flight: vk::Fence,
 }
 
 impl Renderer {
@@ -163,6 +166,12 @@ impl Renderer {
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffer = create_command_buffer(&device, command_pool)?;
 
+        let image_available = unsafe { device.create_semaphore(&Default::default(), None)? };
+        let render_finished = unsafe { device.create_semaphore(&Default::default(), None)? };
+        let fence_create_info =
+            vk::FenceCreateInfo::default().flags(vk::FenceCreateFlags::SIGNALED);
+        let in_flight = unsafe { device.create_fence(&fence_create_info, None)? };
+
         Ok(Self {
             entry,
             instance,
@@ -184,17 +193,20 @@ impl Renderer {
             swapchain_framebuffers,
             command_pool,
             command_buffer,
+            image_available,
+            render_finished,
+            frame_in_flight: in_flight,
         })
     }
 
-    fn record_command_buffer(&mut self, image_index: usize) -> Result<(), BoxError> {
+    fn record_command_buffer(&mut self, image_index: u32) -> Result<(), BoxError> {
         let begin_info = vk::CommandBufferBeginInfo::default();
         unsafe {
             self.device
                 .begin_command_buffer(self.command_buffer, &begin_info)?;
         }
 
-        let framebuffer = self.swapchain_framebuffers[image_index];
+        let framebuffer = self.swapchain_framebuffers[image_index as usize];
         let render_area = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
             .extent(self.image_extent);
@@ -256,11 +268,63 @@ impl Renderer {
 
         Ok(())
     }
+
+    pub fn draw_frame(&mut self) -> Result<(), BoxError> {
+        let fences = [self.frame_in_flight];
+        unsafe { self.device.wait_for_fences(&fences, true, u64::MAX)? };
+        unsafe { self.device.reset_fences(&fences)? };
+
+        let (image_index, _suboptimal) = unsafe {
+            self.swapchain_device_ext.acquire_next_image(
+                self.swapchain,
+                u64::MAX,
+                self.image_available,
+                vk::Fence::null(),
+            )?
+        };
+
+        unsafe {
+            self.device
+                .reset_command_buffer(self.command_buffer, Default::default())?;
+        }
+        self.record_command_buffer(image_index)?;
+
+        let wait_semaphores = [self.image_available];
+        let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let command_buffers = [self.command_buffer];
+        let signal_semaphores = [self.render_finished];
+        let submit_info = vk::SubmitInfo::default()
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_dst_stage_mask)
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&signal_semaphores);
+        unsafe {
+            self.device
+                .queue_submit(self.graphics_queue, &[submit_info], self.frame_in_flight)?;
+        }
+
+        let swapchains = [self.swapchain];
+        let image_indices = [image_index];
+        let present_info = vk::PresentInfoKHR::default()
+            .wait_semaphores(&signal_semaphores)
+            .swapchains(&swapchains)
+            .image_indices(&image_indices);
+        unsafe {
+            self.swapchain_device_ext
+                .queue_present(self.presentation_queue, &present_info)?;
+        }
+
+        Ok(())
+    }
 }
 
 impl Drop for Renderer {
     fn drop(&mut self) {
         unsafe {
+            self.device.destroy_fence(self.frame_in_flight, None);
+            self.device.destroy_semaphore(self.render_finished, None);
+            self.device.destroy_semaphore(self.image_available, None);
+
             self.device.destroy_command_pool(self.command_pool, None);
 
             for framebuffer in &self.swapchain_framebuffers {
@@ -709,9 +773,20 @@ fn create_render_pass(
         .color_attachments(&attachment_refs);
     let subpasses = [subpass];
 
+    // NOTE an alternative to doing this would be to
+    // change the wait stages of image_available to include TOP_OF_PIPE
+    // https://vulkan-tutorial.com/en/Drawing_a_triangle/Drawing/Rendering_and_presentation
+    let subpass_dep = vk::SubpassDependency::default()
+        .src_subpass(vk::SUBPASS_EXTERNAL)
+        .dst_subpass(0)
+        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
+        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
+    let dependencies = [subpass_dep];
+
     let render_pass_create_info = vk::RenderPassCreateInfo::default()
         .attachments(&attachments)
-        .subpasses(&subpasses);
+        .subpasses(&subpasses)
+        .dependencies(&dependencies);
 
     let render_pass = unsafe { device.create_render_pass(&render_pass_create_info, None)? };
 

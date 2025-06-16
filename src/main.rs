@@ -34,6 +34,8 @@ fn main() -> Result<(), BoxError> {
             break;
         }
 
+        app.renderer.draw_frame()?;
+
         unsafe { SDL_DelayPrecise(FRAME_DELAY.as_nanos() as u64) };
     }
 
