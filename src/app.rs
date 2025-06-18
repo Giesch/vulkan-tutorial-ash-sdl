@@ -2,7 +2,7 @@ use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::EventPump;
 
-use crate::Renderer;
+use crate::{BoxError, Renderer};
 
 pub struct App {
     pub quit: bool,
@@ -11,7 +11,7 @@ pub struct App {
 
 impl App {
     // https://wiki.libsdl.org/SDL3/SDL_EventType
-    pub fn handle_events(&mut self, event_pump: &mut EventPump) {
+    pub fn handle_events(&mut self, event_pump: &mut EventPump) -> Result<(), BoxError> {
         for event in event_pump.poll_iter() {
             match event {
                 Event::Quit { .. }
@@ -20,7 +20,7 @@ impl App {
                     ..
                 } => {
                     self.quit = true;
-                    return;
+                    return Ok(());
                 }
 
                 Event::Window { win_event, .. } => match win_event {
@@ -28,8 +28,9 @@ impl App {
                         // Window has been exposed and should be redrawn,
                         // and can be redrawn directly from event watchers for this event
                     }
-                    WindowEvent::Resized(_, _) => {
-                        // vulkan: invalidate swapchain
+                    WindowEvent::Resized(_new_width, _new_height) => {
+                        // we take the new dimensions off the renderer's window ref
+                        self.renderer.recreate_swapchain()?;
                     }
                     WindowEvent::PixelSizeChanged(_, _) => {
                         // vulkan: update display scale
@@ -67,5 +68,7 @@ impl App {
                 _ => {}
             }
         }
+
+        Ok(())
     }
 }

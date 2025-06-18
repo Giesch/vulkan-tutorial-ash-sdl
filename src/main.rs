@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use sdl3::sys::timer::SDL_DelayPrecise;
+use sdl3::{sys::timer::SDL_DelayPrecise, EventPump};
 
 use ash_sdl_vulkan_tutorial::*;
 
@@ -16,10 +16,11 @@ fn main() -> Result<(), BoxError> {
     let window = video_subsystem
         .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
+        .resizable()
         .vulkan()
         .build()?;
 
-    let renderer = Renderer::init(&window)?;
+    let renderer = Renderer::init(window)?;
 
     let mut app = App {
         quit: false,
@@ -28,7 +29,9 @@ fn main() -> Result<(), BoxError> {
 
     let mut event_pump = sdl.event_pump()?;
     loop {
-        app.handle_events(&mut event_pump);
+        let Ok(()) = app.handle_events(&mut event_pump) else {
+            break;
+        };
         if app.quit {
             break;
         }

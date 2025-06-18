@@ -20,19 +20,22 @@ const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
-// TODO load all extensions / device extensions at the start (if possible?)
-
 pub struct Renderer {
+    #[allow(unused)]
     entry: ash::Entry,
+    window: Window,
     instance: ash::Instance,
     debug_ext: vk::DebugUtilsMessengerEXT,
+    surface_ext: ash::khr::surface::Instance,
     debug_loader: ash::ext::debug_utils::Instance,
     surface: vk::SurfaceKHR,
+    physical_device: vk::PhysicalDevice,
     device: ash::Device,
     graphics_queue: vk::Queue,
     presentation_queue: vk::Queue,
     swapchain_device_ext: ash::khr::swapchain::Device,
-    image_format: vk::Format,
+    #[allow(unused)]
+    image_format: vk::Format, // TODO should this be used somewhere?
     image_extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<vk::Image>,
@@ -53,7 +56,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: &Window) -> Result<Self, BoxError> {
+    pub fn init(window: Window) -> Result<Self, BoxError> {
         let entry = ash::Entry::linked();
 
         check_required_extensions(&entry)?;
@@ -128,7 +131,7 @@ impl Renderer {
         } = create_swapchain(
             &instance,
             &device,
-            window,
+            &window,
             &surface_ext,
             surface,
             physical_device,
@@ -136,31 +139,7 @@ impl Renderer {
 
         let swapchain_images = unsafe { swapchain_device_ext.get_swapchain_images(swapchain)? };
 
-        let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
-        for image in &swapchain_images {
-            let components = vk::ComponentMapping::default()
-                .r(vk::ComponentSwizzle::IDENTITY)
-                .g(vk::ComponentSwizzle::IDENTITY)
-                .b(vk::ComponentSwizzle::IDENTITY)
-                .a(vk::ComponentSwizzle::IDENTITY);
-
-            let subresource_range = vk::ImageSubresourceRange::default()
-                .aspect_mask(vk::ImageAspectFlags::COLOR)
-                .base_mip_level(0)
-                .level_count(1)
-                .base_array_layer(0)
-                .layer_count(1);
-
-            let create_info = vk::ImageViewCreateInfo::default()
-                .image(*image)
-                .view_type(vk::ImageViewType::TYPE_2D)
-                .format(image_format)
-                .components(components)
-                .subresource_range(subresource_range);
-
-            let image_view = unsafe { device.create_image_view(&create_info, None)? };
-            swapchain_image_views.push(image_view);
-        }
+        let swapchain_image_views = create_image_views(&device, image_format, &swapchain_images)?;
 
         let render_pass = create_render_pass(&device, image_format)?;
 
@@ -176,11 +155,14 @@ impl Renderer {
             create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
+            window: window.clone(),
             entry,
             instance,
             debug_ext,
+            surface_ext,
             debug_loader,
             surface,
+            physical_device,
             device,
             graphics_queue,
             presentation_queue,
@@ -276,17 +258,26 @@ impl Renderer {
 
         let fences = [self.frames_in_flight[self.current_frame]];
         unsafe { self.device.wait_for_fences(&fences, true, u64::MAX)? };
-        unsafe { self.device.reset_fences(&fences)? };
 
-        let (image_index, _suboptimal) = unsafe {
-            self.swapchain_device_ext.acquire_next_image(
+        let (image_index, swapchain_suboptimal) = unsafe {
+            match self.swapchain_device_ext.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
-                // FIXME need to know the current frame index or current image index
                 self.image_available[self.current_frame],
                 vk::Fence::null(),
-            )?
+            ) {
+                Ok(tup) => tup,
+                Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    return self.recreate_swapchain();
+                }
+                Err(other_error) => {
+                    return Err(other_error.into());
+                }
+            }
         };
+
+        // NOTE only reset fences if we're submitting work
+        unsafe { self.device.reset_fences(&fences)? };
 
         unsafe {
             self.device
@@ -318,11 +309,28 @@ impl Renderer {
             .swapchains(&swapchains)
             .image_indices(&image_indices);
         unsafe {
-            self.swapchain_device_ext
-                .queue_present(self.presentation_queue, &present_info)?;
+            match self
+                .swapchain_device_ext
+                .queue_present(self.presentation_queue, &present_info)
+            {
+                Ok(false) => {
+                    // not suboptimal, aka fine, or optimal i guess
+                }
+                Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
+                    // suboptimal or out of date
+                    return self.recreate_swapchain();
+                }
+                Err(other_error) => {
+                    return Err(other_error.into());
+                }
+            }
         }
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        if swapchain_suboptimal {
+            return self.recreate_swapchain();
+        }
 
         Ok(())
     }
@@ -330,6 +338,68 @@ impl Renderer {
     pub fn drain_gpu(self) -> Result<(), BoxError> {
         unsafe { self.device.device_wait_idle()? };
         Ok(())
+    }
+
+    // to be called on window resize
+    pub fn recreate_swapchain(&mut self) -> Result<(), BoxError> {
+        unsafe { self.device.device_wait_idle()? }
+
+        self.cleanup_swapchain();
+
+        let CreatedSwapchain {
+            swapchain_device_ext,
+            swapchain,
+            image_format,
+            image_extent,
+        } = create_swapchain(
+            &self.instance,
+            &self.device,
+            &self.window,
+            &self.surface_ext,
+            self.surface,
+            self.physical_device,
+        )?;
+
+        self.swapchain_device_ext = swapchain_device_ext;
+        self.swapchain = swapchain;
+        self.image_format = image_format;
+        self.image_extent = image_extent;
+
+        let swapchain_images =
+            unsafe { self.swapchain_device_ext.get_swapchain_images(swapchain)? };
+        self.swapchain_images = swapchain_images;
+
+        let swapchain_image_views =
+            create_image_views(&self.device, self.image_format, &self.swapchain_images)?;
+        self.swapchain_image_views = swapchain_image_views;
+
+        let swapchain_framebuffers = create_framebuffers(
+            &self.device,
+            // NOTE for some monitor changes,
+            // you'd need to recreate the renderpass as well
+            self.render_pass,
+            &self.swapchain_image_views,
+            image_extent,
+        )?;
+
+        self.swapchain_framebuffers = swapchain_framebuffers;
+
+        Ok(())
+    }
+
+    fn cleanup_swapchain(&mut self) {
+        unsafe {
+            for framebuffer in &self.swapchain_framebuffers {
+                self.device.destroy_framebuffer(*framebuffer, None);
+            }
+            for image_view in &self.swapchain_image_views {
+                self.device.destroy_image_view(*image_view, None);
+            }
+
+            // NOTE this also frees the images
+            self.swapchain_device_ext
+                .destroy_swapchain(self.swapchain, None);
+        }
     }
 }
 
@@ -348,23 +418,13 @@ impl Drop for Renderer {
 
             self.device.destroy_command_pool(self.command_pool, None);
 
-            for framebuffer in &self.swapchain_framebuffers {
-                self.device.destroy_framebuffer(*framebuffer, None);
-            }
-
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
 
             self.device.destroy_render_pass(self.render_pass, None);
 
-            for image_view in &self.swapchain_image_views {
-                self.device.destroy_image_view(*image_view, None);
-            }
-
-            // NOTE this also frees the images
-            self.swapchain_device_ext
-                .destroy_swapchain(self.swapchain, None);
+            self.cleanup_swapchain();
 
             self.device.destroy_device(None);
 
@@ -642,7 +702,7 @@ fn create_swapchain(
     // TODO avoid this unwrap; get this during the empty check
     let surface_format = choose_swap_surface_format(&swapchain_support.formats).unwrap();
     let present_mode = choose_swap_present_mode(&swapchain_support.present_modes);
-    let image_extent = choose_swap_extent(window, &swapchain_support.capabilities);
+    let image_extent = choose_swap_extent(&window, &swapchain_support.capabilities);
 
     // the number of images in the swapchain
     // going too low can result in the application blocking on the GPU
@@ -692,6 +752,7 @@ fn create_swapchain(
         // used during resizing & similar swapchain recreations
         .old_swapchain(vk::SwapchainKHR::null());
 
+    // TODO make this once at the beginning and pass it in
     let swapchain_device_ext = ash::khr::swapchain::Device::new(instance, device);
 
     let swapchain = unsafe { swapchain_device_ext.create_swapchain(&create_info, None)? };
@@ -767,6 +828,40 @@ impl SwapChainSupportDetails {
             present_modes,
         })
     }
+}
+
+fn create_image_views(
+    device: &ash::Device,
+    image_format: vk::Format,
+    swapchain_images: &[vk::Image],
+) -> Result<Vec<vk::ImageView>, BoxError> {
+    let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
+    for image in swapchain_images {
+        let components = vk::ComponentMapping::default()
+            .r(vk::ComponentSwizzle::IDENTITY)
+            .g(vk::ComponentSwizzle::IDENTITY)
+            .b(vk::ComponentSwizzle::IDENTITY)
+            .a(vk::ComponentSwizzle::IDENTITY);
+
+        let subresource_range = vk::ImageSubresourceRange::default()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(1);
+
+        let create_info = vk::ImageViewCreateInfo::default()
+            .image(*image)
+            .view_type(vk::ImageViewType::TYPE_2D)
+            .format(image_format)
+            .components(components)
+            .subresource_range(subresource_range);
+
+        let image_view = unsafe { device.create_image_view(&create_info, None)? };
+        swapchain_image_views.push(image_view);
+    }
+
+    Ok(swapchain_image_views)
 }
 
 fn create_render_pass(
