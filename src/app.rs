@@ -6,6 +6,7 @@ use crate::{BoxError, Renderer};
 
 pub struct App {
     pub quit: bool,
+    pub minimized: bool,
     pub renderer: Renderer,
 }
 
@@ -24,45 +25,50 @@ impl App {
                 }
 
                 Event::Window { win_event, .. } => match win_event {
-                    WindowEvent::Exposed => {
-                        // Window has been exposed and should be redrawn,
-                        // and can be redrawn directly from event watchers for this event
-                    }
                     WindowEvent::Resized(_new_width, _new_height) => {
                         // we take the new dimensions off the renderer's window ref
                         self.renderer.recreate_swapchain()?;
                     }
+                    WindowEvent::Minimized => {
+                        self.minimized = true;
+                    }
+                    WindowEvent::Maximized => {
+                        self.minimized = false;
+                    }
+                    WindowEvent::Restored => {
+                        self.minimized = false;
+                    }
+
+                    WindowEvent::Exposed => {
+                        // Window has been exposed and should be redrawn,
+                        // and can be redrawn directly from event watchers for this event
+                    }
                     WindowEvent::PixelSizeChanged(_, _) => {
                         // vulkan: update display scale
                     }
-                    WindowEvent::Minimized => {
-                        // pause & sleep?
-                    }
-                    WindowEvent::Maximized => {
-                        // unsleep if previously minimized?
-                    }
-                    WindowEvent::Restored => {
-                        // unsleep if previously minimized?
-                    }
                     WindowEvent::FocusLost => {
-                        // pause?
+                        // pause in-game?
                     }
-
                     WindowEvent::DisplayChanged(_) => {
                         // vulkan: update whatever is necessary for new surface
                         // ie, display scale
                     }
-
                     WindowEvent::Shown => {}
                     WindowEvent::Hidden => {
                         // what do these two mean? minimized to task bar?
                     }
-
                     WindowEvent::CloseRequested => {
                         // handle same as quit?
                     }
 
-                    _ => {}
+                    WindowEvent::Moved(_, _) => {}
+                    WindowEvent::MouseEnter => {}
+                    WindowEvent::MouseLeave => {}
+                    WindowEvent::FocusGained => {}
+                    WindowEvent::HitTest(_, _) => {}
+                    WindowEvent::ICCProfChanged => {}
+
+                    WindowEvent::None => {}
                 },
 
                 _ => {}

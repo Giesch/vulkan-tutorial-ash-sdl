@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use sdl3::{sys::timer::SDL_DelayPrecise, EventPump};
+use sdl3::sys::timer::SDL_DelayPrecise;
 
 use ash_sdl_vulkan_tutorial::*;
 
@@ -24,6 +24,7 @@ fn main() -> Result<(), BoxError> {
 
     let mut app = App {
         quit: false,
+        minimized: false,
         renderer,
     };
 
@@ -36,7 +37,9 @@ fn main() -> Result<(), BoxError> {
             break;
         }
 
-        app.renderer.draw_frame()?;
+        if !app.minimized {
+            app.renderer.draw_frame()?;
+        }
 
         unsafe { SDL_DelayPrecise(FRAME_DELAY.as_nanos() as u64) };
     }
