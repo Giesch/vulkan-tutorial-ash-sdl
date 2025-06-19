@@ -6,6 +6,7 @@ use std::os::raw::c_void;
 use std::ptr;
 
 use ash::ext::debug_utils;
+use tracing::*;
 
 // based on the logging callback here:
 // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/utility/debug.rs#L8
@@ -16,29 +17,24 @@ unsafe extern "system" fn vulkan_debug_utils_callback(
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _p_user_data: *mut c_void,
 ) -> vk::Bool32 {
+    use vk::DebugUtilsMessageTypeFlagsEXT as MessageType;
     let message_type = match message_type {
-        vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => "[General]",
-        vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE => "[Performance]",
-        vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION => "[Validation]",
+        MessageType::GENERAL => "[General]",
+        MessageType::PERFORMANCE => "[Performance]",
+        MessageType::VALIDATION => "[Validation]",
         _ => "[Unknown]",
     };
 
     let message = unsafe { CStr::from_ptr((*p_callback_data).p_message) };
     let message = message.to_string_lossy();
+    let prefixed_message = format!("{message_type} {message}");
 
+    use vk::DebugUtilsMessageSeverityFlagsEXT as Severity;
     match message_severity {
-        vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => {
-            tracing::debug!("{message_type}, {message}");
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::WARNING => {
-            tracing::warn!("{message_type}, {message}");
-        }
-        vk::DebugUtilsMessageSeverityFlagsEXT::ERROR => {
-            tracing::error!("{message_type}, {message}");
-        }
-        _info_or_other => {
-            tracing::info!("{message_type} {message}");
-        }
+        Severity::ERROR => error!("{prefixed_message}"),
+        Severity::WARNING => warn!("{prefixed_message}"),
+        Severity::VERBOSE => debug!("{prefixed_message}"),
+        _info_or_other => info!("{prefixed_message}"),
     };
 
     vk::FALSE
@@ -69,8 +65,8 @@ pub fn build_messenger_create_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'st
         p_next: ptr::null(),
         flags: vk::DebugUtilsMessengerCreateFlagsEXT::empty(),
         message_severity: vk::DebugUtilsMessageSeverityFlagsEXT::ERROR
-            // | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
-            // | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
+            | vk::DebugUtilsMessageSeverityFlagsEXT::INFO
+            | vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE
             | vk::DebugUtilsMessageSeverityFlagsEXT::WARNING,
         message_type: vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
             | vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE
