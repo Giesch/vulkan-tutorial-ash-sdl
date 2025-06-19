@@ -104,12 +104,8 @@ impl Renderer {
         }
 
         let instance = unsafe { entry.create_instance(&create_info, None)? };
-        let (debug_loader, debug_ext) = debug::maybe_create_debug_messager_extension(
-            ENABLE_VALIDATION,
-            &entry,
-            &instance,
-            &debug_create_info,
-        );
+        let (debug_loader, debug_ext) =
+            debug::maybe_create_debug_messager_extension(&entry, &instance, &debug_create_info);
 
         let surface_ext = ash::khr::surface::Instance::new(&entry, &instance);
 

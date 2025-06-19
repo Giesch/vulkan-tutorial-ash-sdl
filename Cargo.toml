@@ -8,6 +8,7 @@ default-run = "ash-sdl-vulkan-tutorial"
 ash = { version = "0.38.0", features = ["linked"] }
 glam = "0.30.3"
 sdl3 = { version = "0.14.29", features = ["ash"] }
+tracing = "0.1.41"
 
 [profile.dev]
 opt-level = 1
