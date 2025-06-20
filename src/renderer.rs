@@ -10,7 +10,7 @@ use sdl3::video::Window;
 
 use super::BoxError;
 
-mod debug;
+pub mod debug;
 mod platform;
 
 // TODO replace this with env var
@@ -44,6 +44,7 @@ pub struct Renderer {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
+    vertex_buffer: vk::Buffer,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     /// image semaphores indexed by current_frame
@@ -144,6 +145,8 @@ impl Renderer {
         let swapchain_framebuffers =
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
 
+        let vertex_buffer = create_vertex_buffer(&device)?;
+
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
 
@@ -172,6 +175,7 @@ impl Renderer {
             pipeline_layout,
             pipeline,
             swapchain_framebuffers,
+            vertex_buffer,
             command_pool,
             command_buffers,
             image_available,
@@ -413,6 +417,8 @@ impl Drop for Renderer {
             }
 
             self.device.destroy_command_pool(self.command_pool, None);
+
+            self.device.destroy_buffer(self.vertex_buffer, None);
 
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
@@ -1150,4 +1156,16 @@ impl Vertex {
                 .offset(std::mem::offset_of!(Vertex, color) as u32),
         ]
     }
+}
+
+fn create_vertex_buffer(device: &ash::Device) -> Result<vk::Buffer, BoxError> {
+    let buffer_size = std::mem::size_of::<Vertex>() * VERTICIES.len();
+    let create_info = vk::BufferCreateInfo::default()
+        .size(buffer_size as u64)
+        .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+
+    let buffer = unsafe { device.create_buffer(&create_info, None)? };
+
+    Ok(buffer)
 }
