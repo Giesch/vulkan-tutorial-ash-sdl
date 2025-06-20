@@ -6,7 +6,7 @@ use std::os::raw::c_void;
 use std::ptr;
 
 use ash::ext::debug_utils;
-use tracing::*;
+use log::*;
 
 // based on the logging callback here:
 // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/utility/debug.rs#L8

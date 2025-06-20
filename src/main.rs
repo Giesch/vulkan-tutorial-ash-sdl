@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use sdl3::sys::timer::SDL_DelayPrecise;
-use tracing_subscriber::fmt::time::LocalTime;
-use tracing_subscriber::EnvFilter;
 
 use ash_sdl_vulkan_tutorial::*;
 
@@ -12,10 +10,7 @@ const WINDOW_HEIGHT: u32 = 600;
 const FRAME_DELAY: Duration = Duration::from_millis(15);
 
 fn main() -> Result<(), BoxError> {
-    tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::from_default_env())
-        .with_timer(LocalTime::rfc_3339())
-        .init();
+    pretty_env_logger::init();
 
     let sdl = sdl3::init()?;
     let video_subsystem = sdl.video()?;

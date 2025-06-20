@@ -15,7 +15,6 @@ mod platform;
 
 // TODO replace this with env var
 // https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
-// use separate config option for logging; maybe tracing env vars
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
