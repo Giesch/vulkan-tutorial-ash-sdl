@@ -950,7 +950,11 @@ fn create_graphics_pipeline(
     let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default();
+    let binding_descriptions = [Vertex::binding_description()];
+    let attribute_descriptions = Vertex::attribute_descriptions();
+    let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()
+        .vertex_binding_descriptions(&binding_descriptions)
+        .vertex_attribute_descriptions(&attribute_descriptions);
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
@@ -1093,4 +1097,57 @@ fn create_sync_objects(
     }
 
     Ok((image_available, render_finished, frames_in_flight))
+}
+
+#[derive(Debug)]
+#[repr(C)]
+struct Vertex {
+    position: glam::Vec2,
+    color: glam::Vec3,
+}
+
+const VERTICIES: [Vertex; 3] = [
+    Vertex {
+        position: glam::Vec2::new(0.0, -0.5),
+        color: glam::Vec3::new(1.0, 0.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec2::new(0.5, 0.5),
+        color: glam::Vec3::new(0.0, 1.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec2::new(-0.5, 0.5),
+        color: glam::Vec3::new(0.0, 0.0, 1.0),
+    },
+];
+
+impl Vertex {
+    fn binding_description() -> vk::VertexInputBindingDescription {
+        vk::VertexInputBindingDescription::default()
+            .binding(0)
+            .stride(std::mem::size_of::<Self>() as u32)
+            .input_rate(vk::VertexInputRate::VERTEX)
+    }
+
+    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+        [
+            vk::VertexInputAttributeDescription::default()
+                // TODO what is this
+                .binding(0)
+                // this is the location in glsl
+                .location(0)
+                // color formats are also used to define non-color vec sizes 1-4
+                // (the official tutorial is mildly apologetic)
+                // BUT this does matter for defaults -
+                // if there aren't enough components here to fill the components shader-side,
+                // the 'color' components default to 0 and 'alpha' component defaults to 1
+                .format(vk::Format::R32G32_SFLOAT)
+                .offset(std::mem::offset_of!(Vertex, position) as u32),
+            vk::VertexInputAttributeDescription::default()
+                .binding(0)
+                .location(1)
+                .format(vk::Format::R32G32B32_SFLOAT)
+                .offset(std::mem::offset_of!(Vertex, color) as u32),
+        ]
+    }
 }
