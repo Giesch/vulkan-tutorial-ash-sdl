@@ -20,6 +20,7 @@ const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
+    // fields that are created once
     #[allow(unused)]
     entry: ash::Entry,
     window: Window,
@@ -33,6 +34,8 @@ pub struct Renderer {
     graphics_queue: vk::Queue,
     presentation_queue: vk::Queue,
     swapchain_device_ext: ash::khr::swapchain::Device,
+
+    // fields that change
     #[allow(unused)]
     image_format: vk::Format, // TODO should this be used somewhere?
     image_extent: vk::Extent2D,
@@ -44,6 +47,7 @@ pub struct Renderer {
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     vertex_buffer: vk::Buffer,
+    vertex_buffer_memory: vk::DeviceMemory,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     /// image semaphores indexed by current_frame
@@ -144,7 +148,8 @@ impl Renderer {
         let swapchain_framebuffers =
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
 
-        let vertex_buffer = create_vertex_buffer(&device)?;
+        let (vertex_buffer, vertex_buffer_memory) =
+            create_vertex_buffer(&instance, &device, physical_device)?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
@@ -175,6 +180,7 @@ impl Renderer {
             pipeline,
             swapchain_framebuffers,
             vertex_buffer,
+            vertex_buffer_memory,
             command_pool,
             command_buffers,
             image_available,
@@ -209,6 +215,7 @@ impl Renderer {
             .render_area(render_area)
             .clear_values(&clear_values);
 
+        // BEGIN RENDER PASS
         unsafe {
             self.device.cmd_begin_render_pass(
                 command_buffer,
@@ -243,8 +250,19 @@ impl Renderer {
         let scissors = [scissor];
         unsafe { self.device.cmd_set_scissor(command_buffer, 0, &scissors) };
 
-        unsafe { self.device.cmd_draw(command_buffer, 3, 1, 0, 0) };
+        unsafe {
+            let buffers = [self.vertex_buffer];
+            let offsets = [0];
+            self.device
+                .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
+        }
 
+        unsafe {
+            let vertex_count = VERTICIES.len() as u32;
+            self.device.cmd_draw(command_buffer, vertex_count, 1, 0, 0)
+        };
+
+        // END RENDER PASS
         unsafe { self.device.cmd_end_render_pass(command_buffer) };
 
         unsafe { self.device.end_command_buffer(command_buffer)? };
@@ -418,6 +436,7 @@ impl Drop for Renderer {
             self.device.destroy_command_pool(self.command_pool, None);
 
             self.device.destroy_buffer(self.vertex_buffer, None);
+            self.device.free_memory(self.vertex_buffer_memory, None);
 
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
@@ -700,7 +719,8 @@ fn create_swapchain(
 ) -> Result<CreatedSwapchain, BoxError> {
     let swapchain_support = SwapChainSupportDetails::query(surface_ext, surface, physical_device)?;
 
-    // TODO avoid this unwrap; get this during the empty check
+    // TODO avoid this unwrap; change the valiation step to also do the choose
+    // so SwapChainSupportDetails just has the one of each
     let surface_format = choose_swap_surface_format(&swapchain_support.formats).unwrap();
     let present_mode = choose_swap_present_mode(&swapchain_support.present_modes);
     let image_extent = choose_swap_extent(&window, &swapchain_support.capabilities);
@@ -1115,6 +1135,7 @@ const VERTICIES: [Vertex; 3] = [
     Vertex {
         position: glam::Vec2::new(0.0, -0.5),
         color: glam::Vec3::new(1.0, 0.0, 0.0),
+        // color: glam::Vec3::new(1.0, 1.0, 1.0),
     },
     Vertex {
         position: glam::Vec2::new(0.5, 0.5),
@@ -1157,14 +1178,66 @@ impl Vertex {
     }
 }
 
-fn create_vertex_buffer(device: &ash::Device) -> Result<vk::Buffer, BoxError> {
+fn create_vertex_buffer(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
     let buffer_size = std::mem::size_of::<Vertex>() * VERTICIES.len();
-    let create_info = vk::BufferCreateInfo::default()
+    let buffer_create_info = vk::BufferCreateInfo::default()
         .size(buffer_size as u64)
         .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
         .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    let vertex_buffer = unsafe { device.create_buffer(&buffer_create_info, None)? };
 
-    let buffer = unsafe { device.create_buffer(&create_info, None)? };
+    let memory_requirements = unsafe { device.get_buffer_memory_requirements(vertex_buffer) };
+    use vk::MemoryPropertyFlags as MemProperty;
+    let required_properties = MemProperty::HOST_VISIBLE | MemProperty::HOST_COHERENT;
+    let mem_type_index = find_memory_type_index(
+        &instance,
+        physical_device,
+        memory_requirements.memory_type_bits,
+        required_properties,
+    )?;
+    let allocate_info = vk::MemoryAllocateInfo::default()
+        .allocation_size(memory_requirements.size)
+        .memory_type_index(mem_type_index as u32);
+    let vertex_buffer_memory = unsafe { device.allocate_memory(&allocate_info, None)? };
 
-    Ok(buffer)
+    unsafe {
+        device.bind_buffer_memory(vertex_buffer, vertex_buffer_memory, 0)?;
+
+        let mapped_dst = device.map_memory(
+            vertex_buffer_memory,
+            0,
+            buffer_create_info.size,
+            Default::default(),
+        )? as *mut Vertex;
+        std::ptr::copy_nonoverlapping(VERTICIES.as_ptr(), mapped_dst, VERTICIES.len());
+        device.unmap_memory(vertex_buffer_memory);
+    };
+
+    Ok((vertex_buffer, vertex_buffer_memory))
+}
+
+fn find_memory_type_index(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    memory_type_bits: u32,
+    required_properties: vk::MemoryPropertyFlags,
+) -> Result<usize, BoxError> {
+    let memory_properties =
+        unsafe { instance.get_physical_device_memory_properties(physical_device) };
+
+    for (i, mem_type) in memory_properties.memory_types.iter().enumerate() {
+        let matches_type_filter = (memory_type_bits & (1 << i)) != 0;
+        let has_required_properties =
+            (mem_type.property_flags & required_properties) == required_properties;
+
+        if matches_type_filter && has_required_properties {
+            return Ok(i);
+        }
+    }
+
+    Err("failed to find suitable memory type".into())
 }
