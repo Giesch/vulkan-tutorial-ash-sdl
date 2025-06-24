@@ -1,0 +1,11 @@
+#+title: Todo
+
+* Next
+
+* Future
+- [ ] add translated slang shaders
+  - try generating vertex struct
+- [ ] add shader hot reload
+- [ ] consider adding a separate queue & command buffer for memory transfer
+  https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue
+- [ ] learn how to use a gpu memory allocator

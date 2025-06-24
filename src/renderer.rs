@@ -148,11 +148,16 @@ impl Renderer {
         let swapchain_framebuffers =
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
 
-        let (vertex_buffer, vertex_buffer_memory) =
-            create_vertex_buffer(&instance, &device, physical_device)?;
-
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
+
+        let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
+            &instance,
+            &device,
+            physical_device,
+            command_pool,
+            graphics_queue,
+        )?;
 
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
@@ -523,8 +528,8 @@ fn check_required_extensions(entry: &ash::Entry) -> Result<(), BoxError> {
     Ok(())
 }
 
-/// converts a null-terminated c string from vulkan
-/// to non-nul bytes for comparison with CStr constants
+/// trims a null-terminated c string from vulkan to only include
+/// non-null bytes for comparison with CStr constants
 fn vk_str_bytes(vk_str: &[c_char]) -> Vec<u8> {
     vk_str
         .iter()
@@ -552,6 +557,7 @@ impl QueueFamilyIndices {
         let mut presentation = None;
 
         for (i, family) in queue_families.iter().enumerate() {
+            // NOTE this also implies vk::QueueFlags::TRANSFER
             if family.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
                 graphics = Some(i as u32);
             }
@@ -1182,42 +1188,121 @@ fn create_vertex_buffer(
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
+    command_pool: vk::CommandPool,
+    graphics_queue: vk::Queue,
 ) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
-    let buffer_size = std::mem::size_of::<Vertex>() * VERTICIES.len();
-    let buffer_create_info = vk::BufferCreateInfo::default()
-        .size(buffer_size as u64)
-        .usage(vk::BufferUsageFlags::VERTEX_BUFFER)
-        .sharing_mode(vk::SharingMode::EXCLUSIVE);
-    let vertex_buffer = unsafe { device.create_buffer(&buffer_create_info, None)? };
+    let buffer_size = (std::mem::size_of::<Vertex>() * VERTICIES.len()) as u64;
+    let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
+        instance,
+        device,
+        physical_device,
+        buffer_size,
+        vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
 
-    let memory_requirements = unsafe { device.get_buffer_memory_requirements(vertex_buffer) };
-    use vk::MemoryPropertyFlags as MemProperty;
-    let required_properties = MemProperty::HOST_VISIBLE | MemProperty::HOST_COHERENT;
+    unsafe {
+        let mapped_dst =
+            device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
+                as *mut Vertex;
+        std::ptr::copy_nonoverlapping(VERTICIES.as_ptr(), mapped_dst, VERTICIES.len());
+        device.unmap_memory(staging_buffer_memory);
+    };
+
+    let (vertex_buffer, vertex_buffer_memory) = create_memory_buffer(
+        instance,
+        device,
+        physical_device,
+        buffer_size,
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::VERTEX_BUFFER,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    )?;
+
+    copy_memory_buffer(
+        device,
+        command_pool,
+        staging_buffer,
+        vertex_buffer,
+        buffer_size,
+        graphics_queue,
+    )?;
+
+    unsafe {
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+    }
+
+    Ok((vertex_buffer, vertex_buffer_memory))
+}
+
+fn copy_memory_buffer(
+    device: &ash::Device,
+    command_pool: vk::CommandPool,
+    src_buffer: vk::Buffer,
+    dst_buffer: vk::Buffer,
+    size: vk::DeviceSize,
+    graphics_queue: vk::Queue,
+) -> Result<(), BoxError> {
+    // NOTE it would be better to have a second command pool for transfers,
+    // that also uses 'create transient'
+    let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
+        .level(vk::CommandBufferLevel::PRIMARY)
+        .command_pool(command_pool)
+        .command_buffer_count(1);
+    let command_buffers =
+        unsafe { device.allocate_command_buffers(&command_buffer_allocate_info)? };
+    let command_buffer = command_buffers[0];
+
+    let begin_info =
+        vk::CommandBufferBeginInfo::default().flags(vk::CommandBufferUsageFlags::ONE_TIME_SUBMIT);
+    unsafe { device.begin_command_buffer(command_buffer, &begin_info)? };
+    let regions = [vk::BufferCopy::default().size(size)];
+    unsafe { device.cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &regions) };
+    unsafe { device.end_command_buffer(command_buffer)? };
+
+    let submit_info = vk::SubmitInfo::default().command_buffers(&command_buffers);
+    let submits = [submit_info];
+    unsafe {
+        device.queue_submit(graphics_queue, &submits, vk::Fence::null())?;
+        device.device_wait_idle()?;
+    }
+    unsafe { device.free_command_buffers(command_pool, &command_buffers) };
+
+    Ok(())
+}
+
+fn create_memory_buffer(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    buffer_size: vk::DeviceSize,
+    buffer_usage: vk::BufferUsageFlags,
+    memory_property_flags: vk::MemoryPropertyFlags,
+) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
+    let buffer_create_info = vk::BufferCreateInfo::default()
+        .size(buffer_size)
+        .usage(buffer_usage)
+        .sharing_mode(vk::SharingMode::EXCLUSIVE);
+    let buffer = unsafe { device.create_buffer(&buffer_create_info, None)? };
+
+    let memory_requirements = unsafe { device.get_buffer_memory_requirements(buffer) };
+
     let mem_type_index = find_memory_type_index(
         &instance,
         physical_device,
         memory_requirements.memory_type_bits,
-        required_properties,
+        memory_property_flags,
     )?;
     let allocate_info = vk::MemoryAllocateInfo::default()
         .allocation_size(memory_requirements.size)
         .memory_type_index(mem_type_index as u32);
-    let vertex_buffer_memory = unsafe { device.allocate_memory(&allocate_info, None)? };
+    let buffer_memory = unsafe { device.allocate_memory(&allocate_info, None)? };
 
     unsafe {
-        device.bind_buffer_memory(vertex_buffer, vertex_buffer_memory, 0)?;
-
-        let mapped_dst = device.map_memory(
-            vertex_buffer_memory,
-            0,
-            buffer_create_info.size,
-            Default::default(),
-        )? as *mut Vertex;
-        std::ptr::copy_nonoverlapping(VERTICIES.as_ptr(), mapped_dst, VERTICIES.len());
-        device.unmap_memory(vertex_buffer_memory);
+        device.bind_buffer_memory(buffer, buffer_memory, 0)?;
     };
 
-    Ok((vertex_buffer, vertex_buffer_memory))
+    Ok((buffer, buffer_memory))
 }
 
 fn find_memory_type_index(
