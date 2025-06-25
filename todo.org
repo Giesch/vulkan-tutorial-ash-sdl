@@ -1,11 +1,25 @@
 #+title: Todo
 
 * Next
+- [-] finish official vulkan tutorial
+  https://docs.vulkan.org/tutorial/latest
+  - [X] drawing a triangle
+  - [X] vertex buffers
+  - [ ] uniform buffers
+  - [ ] texture mapping
+  - [ ] depth buffering
+  - [ ] loading models
+
 
 * Future
+- [ ] look at Sascha Willems' examples
+  https://github.com/SaschaWillems/Vulkan
+  - [ ] 1.3 dynamic rendering triangle
+- [ ] move on to https://vkguide.dev/
 - [ ] add translated slang shaders
   - try generating vertex struct
 - [ ] add shader hot reload
 - [ ] consider adding a separate queue & command buffer for memory transfer
   https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue
 - [ ] learn how to use a gpu memory allocator
+  particularly the two crates the ash egui crate integrates with

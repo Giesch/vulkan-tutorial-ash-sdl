@@ -48,6 +48,8 @@ pub struct Renderer {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
+    index_buffer: vk::Buffer,
+    index_buffer_memory: vk::DeviceMemory,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     /// image semaphores indexed by current_frame
@@ -159,6 +161,14 @@ impl Renderer {
             graphics_queue,
         )?;
 
+        let (index_buffer, index_buffer_memory) = create_index_buffer(
+            &instance,
+            &device,
+            physical_device,
+            command_pool,
+            graphics_queue,
+        )?;
+
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
 
@@ -186,6 +196,8 @@ impl Renderer {
             swapchain_framebuffers,
             vertex_buffer,
             vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
             command_pool,
             command_buffers,
             image_available,
@@ -260,12 +272,17 @@ impl Renderer {
             let offsets = [0];
             self.device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
-        }
 
-        unsafe {
-            let vertex_count = VERTICIES.len() as u32;
-            self.device.cmd_draw(command_buffer, vertex_count, 1, 0, 0)
-        };
+            self.device.cmd_bind_index_buffer(
+                command_buffer,
+                self.index_buffer,
+                0,
+                vk::IndexType::UINT16,
+            );
+
+            self.device
+                .cmd_draw_indexed(command_buffer, INDICES.len() as u32, 1, 0, 0, 0);
+        }
 
         // END RENDER PASS
         unsafe { self.device.cmd_end_render_pass(command_buffer) };
@@ -439,6 +456,9 @@ impl Drop for Renderer {
             }
 
             self.device.destroy_command_pool(self.command_pool, None);
+
+            self.device.destroy_buffer(self.index_buffer, None);
+            self.device.free_memory(self.index_buffer_memory, None);
 
             self.device.destroy_buffer(self.vertex_buffer, None);
             self.device.free_memory(self.vertex_buffer_memory, None);
@@ -1137,21 +1157,27 @@ struct Vertex {
     color: glam::Vec3,
 }
 
-const VERTICIES: [Vertex; 3] = [
+const VERTICES: [Vertex; 4] = [
     Vertex {
-        position: glam::Vec2::new(0.0, -0.5),
+        position: glam::Vec2::new(-0.5, -0.5),
         color: glam::Vec3::new(1.0, 0.0, 0.0),
-        // color: glam::Vec3::new(1.0, 1.0, 1.0),
     },
     Vertex {
-        position: glam::Vec2::new(0.5, 0.5),
+        position: glam::Vec2::new(0.5, -0.5),
         color: glam::Vec3::new(0.0, 1.0, 0.0),
     },
     Vertex {
-        position: glam::Vec2::new(-0.5, 0.5),
+        position: glam::Vec2::new(0.5, 0.5),
         color: glam::Vec3::new(0.0, 0.0, 1.0),
     },
+    Vertex {
+        position: glam::Vec2::new(-0.5, 0.5),
+        color: glam::Vec3::new(1.0, 1.0, 1.0),
+    },
 ];
+
+// NOTE this can be u16 or u32
+const INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
 
 impl Vertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -1191,7 +1217,7 @@ fn create_vertex_buffer(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
-    let buffer_size = (std::mem::size_of::<Vertex>() * VERTICIES.len()) as u64;
+    let buffer_size = (std::mem::size_of::<Vertex>() * VERTICES.len()) as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
         device,
@@ -1205,7 +1231,7 @@ fn create_vertex_buffer(
         let mapped_dst =
             device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
                 as *mut Vertex;
-        std::ptr::copy_nonoverlapping(VERTICIES.as_ptr(), mapped_dst, VERTICIES.len());
+        std::ptr::copy_nonoverlapping(VERTICES.as_ptr(), mapped_dst, VERTICES.len());
         device.unmap_memory(staging_buffer_memory);
     };
 
@@ -1233,6 +1259,57 @@ fn create_vertex_buffer(
     }
 
     Ok((vertex_buffer, vertex_buffer_memory))
+}
+
+fn create_index_buffer(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    command_pool: vk::CommandPool,
+    graphics_queue: vk::Queue,
+) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
+    let buffer_size = (std::mem::size_of::<u16>() * INDICES.len()) as u64;
+    let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
+        instance,
+        device,
+        physical_device,
+        buffer_size,
+        vk::BufferUsageFlags::TRANSFER_SRC,
+        vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+    )?;
+
+    unsafe {
+        let mapped_dst =
+            device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
+                as *mut u16;
+        std::ptr::copy_nonoverlapping(INDICES.as_ptr(), mapped_dst, INDICES.len());
+        device.unmap_memory(staging_buffer_memory);
+    };
+
+    let (index_buffer, index_buffer_memory) = create_memory_buffer(
+        instance,
+        device,
+        physical_device,
+        buffer_size,
+        vk::BufferUsageFlags::TRANSFER_DST | vk::BufferUsageFlags::INDEX_BUFFER,
+        vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    )?;
+
+    copy_memory_buffer(
+        device,
+        command_pool,
+        staging_buffer,
+        index_buffer,
+        buffer_size,
+        graphics_queue,
+    )?;
+
+    unsafe {
+        device.destroy_buffer(staging_buffer, None);
+        device.free_memory(staging_buffer_memory, None);
+    }
+
+    Ok((index_buffer, index_buffer_memory))
 }
 
 fn copy_memory_buffer(
