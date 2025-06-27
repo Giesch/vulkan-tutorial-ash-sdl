@@ -58,6 +58,8 @@ pub struct Renderer {
     uniform_buffers_mapped: Vec<*mut UniformBufferObject>,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_sets: Vec<vk::DescriptorSet>,
     /// image semaphores indexed by current_frame
     image_available: Vec<vk::Semaphore>,
     /// render finished semaphores indexed by image_index
@@ -183,6 +185,14 @@ impl Renderer {
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
             create_uniform_buffers(&instance, &device, physical_device)?;
 
+        let descriptor_pool = create_descriptor_pool(&device)?;
+        let descriptor_sets = create_descriptor_sets(
+            &device,
+            descriptor_pool,
+            descriptor_set_layout,
+            &uniform_buffers,
+        )?;
+
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
 
@@ -219,6 +229,8 @@ impl Renderer {
             uniform_buffers_mapped,
             command_pool,
             command_buffers,
+            descriptor_pool,
+            descriptor_sets,
             image_available,
             render_finished,
             frames_in_flight,
@@ -299,6 +311,16 @@ impl Renderer {
                 vk::IndexType::UINT16,
             );
 
+            let descriptor_sets = [self.descriptor_sets[self.current_frame]];
+            self.device.cmd_bind_descriptor_sets(
+                command_buffer,
+                vk::PipelineBindPoint::GRAPHICS,
+                self.pipeline_layout,
+                0,
+                &descriptor_sets,
+                &[],
+            );
+
             self.device
                 .cmd_draw_indexed(command_buffer, INDICES.len() as u32, 1, 0, 0, 0);
         }
@@ -337,6 +359,8 @@ impl Renderer {
         update_uniform_buffer(
             self.start_time,
             self.image_extent,
+            // TODO is this by frame or by image?
+            // the tutorial seems inconsistent
             self.uniform_buffers_mapped[self.current_frame],
         )?;
 
@@ -480,6 +504,12 @@ impl Drop for Renderer {
                 self.device.destroy_semaphore(*semaphore, None);
             }
 
+            // this also destroys the sets from the pool
+            self.device
+                .destroy_descriptor_pool(self.descriptor_pool, None);
+            self.device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+
             self.device.destroy_command_pool(self.command_pool, None);
 
             self.device.destroy_buffer(self.index_buffer, None);
@@ -501,9 +531,6 @@ impl Drop for Renderer {
                 self.device
                     .free_memory(self.uniform_buffers_memory[i], None);
             }
-
-            self.device
-                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
 
             self.device.destroy_device(None);
 
@@ -1057,7 +1084,7 @@ fn create_graphics_pipeline(
         .polygon_mode(vk::PolygonMode::FILL)
         .line_width(1.0)
         .cull_mode(vk::CullModeFlags::BACK)
-        .front_face(vk::FrontFace::CLOCKWISE)
+        .front_face(vk::FrontFace::COUNTER_CLOCKWISE)
         .depth_bias_enable(false);
 
     let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
@@ -1518,13 +1545,13 @@ fn update_uniform_buffer(
     let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
 
     let model = glam::Mat4::IDENTITY * glam::Mat4::from_rotation_z(turn_radians);
-    let view = glam::Mat4::look_at_lh(
+    let view = glam::Mat4::look_at_rh(
         glam::Vec3::splat(2.0),
         glam::Vec3::splat(0.0),
         glam::Vec3::new(0.0, 0.0, 1.0),
     );
     let aspect_ratio = image_extent.width as f32 / image_extent.height as f32;
-    let projection = glam::Mat4::perspective_lh(45.0_f32.to_radians(), aspect_ratio, 0.1, 10.0);
+    let projection = glam::Mat4::perspective_rh(45.0_f32.to_radians(), aspect_ratio, 0.1, 10.0);
 
     let mut ubo = UniformBufferObject {
         model,
@@ -1545,4 +1572,56 @@ fn update_uniform_buffer(
     }
 
     Ok(())
+}
+
+fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, BoxError> {
+    let pool_size = vk::DescriptorPoolSize::default()
+        .ty(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
+    let pool_sizes = [pool_size];
+    let pool_create_info = vk::DescriptorPoolCreateInfo::default()
+        .pool_sizes(&pool_sizes)
+        .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
+
+    let pool = unsafe { device.create_descriptor_pool(&pool_create_info, None)? };
+
+    Ok(pool)
+}
+
+fn create_descriptor_sets(
+    device: &ash::Device,
+    descriptor_pool: vk::DescriptorPool,
+    descriptor_set_layout: vk::DescriptorSetLayout,
+    uniform_buffers: &[vk::Buffer],
+) -> Result<Vec<vk::DescriptorSet>, BoxError> {
+    let set_layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
+    let alloc_info = vk::DescriptorSetAllocateInfo::default()
+        .descriptor_pool(descriptor_pool)
+        .set_layouts(&set_layouts);
+
+    let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
+
+    for i in 0..MAX_FRAMES_IN_FLIGHT {
+        let buffer = uniform_buffers[i];
+        let buffer_info = vk::DescriptorBufferInfo::default()
+            .buffer(buffer)
+            .offset(0)
+            .range(std::mem::size_of::<UniformBufferObject>() as u64);
+
+        let buffer_info = [buffer_info];
+        let dst_set = descriptor_sets[i];
+        let write = vk::WriteDescriptorSet::default()
+            .dst_set(dst_set)
+            .dst_binding(0)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+            .descriptor_count(1)
+            .buffer_info(&buffer_info);
+
+        // TODO why does the tutorial call this in a loop?
+        let writes = [write];
+        unsafe { device.update_descriptor_sets(&writes, &[]) };
+    }
+
+    Ok(descriptor_sets)
 }

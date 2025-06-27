@@ -1,7 +1,7 @@
 check:
     bacon check-all
 
-run:
+run: shaders
     cargo run
 
 # NOTE: this depends on an installed glslc from the vulkan sdk
