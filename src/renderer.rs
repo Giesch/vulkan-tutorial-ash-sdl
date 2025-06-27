@@ -3,6 +3,7 @@ use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
+use std::time::Instant;
 
 use ash::vk;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
@@ -20,6 +21,7 @@ const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
+    start_time: Instant,
     // fields that are created once
     #[allow(unused)]
     entry: ash::Entry,
@@ -43,6 +45,7 @@ pub struct Renderer {
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
+    descriptor_set_layout: vk::DescriptorSetLayout,
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
@@ -50,6 +53,9 @@ pub struct Renderer {
     vertex_buffer_memory: vk::DeviceMemory,
     index_buffer: vk::Buffer,
     index_buffer_memory: vk::DeviceMemory,
+    uniform_buffers: Vec<vk::Buffer>,
+    uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    uniform_buffers_mapped: Vec<*mut UniformBufferObject>,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     /// image semaphores indexed by current_frame
@@ -63,6 +69,8 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn init(window: Window) -> Result<Self, BoxError> {
+        let start_time = Instant::now();
+
         let entry = ash::Entry::linked();
 
         check_required_extensions(&entry)?;
@@ -145,7 +153,10 @@ impl Renderer {
 
         let render_pass = create_render_pass(&device, image_format)?;
 
-        let (pipeline_layout, pipeline) = create_graphics_pipeline(&device, render_pass)?;
+        let descriptor_set_layout = create_descriptor_set_layout(&device)?;
+
+        let (pipeline_layout, pipeline) =
+            create_graphics_pipeline(&device, render_pass, descriptor_set_layout)?;
 
         let swapchain_framebuffers =
             create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
@@ -169,10 +180,14 @@ impl Renderer {
             graphics_queue,
         )?;
 
+        let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
+            create_uniform_buffers(&instance, &device, physical_device)?;
+
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
+            start_time,
             window: window.clone(),
             entry,
             instance,
@@ -191,6 +206,7 @@ impl Renderer {
             swapchain_images,
             swapchain_image_views,
             render_pass,
+            descriptor_set_layout,
             pipeline_layout,
             pipeline,
             swapchain_framebuffers,
@@ -198,6 +214,9 @@ impl Renderer {
             vertex_buffer_memory,
             index_buffer,
             index_buffer_memory,
+            uniform_buffers,
+            uniform_buffers_memory,
+            uniform_buffers_mapped,
             command_pool,
             command_buffers,
             image_available,
@@ -314,6 +333,12 @@ impl Renderer {
                 }
             }
         };
+
+        update_uniform_buffer(
+            self.start_time,
+            self.image_extent,
+            self.uniform_buffers_mapped[self.current_frame],
+        )?;
 
         // NOTE only reset fences if we're submitting work
         unsafe { self.device.reset_fences(&fences)? };
@@ -470,6 +495,15 @@ impl Drop for Renderer {
             self.device.destroy_render_pass(self.render_pass, None);
 
             self.cleanup_swapchain();
+
+            for i in 0..MAX_FRAMES_IN_FLIGHT {
+                self.device.destroy_buffer(self.uniform_buffers[i], None);
+                self.device
+                    .free_memory(self.uniform_buffers_memory[i], None);
+            }
+
+            self.device
+                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
 
             self.device.destroy_device(None);
 
@@ -977,6 +1011,7 @@ fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
 fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
+    descriptor_set_layout: vk::DescriptorSetLayout,
 ) -> Result<(vk::PipelineLayout, vk::Pipeline), BoxError> {
     let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
     let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
@@ -1040,7 +1075,9 @@ fn create_graphics_pipeline(
         .attachments(&color_attachments);
 
     // handle not struct; to be used later
-    let pipeline_layout_create_info = vk::PipelineLayoutCreateInfo::default();
+    let set_layouts = [descriptor_set_layout];
+    let pipeline_layout_create_info =
+        vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_create_info, None)? };
 
@@ -1308,7 +1345,6 @@ fn create_index_buffer(
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
     }
-
     Ok((index_buffer, index_buffer_memory))
 }
 
@@ -1402,4 +1438,111 @@ fn find_memory_type_index(
     }
 
     Err("failed to find suitable memory type".into())
+}
+
+#[allow(unused)] // mapped directly to gpu
+struct UniformBufferObject {
+    model: glam::Mat4,
+    view: glam::Mat4,
+    projection: glam::Mat4,
+}
+
+fn create_descriptor_set_layout(device: &ash::Device) -> Result<vk::DescriptorSetLayout, BoxError> {
+    let layout_binding = vk::DescriptorSetLayoutBinding::default()
+        .binding(0)
+        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::VERTEX);
+
+    let bindings = [layout_binding];
+    let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
+
+    let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
+
+    Ok(descriptor_set_layout)
+}
+
+fn create_uniform_buffers(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+) -> Result<
+    (
+        Vec<vk::Buffer>,
+        Vec<vk::DeviceMemory>,
+        Vec<*mut UniformBufferObject>,
+    ),
+    BoxError,
+> {
+    let buffer_size = std::mem::size_of::<UniformBufferObject>() as vk::DeviceSize;
+
+    let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+    let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+    let mut uniform_buffers_mapped = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+
+    for _ in 0..MAX_FRAMES_IN_FLIGHT {
+        let (buffer, memory) = create_memory_buffer(
+            instance,
+            device,
+            physical_device,
+            buffer_size,
+            vk::BufferUsageFlags::UNIFORM_BUFFER,
+            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+        )?;
+
+        uniform_buffers.push(buffer);
+        uniform_buffers_memory.push(memory);
+
+        let mapped = unsafe {
+            device.map_memory(memory, 0, buffer_size, Default::default())?
+                as *mut UniformBufferObject
+        };
+
+        uniform_buffers_mapped.push(mapped);
+    }
+
+    Ok((
+        uniform_buffers,
+        uniform_buffers_memory,
+        uniform_buffers_mapped,
+    ))
+}
+
+fn update_uniform_buffer(
+    start_time: Instant,
+    image_extent: vk::Extent2D,
+    mapped_uniform_buffer: *mut UniformBufferObject,
+) -> Result<(), BoxError> {
+    const DEGREES_PER_SECOND: f32 = 90.0;
+    let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
+    let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
+
+    let model = glam::Mat4::IDENTITY * glam::Mat4::from_rotation_z(turn_radians);
+    let view = glam::Mat4::look_at_lh(
+        glam::Vec3::splat(2.0),
+        glam::Vec3::splat(0.0),
+        glam::Vec3::new(0.0, 0.0, 1.0),
+    );
+    let aspect_ratio = image_extent.width as f32 / image_extent.height as f32;
+    let projection = glam::Mat4::perspective_lh(45.0_f32.to_radians(), aspect_ratio, 0.1, 10.0);
+
+    let mut ubo = UniformBufferObject {
+        model,
+        view,
+        projection,
+    };
+
+    // "GLM was originally designed for OpenGL,
+    // where the Y coordinate of the clip coordinates is inverted.
+    // The easiest way to compensate for that is to flip the sign
+    // on the scaling factor of the Y axis in the projection matrix.
+    // If you don’t do this, then the image will be rendered upside down."
+    // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
+    ubo.projection.y_axis.y *= -1.0;
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(&ubo, mapped_uniform_buffer, 1);
+    }
+
+    Ok(())
 }
