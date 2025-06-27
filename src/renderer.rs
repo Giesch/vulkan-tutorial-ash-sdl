@@ -38,8 +38,7 @@ pub struct Renderer {
     swapchain_device_ext: ash::khr::swapchain::Device,
 
     // fields that change
-    #[allow(unused)]
-    image_format: vk::Format, // TODO should this be used somewhere?
+    image_format: vk::Format,
     image_extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
     swapchain_images: Vec<vk::Image>,
@@ -359,8 +358,6 @@ impl Renderer {
         update_uniform_buffer(
             self.start_time,
             self.image_extent,
-            // TODO is this by frame or by image?
-            // the tutorial seems inconsistent
             self.uniform_buffers_mapped[self.current_frame],
         )?;
 
@@ -1254,7 +1251,7 @@ impl Vertex {
     fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
         [
             vk::VertexInputAttributeDescription::default()
-                // TODO what is this
+                // the binding in glsl; matched with other vulkan structs as well
                 .binding(0)
                 // this is the location in glsl
                 .location(0)
@@ -1618,7 +1615,7 @@ fn create_descriptor_sets(
             .descriptor_count(1)
             .buffer_info(&buffer_info);
 
-        // TODO why does the tutorial call this in a loop?
+        // you can avoid calling this twice, but the ownership gets wonky
         let writes = [write];
         unsafe { device.update_descriptor_sets(&writes, &[]) };
     }
