@@ -51,6 +51,8 @@ pub struct Renderer {
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     texture_image: vk::Image,
     texture_image_memory: vk::DeviceMemory,
+    texture_image_view: vk::ImageView,
+    texture_sampler: vk::Sampler,
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
     index_buffer: vk::Buffer,
@@ -129,7 +131,7 @@ impl Renderer {
 
         let surface = window.vulkan_create_surface(instance.handle())?;
 
-        let (physical_device, queue_family_indices) =
+        let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
 
@@ -153,7 +155,8 @@ impl Renderer {
 
         let swapchain_images = unsafe { swapchain_device_ext.get_swapchain_images(swapchain)? };
 
-        let swapchain_image_views = create_image_views(&device, image_format, &swapchain_images)?;
+        let swapchain_image_views =
+            create_swapchain_image_views(&device, image_format, &swapchain_images)?;
 
         let render_pass = create_render_pass(&device, image_format)?;
 
@@ -175,6 +178,9 @@ impl Renderer {
             command_pool,
             graphics_queue,
         )?;
+        let texture_image_view =
+            create_image_view(&device, texture_image, vk::Format::R8G8B8A8_SRGB)?;
+        let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
@@ -232,6 +238,8 @@ impl Renderer {
             swapchain_framebuffers,
             texture_image,
             texture_image_memory,
+            texture_image_view,
+            texture_sampler,
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
@@ -468,7 +476,7 @@ impl Renderer {
         self.swapchain_images = swapchain_images;
 
         let swapchain_image_views =
-            create_image_views(&self.device, self.image_format, &self.swapchain_images)?;
+            create_swapchain_image_views(&self.device, self.image_format, &self.swapchain_images)?;
         self.swapchain_image_views = swapchain_image_views;
 
         let swapchain_framebuffers = create_framebuffers(
@@ -528,6 +536,9 @@ impl Drop for Renderer {
             self.device.destroy_buffer(self.vertex_buffer, None);
             self.device.free_memory(self.vertex_buffer_memory, None);
 
+            self.device.destroy_sampler(self.texture_sampler, None);
+            self.device
+                .destroy_image_view(self.texture_image_view, None);
             self.device.destroy_image(self.texture_image, None);
             self.device.free_memory(self.texture_image_memory, None);
 
@@ -686,12 +697,19 @@ fn choose_physical_device(
     instance: &ash::Instance,
     surface_ext: &ash::khr::surface::Instance,
     surface: vk::SurfaceKHR,
-) -> Result<(vk::PhysicalDevice, QueueFamilyIndices), BoxError> {
+) -> Result<
+    (
+        vk::PhysicalDevice,
+        QueueFamilyIndices,
+        vk::PhysicalDeviceProperties,
+    ),
+    BoxError,
+> {
     let physical_devices: Vec<vk::PhysicalDevice> =
         unsafe { instance.enumerate_physical_devices()? };
 
     // this corresponds to the tutorial's 'isDeviceSuitable'
-    let mut devices_with_indices = vec![];
+    let mut devices_with_indices_and_props = vec![];
     for physical_device in physical_devices {
         let indices = QueueFamilyIndices::find(instance, surface_ext, surface, physical_device)?;
         let Some(indices) = indices else {
@@ -712,13 +730,17 @@ fn choose_physical_device(
             continue;
         }
 
-        devices_with_indices.push((physical_device, indices));
+        let features = unsafe { instance.get_physical_device_features(physical_device) };
+        if features.sampler_anisotropy != vk::TRUE {
+            continue;
+        }
+
+        let props = unsafe { instance.get_physical_device_properties(physical_device) };
+
+        devices_with_indices_and_props.push((physical_device, indices, props));
     }
 
-    devices_with_indices.sort_by_key(|(physical_device, _indices)| {
-        let props: vk::PhysicalDeviceProperties =
-            unsafe { instance.get_physical_device_properties(*physical_device) };
-
+    devices_with_indices_and_props.sort_by_key(|(_physical_device, _indices, props)| {
         match props.device_type {
             vk::PhysicalDeviceType::DISCRETE_GPU => 0,
             vk::PhysicalDeviceType::INTEGRATED_GPU => 1,
@@ -729,7 +751,7 @@ fn choose_physical_device(
         }
     });
 
-    let Some(chosen_device) = devices_with_indices.into_iter().next() else {
+    let Some(chosen_device) = devices_with_indices_and_props.into_iter().next() else {
         return Err("no graphics device availble".into());
     };
 
@@ -903,7 +925,7 @@ fn create_logical_device(
         queue_create_infos.push(queue_create_info);
     }
 
-    let features = vk::PhysicalDeviceFeatures::default();
+    let features = vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
 
     let enabled_extension_names: Vec<_> = REQUIRED_DEVICE_EXTENSIONS
         .iter()
@@ -951,34 +973,14 @@ impl SwapChainSupportDetails {
     }
 }
 
-fn create_image_views(
+fn create_swapchain_image_views(
     device: &ash::Device,
     image_format: vk::Format,
     swapchain_images: &[vk::Image],
 ) -> Result<Vec<vk::ImageView>, BoxError> {
     let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
-    for image in swapchain_images {
-        let components = vk::ComponentMapping::default()
-            .r(vk::ComponentSwizzle::IDENTITY)
-            .g(vk::ComponentSwizzle::IDENTITY)
-            .b(vk::ComponentSwizzle::IDENTITY)
-            .a(vk::ComponentSwizzle::IDENTITY);
-
-        let subresource_range = vk::ImageSubresourceRange::default()
-            .aspect_mask(vk::ImageAspectFlags::COLOR)
-            .base_mip_level(0)
-            .level_count(1)
-            .base_array_layer(0)
-            .layer_count(1);
-
-        let create_info = vk::ImageViewCreateInfo::default()
-            .image(*image)
-            .view_type(vk::ImageViewType::TYPE_2D)
-            .format(image_format)
-            .components(components)
-            .subresource_range(subresource_range);
-
-        let image_view = unsafe { device.create_image_view(&create_info, None)? };
+    for &image in swapchain_images {
+        let image_view = create_image_view(device, image, image_format)?;
         swapchain_image_views.push(image_view);
     }
 
@@ -1398,7 +1400,7 @@ fn copy_memory_buffer(
 ) -> Result<(), BoxError> {
     // NOTE it would be better to have a second command pool for transfers,
     // that also uses 'create transient'
-    let command_buffer = begin_single_time_commands(device, command_pool, graphics_queue)?;
+    let command_buffer = begin_single_time_commands(device, command_pool)?;
 
     let regions = [vk::BufferCopy::default().size(size)];
     unsafe { device.cmd_copy_buffer(command_buffer, src_buffer, dst_buffer, &regions) };
@@ -1759,7 +1761,6 @@ fn create_vk_image(
 fn begin_single_time_commands(
     device: &ash::Device,
     command_pool: vk::CommandPool,
-    graphics_queue: vk::Queue,
 ) -> Result<vk::CommandBuffer, BoxError> {
     let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
         .level(vk::CommandBufferLevel::PRIMARY)
@@ -1807,7 +1808,7 @@ fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
 ) -> Result<(), BoxError> {
-    let command_buffer = begin_single_time_commands(device, command_pool, graphics_queue)?;
+    let command_buffer = begin_single_time_commands(device, command_pool)?;
 
     let subresource_range = vk::ImageSubresourceRange::default()
         .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -1874,7 +1875,7 @@ fn copy_buffer_to_image(
     image: vk::Image,
     extent: vk::Extent2D,
 ) -> Result<(), BoxError> {
-    let command_buffer = begin_single_time_commands(device, command_pool, graphics_queue)?;
+    let command_buffer = begin_single_time_commands(device, command_pool)?;
 
     let image_subresource = vk::ImageSubresourceLayers::default()
         .aspect_mask(vk::ImageAspectFlags::COLOR)
@@ -1904,4 +1905,62 @@ fn copy_buffer_to_image(
     end_single_time_commands(device, command_pool, graphics_queue, command_buffer)?;
 
     Ok(())
+}
+
+fn create_image_view(
+    device: &ash::Device,
+    image: vk::Image,
+    format: vk::Format,
+) -> Result<vk::ImageView, BoxError> {
+    let components = vk::ComponentMapping::default()
+        // NOTE these are the default
+        .r(vk::ComponentSwizzle::IDENTITY)
+        .g(vk::ComponentSwizzle::IDENTITY)
+        .b(vk::ComponentSwizzle::IDENTITY)
+        .a(vk::ComponentSwizzle::IDENTITY);
+
+    let subresource_range = vk::ImageSubresourceRange::default()
+        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .base_mip_level(0)
+        .level_count(1)
+        .base_array_layer(0)
+        .layer_count(1);
+
+    let create_info = vk::ImageViewCreateInfo::default()
+        .image(image)
+        .view_type(vk::ImageViewType::TYPE_2D)
+        .format(format)
+        .components(components)
+        .subresource_range(subresource_range);
+
+    let image_view = unsafe { device.create_image_view(&create_info, None)? };
+
+    Ok(image_view)
+}
+
+fn create_texture_sampler(
+    device: &ash::Device,
+    physical_device_properties: vk::PhysicalDeviceProperties,
+) -> Result<vk::Sampler, BoxError> {
+    let max_anisotropy = physical_device_properties.limits.max_sampler_anisotropy;
+    let create_info = vk::SamplerCreateInfo::default()
+        .mag_filter(vk::Filter::LINEAR)
+        .min_filter(vk::Filter::LINEAR)
+        .address_mode_u(vk::SamplerAddressMode::REPEAT)
+        .address_mode_v(vk::SamplerAddressMode::REPEAT)
+        .address_mode_w(vk::SamplerAddressMode::REPEAT)
+        .anisotropy_enable(true)
+        .max_anisotropy(max_anisotropy)
+        .border_color(vk::BorderColor::INT_OPAQUE_BLACK)
+        .unnormalized_coordinates(false)
+        .compare_enable(false)
+        .compare_op(vk::CompareOp::ALWAYS)
+        .mipmap_mode(vk::SamplerMipmapMode::LINEAR)
+        .mip_lod_bias(0.0)
+        .min_lod(0.0)
+        .max_lod(0.0);
+
+    let sampler = unsafe { device.create_sampler(&create_info, None)? };
+
+    Ok(sampler)
 }
