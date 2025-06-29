@@ -48,6 +48,9 @@ pub struct Renderer {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
+    depth_image: vk::Image,
+    depth_image_memory: vk::DeviceMemory,
+    depth_image_view: vk::ImageView,
     texture_image: vk::Image,
     texture_image_memory: vk::DeviceMemory,
     texture_image_view: vk::ImageView,
@@ -157,18 +160,32 @@ impl Renderer {
         let swapchain_image_views =
             create_swapchain_image_views(&device, image_format, &swapchain_images)?;
 
-        let render_pass = create_render_pass(&device, image_format)?;
+        let render_pass = create_render_pass(&instance, physical_device, &device, image_format)?;
 
         let descriptor_set_layout = create_descriptor_set_layout(&device)?;
 
         let (pipeline_layout, pipeline) =
             create_graphics_pipeline(&device, render_pass, descriptor_set_layout)?;
 
-        let swapchain_framebuffers =
-            create_framebuffers(&device, render_pass, &swapchain_image_views, image_extent)?;
-
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
+
+        let (depth_image, depth_image_memory, depth_image_view) = create_depth_image(
+            &instance,
+            &device,
+            physical_device,
+            command_pool,
+            graphics_queue,
+            image_extent,
+        )?;
+
+        let swapchain_framebuffers = create_framebuffers(
+            &device,
+            render_pass,
+            &swapchain_image_views,
+            image_extent,
+            depth_image_view,
+        )?;
 
         let (texture_image, texture_image_memory) = create_texture_image(
             &instance,
@@ -177,8 +194,12 @@ impl Renderer {
             command_pool,
             graphics_queue,
         )?;
-        let texture_image_view =
-            create_image_view(&device, texture_image, vk::Format::R8G8B8A8_SRGB)?;
+        let texture_image_view = create_image_view(
+            &device,
+            texture_image,
+            vk::Format::R8G8B8A8_SRGB,
+            vk::ImageAspectFlags::COLOR,
+        )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
@@ -238,6 +259,9 @@ impl Renderer {
             pipeline_layout,
             pipeline,
             swapchain_framebuffers,
+            depth_image,
+            depth_image_memory,
+            depth_image_view,
             texture_image,
             texture_image_memory,
             texture_image_view,
@@ -278,7 +302,14 @@ impl Renderer {
                 float32: [0.0, 0.0, 0.0, 1.0],
             },
         };
-        let clear_values = [clear_color];
+        let clear_depth_stencil = vk::ClearValue {
+            depth_stencil: vk::ClearDepthStencilValue {
+                depth: 1.0,
+                stencil: 0,
+            },
+        };
+        // NOTE this must match the order of the attachments
+        let clear_values = [clear_color, clear_depth_stencil];
         let render_pass_begin = vk::RenderPassBeginInfo::default()
             .render_pass(self.render_pass)
             .framebuffer(framebuffer)
@@ -453,6 +484,11 @@ impl Renderer {
         unsafe { self.device.device_wait_idle()? }
 
         self.cleanup_swapchain();
+        unsafe {
+            self.device.destroy_image_view(self.depth_image_view, None);
+            self.device.destroy_image(self.depth_image, None);
+            self.device.free_memory(self.depth_image_memory, None);
+        }
 
         let CreatedSwapchain {
             swapchain,
@@ -466,29 +502,37 @@ impl Renderer {
             self.physical_device,
             &self.queue_family_indices,
         )?;
-
         self.swapchain = swapchain;
         self.image_format = image_format;
         self.image_extent = image_extent;
 
-        let swapchain_images =
+        self.swapchain_images =
             unsafe { self.swapchain_device_ext.get_swapchain_images(swapchain)? };
-        self.swapchain_images = swapchain_images;
 
-        let swapchain_image_views =
+        self.swapchain_image_views =
             create_swapchain_image_views(&self.device, self.image_format, &self.swapchain_images)?;
-        self.swapchain_image_views = swapchain_image_views;
 
-        let swapchain_framebuffers = create_framebuffers(
+        let (depth_image, depth_image_memory, depth_image_view) = create_depth_image(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.command_pool,
+            self.graphics_queue,
+            self.image_extent,
+        )?;
+        self.depth_image = depth_image;
+        self.depth_image_memory = depth_image_memory;
+        self.depth_image_view = depth_image_view;
+
+        self.swapchain_framebuffers = create_framebuffers(
             &self.device,
             // NOTE for some monitor changes,
             // you'd need to recreate the renderpass as well
             self.render_pass,
             &self.swapchain_image_views,
             image_extent,
+            self.depth_image_view,
         )?;
-
-        self.swapchain_framebuffers = swapchain_framebuffers;
 
         Ok(())
     }
@@ -541,6 +585,10 @@ impl Drop for Renderer {
                 .destroy_image_view(self.texture_image_view, None);
             self.device.destroy_image(self.texture_image, None);
             self.device.free_memory(self.texture_image_memory, None);
+
+            self.device.destroy_image_view(self.depth_image_view, None);
+            self.device.destroy_image(self.depth_image, None);
+            self.device.free_memory(self.depth_image_memory, None);
 
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
@@ -976,7 +1024,8 @@ fn create_swapchain_image_views(
 ) -> Result<Vec<vk::ImageView>, BoxError> {
     let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
     for &image in swapchain_images {
-        let image_view = create_image_view(device, image, image_format)?;
+        let image_view =
+            create_image_view(device, image, image_format, vk::ImageAspectFlags::COLOR)?;
         swapchain_image_views.push(image_view);
     }
 
@@ -984,6 +1033,8 @@ fn create_swapchain_image_views(
 }
 
 fn create_render_pass(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
     device: &ash::Device,
     swapchain_format: vk::Format,
 ) -> Result<vk::RenderPass, BoxError> {
@@ -994,19 +1045,33 @@ fn create_render_pass(
         .store_op(vk::AttachmentStoreOp::STORE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
-    let attachments = [color_attachment];
 
     let color_attachment_ref = vk::AttachmentReference::default()
         .attachment(0)
         .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
-    let attachment_refs = [color_attachment_ref];
 
+    let depth_format = find_depth_format(instance, physical_device);
+    let depth_attachment = vk::AttachmentDescription::default()
+        .format(depth_format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::CLEAR)
+        .store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    let depth_attachment_ref = vk::AttachmentReference::default()
+        .attachment(1)
+        .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
+
+    let color_attachment_refs = [color_attachment_ref];
     let subpass = vk::SubpassDescription::default()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         // NOTE the index in this array is the one referred to by
         // 'layout(location = 0) out' in the frag shader
-        .color_attachments(&attachment_refs);
-    let subpasses = [subpass];
+        .color_attachments(&color_attachment_refs)
+        .depth_stencil_attachment(&depth_attachment_ref);
 
     // NOTE an alternative to doing this would be to
     // change the wait stages of image_available to include TOP_OF_PIPE
@@ -1014,11 +1079,23 @@ fn create_render_pass(
     let subpass_dep = vk::SubpassDependency::default()
         .src_subpass(vk::SUBPASS_EXTERNAL)
         .dst_subpass(0)
-        .src_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-        .dst_stage_mask(vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT)
-        .dst_access_mask(vk::AccessFlags::COLOR_ATTACHMENT_WRITE);
-    let dependencies = [subpass_dep];
+        .src_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
+        )
+        .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+        .dst_stage_mask(
+            vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
+                | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
+        )
+        .dst_access_mask(
+            vk::AccessFlags::COLOR_ATTACHMENT_WRITE
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
+        );
 
+    let attachments = [color_attachment, depth_attachment];
+    let subpasses = [subpass];
+    let dependencies = [subpass_dep];
     let render_pass_create_info = vk::RenderPassCreateInfo::default()
         .attachments(&attachments)
         .subpasses(&subpasses)
@@ -1119,6 +1196,13 @@ fn create_graphics_pipeline(
     let pipeline_layout =
         unsafe { device.create_pipeline_layout(&pipeline_layout_create_info, None)? };
 
+    let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::default()
+        .depth_test_enable(true)
+        .depth_write_enable(true)
+        .depth_compare_op(vk::CompareOp::LESS)
+        .depth_bounds_test_enable(false)
+        .stencil_test_enable(false);
+
     let pipeline_info = vk::GraphicsPipelineCreateInfo::default()
         .stages(&stages)
         .vertex_input_state(&vertex_input_state)
@@ -1130,7 +1214,8 @@ fn create_graphics_pipeline(
         .dynamic_state(&dynamic_state)
         .layout(pipeline_layout)
         .render_pass(render_pass)
-        .subpass(0);
+        .subpass(0)
+        .depth_stencil_state(&depth_stencil_state);
 
     let graphics_pipelines = unsafe {
         device
@@ -1150,11 +1235,12 @@ fn create_framebuffers(
     render_pass: vk::RenderPass,
     swapchain_image_views: &[vk::ImageView],
     image_extent: vk::Extent2D,
+    depth_image_view: vk::ImageView,
 ) -> Result<Vec<vk::Framebuffer>, BoxError> {
     let mut framebuffers = Vec::with_capacity(swapchain_image_views.len());
 
-    for image_view in swapchain_image_views {
-        let attachments = [*image_view];
+    for &image_view in swapchain_image_views {
+        let attachments = [image_view, depth_image_view];
 
         let framebuffer_info = vk::FramebufferCreateInfo::default()
             .render_pass(render_pass)
@@ -1228,36 +1314,60 @@ fn create_sync_objects(
 #[derive(Debug)]
 #[repr(C, align(16))]
 struct Vertex {
-    position: glam::Vec2,
+    position: glam::Vec3,
     color: glam::Vec3,
     tex_coord: glam::Vec2,
 }
 
-const VERTICES: [Vertex; 4] = [
+const VERTICES: [Vertex; 8] = [
     Vertex {
-        position: glam::Vec2::new(-0.5, -0.5),
+        position: glam::Vec3::new(-0.5, -0.5, 0.0),
         color: glam::Vec3::new(1.0, 0.0, 0.0),
         tex_coord: glam::Vec2::new(1.0, 0.0),
     },
     Vertex {
-        position: glam::Vec2::new(0.5, -0.5),
+        position: glam::Vec3::new(0.5, -0.5, 0.0),
         color: glam::Vec3::new(0.0, 1.0, 0.0),
         tex_coord: glam::Vec2::new(0.0, 0.0),
     },
     Vertex {
-        position: glam::Vec2::new(0.5, 0.5),
+        position: glam::Vec3::new(0.5, 0.5, 0.0),
         color: glam::Vec3::new(0.0, 0.0, 1.0),
         tex_coord: glam::Vec2::new(0.0, 1.0),
     },
     Vertex {
-        position: glam::Vec2::new(-0.5, 0.5),
+        position: glam::Vec3::new(-0.5, 0.5, 0.0),
+        color: glam::Vec3::new(1.0, 1.0, 1.0),
+        tex_coord: glam::Vec2::new(1.0, 1.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(-0.5, -0.5, -0.5),
+        color: glam::Vec3::new(1.0, 0.0, 0.0),
+        tex_coord: glam::Vec2::new(1.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, -0.5, -0.5),
+        color: glam::Vec3::new(0.0, 1.0, 0.0),
+        tex_coord: glam::Vec2::new(0.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, 0.5, -0.5),
+        color: glam::Vec3::new(0.0, 0.0, 1.0),
+        tex_coord: glam::Vec2::new(0.0, 1.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(-0.5, 0.5, -0.5),
         color: glam::Vec3::new(1.0, 1.0, 1.0),
         tex_coord: glam::Vec2::new(1.0, 1.0),
     },
 ];
 
 // NOTE this can be u16 or u32
-const INDICES: [u16; 6] = [0, 1, 2, 2, 3, 0];
+#[rustfmt::skip]
+const INDICES: [u16; 12] = [
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4,
+];
 
 impl Vertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -1269,6 +1379,7 @@ impl Vertex {
 
     fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
         [
+            // position
             vk::VertexInputAttributeDescription::default()
                 // the binding in glsl; matched with other vulkan structs as well
                 .binding(0)
@@ -1279,13 +1390,15 @@ impl Vertex {
                 // BUT this does matter for defaults -
                 // if there aren't enough components here to fill the components shader-side,
                 // the 'color' components default to 0 and 'alpha' component defaults to 1
-                .format(vk::Format::R32G32_SFLOAT)
+                .format(vk::Format::R32G32B32_SFLOAT)
                 .offset(std::mem::offset_of!(Vertex, position) as u32),
+            // color
             vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(1)
                 .format(vk::Format::R32G32B32_SFLOAT)
                 .offset(std::mem::offset_of!(Vertex, color) as u32),
+            // texture coordinate
             vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(2)
@@ -1833,7 +1946,6 @@ fn transition_image_layout(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
     image: vk::Image,
-    #[expect(unused)] // to be used for depth buffers
     format: vk::Format,
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
@@ -1872,6 +1984,21 @@ fn transition_image_layout(
 
             src_stage_mask = vk::PipelineStageFlags::TRANSFER;
             dst_stage_mask = vk::PipelineStageFlags::FRAGMENT_SHADER;
+        }
+
+        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL) => {
+            barrier.subresource_range.aspect_mask = vk::ImageAspectFlags::DEPTH;
+
+            if has_stencil_component(format) {
+                barrier.subresource_range.aspect_mask |= vk::ImageAspectFlags::STENCIL;
+            }
+
+            barrier.src_access_mask = Default::default();
+            barrier.dst_access_mask = vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_READ
+                | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE;
+
+            src_stage_mask = vk::PipelineStageFlags::TOP_OF_PIPE;
+            dst_stage_mask = vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS;
         }
 
         transition => {
@@ -1942,6 +2069,7 @@ fn create_image_view(
     device: &ash::Device,
     image: vk::Image,
     format: vk::Format,
+    aspect_mask: vk::ImageAspectFlags,
 ) -> Result<vk::ImageView, BoxError> {
     let components = vk::ComponentMapping::default()
         // NOTE these are the default
@@ -1951,7 +2079,7 @@ fn create_image_view(
         .a(vk::ComponentSwizzle::IDENTITY);
 
     let subresource_range = vk::ImageSubresourceRange::default()
-        .aspect_mask(vk::ImageAspectFlags::COLOR)
+        .aspect_mask(aspect_mask)
         .base_mip_level(0)
         .level_count(1)
         .base_array_layer(0)
@@ -1994,4 +2122,96 @@ fn create_texture_sampler(
     let sampler = unsafe { device.create_sampler(&create_info, None)? };
 
     Ok(sampler)
+}
+
+fn create_depth_image(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    command_pool: vk::CommandPool,
+    graphics_queue: vk::Queue,
+    swapchain_extent: vk::Extent2D,
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), BoxError> {
+    let depth_format = find_depth_format(instance, physical_device);
+
+    let image_options = ImageOptions {
+        extent: swapchain_extent,
+        format: depth_format,
+        tiling: vk::ImageTiling::OPTIMAL,
+        usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
+        memory_properties: vk::MemoryPropertyFlags::DEVICE_LOCAL,
+    };
+
+    let (depth_image, depth_image_memory) =
+        create_vk_image(instance, device, physical_device, image_options)?;
+
+    let depth_image_view = create_image_view(
+        device,
+        depth_image,
+        depth_format,
+        vk::ImageAspectFlags::DEPTH,
+    )?;
+
+    transition_image_layout(
+        device,
+        command_pool,
+        graphics_queue,
+        depth_image,
+        depth_format,
+        vk::ImageLayout::UNDEFINED,
+        vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+    )?;
+
+    Ok((depth_image, depth_image_memory, depth_image_view))
+}
+
+// VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
+// VkImageTiling tiling, VkFormatFeatureFlags features) {
+
+fn find_supported_format(
+    instance: &ash::Instance,
+    physical_device: vk::PhysicalDevice,
+    candidates: &[vk::Format],
+    tiling: vk::ImageTiling,
+    features: vk::FormatFeatureFlags,
+) -> Option<vk::Format> {
+    for &format in candidates {
+        let format_properties =
+            unsafe { instance.get_physical_device_format_properties(physical_device, format) };
+
+        if tiling == vk::ImageTiling::LINEAR
+            && (format_properties.linear_tiling_features & features) == features
+        {
+            return Some(format);
+        }
+
+        if tiling == vk::ImageTiling::OPTIMAL
+            && (format_properties.optimal_tiling_features & features) == features
+        {
+            return Some(format);
+        }
+    }
+
+    None
+}
+
+fn find_depth_format(instance: &ash::Instance, physical_device: vk::PhysicalDevice) -> vk::Format {
+    let candidates = [
+        vk::Format::D32_SFLOAT,
+        vk::Format::D32_SFLOAT_S8_UINT,
+        vk::Format::D24_UNORM_S8_UINT,
+    ];
+    let tiling = vk::ImageTiling::OPTIMAL;
+    let features = vk::FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
+
+    find_supported_format(instance, physical_device, &candidates, tiling, features)
+        .expect("no supported depth format available")
+}
+
+fn has_stencil_component(format: vk::Format) -> bool {
+    [
+        vk::Format::D32_SFLOAT_S8_UINT,
+        vk::Format::D24_UNORM_S8_UINT,
+    ]
+    .contains(&format)
 }

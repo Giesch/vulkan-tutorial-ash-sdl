@@ -7,7 +7,7 @@
   - [X] vertex buffers
   - [X] uniform buffers
   - [X] texture mapping
-  - [ ] depth buffering
+  - [X] depth buffering
   - [ ] loading models
   - [ ] generating mipmaps
   - [ ] multisampling
@@ -38,4 +38,9 @@
 - [ ] find out if reloading pipeline code is possible
   ie, use lifecycle methods from
 
-- [ ] understand stage & access masks in ImageMemoryBarrier better
+- [ ] understand stage & access masks better
+  in ImageMemoryBarrier & in SubpassDependency
+  re: creating framebuffers using the same depth image:
+  "The color attachment differs for every swap chain image, but the same depth image can be used by all of them because only a single subpass is running at the same time due to our semaphores."
+  so we'd need to do a depth image per swapchain image if there were multiple subpasses using them?
+  how does SDL3_gpu handle that?
