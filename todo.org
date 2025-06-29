@@ -6,21 +6,36 @@
   - [X] drawing a triangle
   - [X] vertex buffers
   - [X] uniform buffers
-  - [ ] texture mapping
+  - [X] texture mapping
   - [ ] depth buffering
   - [ ] loading models
+  - [ ] generating mipmaps
+  - [ ] multisampling
+  - [ ] compute shader
 
+* Cleanup
+- [X] avoid option unwraps after setup
+- [ ] replace ENABLE_VALIDATION with an env var
+  https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
 
 * Future
+- [ ] add translated slang shaders
+- [ ] make a spinning cube
+
+- [ ] add shader hot reload
+- [ ] try generating Vertex struct
+
 - [ ] look at Sascha Willems' examples
   https://github.com/SaschaWillems/Vulkan
   - [ ] 1.3 dynamic rendering triangle
-- [ ] move on to https://vkguide.dev/
-- [ ] add translated slang shaders
-  - try generating vertex struct
-- [ ] add shader hot reload
+- [ ] move on to https://vkguide.dev/ ?
 - [ ] consider adding a separate queue & command buffer for memory transfer
   https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue
 - [ ] learn how to use a gpu memory allocator
   particularly the two crates the ash egui crate integrates with
 - [ ] start recreating bevy 2d platformer with this tech stack?
+
+- [ ] find out if reloading pipeline code is possible
+  ie, use lifecycle methods from
+
+- [ ] understand stage & access masks in ImageMemoryBarrier better

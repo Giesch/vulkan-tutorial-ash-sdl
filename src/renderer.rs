@@ -15,8 +15,6 @@ use super::BoxError;
 pub mod debug;
 mod platform;
 
-// TODO replace this with env var
-// https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
@@ -33,6 +31,7 @@ pub struct Renderer {
     debug_loader: ash::ext::debug_utils::Instance,
     surface: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
+    queue_family_indices: QueueFamilyIndices,
     device: ash::Device,
     graphics_queue: vk::Queue,
     presentation_queue: vk::Queue,
@@ -139,18 +138,18 @@ impl Renderer {
         let presentation_queue =
             unsafe { device.get_device_queue(queue_family_indices.presentation, 0) };
 
+        let swapchain_device_ext = ash::khr::swapchain::Device::new(&instance, &device);
         let CreatedSwapchain {
-            swapchain_device_ext,
             swapchain,
             image_format,
             image_extent,
         } = create_swapchain(
-            &instance,
-            &device,
             &window,
+            &swapchain_device_ext,
             &surface_ext,
             surface,
             physical_device,
+            &queue_family_indices,
         )?;
 
         let swapchain_images = unsafe { swapchain_device_ext.get_swapchain_images(swapchain)? };
@@ -224,6 +223,7 @@ impl Renderer {
             debug_loader,
             surface,
             physical_device,
+            queue_family_indices,
             device,
             graphics_queue,
             presentation_queue,
@@ -455,20 +455,18 @@ impl Renderer {
         self.cleanup_swapchain();
 
         let CreatedSwapchain {
-            swapchain_device_ext,
             swapchain,
             image_format,
             image_extent,
         } = create_swapchain(
-            &self.instance,
-            &self.device,
             &self.window,
+            &self.swapchain_device_ext,
             &self.surface_ext,
             self.surface,
             self.physical_device,
+            &self.queue_family_indices,
         )?;
 
-        self.swapchain_device_ext = swapchain_device_ext;
         self.swapchain = swapchain;
         self.image_format = image_format;
         self.image_extent = image_extent;
@@ -765,14 +763,12 @@ const PREFERRED_SURFACE_FORMAT: vk::SurfaceFormatKHR = vk::SurfaceFormatKHR {
     color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
 };
 
-fn choose_swap_surface_format(
-    available_formats: &[vk::SurfaceFormatKHR],
-) -> Option<vk::SurfaceFormatKHR> {
-    if available_formats.contains(&PREFERRED_SURFACE_FORMAT) {
-        return Some(PREFERRED_SURFACE_FORMAT);
+fn choose_swap_surface_format(swapchain: &SwapChainSupportDetails) -> vk::SurfaceFormatKHR {
+    if swapchain.formats.contains(&PREFERRED_SURFACE_FORMAT) {
+        return PREFERRED_SURFACE_FORMAT;
     }
 
-    available_formats.first().copied()
+    swapchain.fallback_format
 }
 
 fn choose_swap_present_mode(available_modes: &[vk::PresentModeKHR]) -> vk::PresentModeKHR {
@@ -827,25 +823,22 @@ fn choose_swap_extent(window: &Window, capabilities: &vk::SurfaceCapabilitiesKHR
 }
 
 struct CreatedSwapchain {
-    swapchain_device_ext: ash::khr::swapchain::Device,
     swapchain: vk::SwapchainKHR,
     image_format: vk::Format,
     image_extent: vk::Extent2D,
 }
 
 fn create_swapchain(
-    instance: &ash::Instance,
-    device: &ash::Device,
     window: &Window,
+    swapchain_device_ext: &ash::khr::swapchain::Device,
     surface_ext: &ash::khr::surface::Instance,
     surface: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
+    queue_family_indices: &QueueFamilyIndices,
 ) -> Result<CreatedSwapchain, BoxError> {
     let swapchain_support = SwapChainSupportDetails::query(surface_ext, surface, physical_device)?;
 
-    // TODO avoid this unwrap; change the valiation step to also do the choose
-    // so SwapChainSupportDetails just has the one of each
-    let surface_format = choose_swap_surface_format(&swapchain_support.formats).unwrap();
+    let surface_format = choose_swap_surface_format(&swapchain_support);
     let present_mode = choose_swap_present_mode(&swapchain_support.present_modes);
     let image_extent = choose_swap_extent(&window, &swapchain_support.capabilities);
 
@@ -870,18 +863,17 @@ fn create_swapchain(
         .image_array_layers(1) // only not one for stereoscopic 3D (VR?)
         .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT); // this would be a memory op instead, if post-processing
 
-    // TODO avoid this unwrap; pass it in
-    let indices =
-        QueueFamilyIndices::find(instance, surface_ext, surface, physical_device)?.unwrap();
-    let queue_family_indices = [indices.graphics, indices.presentation];
-
-    let create_info = if indices.graphics != indices.presentation {
+    let create_info_indices = [
+        queue_family_indices.graphics,
+        queue_family_indices.presentation,
+    ];
+    let create_info = if queue_family_indices.graphics != queue_family_indices.presentation {
         // different queue families; the uncommon case
         // the tutorial recommends avoiding concurrent sharing mode if possible
         // but this involves the ownership portion of the vulkan API
         create_info
             .image_sharing_mode(vk::SharingMode::CONCURRENT)
-            .queue_family_indices(&queue_family_indices)
+            .queue_family_indices(&create_info_indices)
     } else {
         // same queue family; the common case
         create_info.image_sharing_mode(vk::SharingMode::EXCLUSIVE)
@@ -897,13 +889,9 @@ fn create_swapchain(
         // used during resizing & similar swapchain recreations
         .old_swapchain(vk::SwapchainKHR::null());
 
-    // TODO make this once at the beginning and pass it in
-    let swapchain_device_ext = ash::khr::swapchain::Device::new(instance, device);
-
     let swapchain = unsafe { swapchain_device_ext.create_swapchain(&create_info, None)? };
 
     Ok(CreatedSwapchain {
-        swapchain_device_ext,
         swapchain,
         image_format: surface_format.format,
         image_extent,
@@ -947,6 +935,7 @@ fn create_logical_device(
 struct SwapChainSupportDetails {
     capabilities: vk::SurfaceCapabilitiesKHR,
     formats: Vec<vk::SurfaceFormatKHR>,
+    fallback_format: vk::SurfaceFormatKHR,
     present_modes: Vec<vk::PresentModeKHR>,
 }
 
@@ -962,6 +951,10 @@ impl SwapChainSupportDetails {
 
         let formats =
             unsafe { surface_ext.get_physical_device_surface_formats(physical_device, surface)? };
+        let fallback_format = formats
+            .first()
+            .copied()
+            .expect("physical device had no surface formats");
 
         let present_modes = unsafe {
             surface_ext.get_physical_device_surface_present_modes(physical_device, surface)?
@@ -970,6 +963,7 @@ impl SwapChainSupportDetails {
         Ok(Self {
             capabilities,
             formats,
+            fallback_format,
             present_modes,
         })
     }
@@ -1742,7 +1736,6 @@ fn create_texture_image(
         vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
     )?;
 
-    // TODO tutorial doesn't mention this?
     unsafe {
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
@@ -1859,30 +1852,31 @@ fn transition_image_layout(
         .src_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .dst_queue_family_index(vk::QUEUE_FAMILY_IGNORED)
         .image(image)
-        .subresource_range(subresource_range)
-        // TODO operations that must happen before the barrier
-        .src_access_mask(Default::default())
-        // TODO operations that must wait on the barrier
-        .dst_access_mask(Default::default());
+        .subresource_range(subresource_range);
 
     let src_stage_mask: vk::PipelineStageFlags;
     let dst_stage_mask: vk::PipelineStageFlags;
-    if old_layout == vk::ImageLayout::UNDEFINED
-        && new_layout == vk::ImageLayout::TRANSFER_DST_OPTIMAL
-    {
-        barrier.src_access_mask = Default::default();
-        barrier.dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
-        src_stage_mask = vk::PipelineStageFlags::TOP_OF_PIPE;
-        dst_stage_mask = vk::PipelineStageFlags::TRANSFER;
-    } else if old_layout == vk::ImageLayout::TRANSFER_DST_OPTIMAL
-        && new_layout == vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL
-    {
-        barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
-        barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
-        src_stage_mask = vk::PipelineStageFlags::TRANSFER;
-        dst_stage_mask = vk::PipelineStageFlags::FRAGMENT_SHADER;
-    } else {
-        return Err("layout transition not supported".into());
+
+    match (old_layout, new_layout) {
+        (vk::ImageLayout::UNDEFINED, vk::ImageLayout::TRANSFER_DST_OPTIMAL) => {
+            barrier.src_access_mask = Default::default();
+            barrier.dst_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+
+            src_stage_mask = vk::PipelineStageFlags::TOP_OF_PIPE;
+            dst_stage_mask = vk::PipelineStageFlags::TRANSFER;
+        }
+
+        (vk::ImageLayout::TRANSFER_DST_OPTIMAL, vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL) => {
+            barrier.src_access_mask = vk::AccessFlags::TRANSFER_WRITE;
+            barrier.dst_access_mask = vk::AccessFlags::SHADER_READ;
+
+            src_stage_mask = vk::PipelineStageFlags::TRANSFER;
+            dst_stage_mask = vk::PipelineStageFlags::FRAGMENT_SHADER;
+        }
+
+        transition => {
+            return Err(format!("layout transition: {transition:?} not supported").into());
+        }
     }
 
     // https://docs.vulkan.org/spec/latest/chapters/synchronization.html#synchronization-access-types-supported
