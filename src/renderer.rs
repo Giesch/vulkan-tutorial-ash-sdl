@@ -207,6 +207,8 @@ impl Renderer {
             descriptor_pool,
             descriptor_set_layout,
             &uniform_buffers,
+            texture_image_view,
+            texture_sampler,
         )?;
 
         let (image_available, render_finished, frames_in_flight) =
@@ -1230,28 +1232,33 @@ fn create_sync_objects(
 }
 
 #[derive(Debug)]
-#[repr(C)]
+#[repr(C, align(16))]
 struct Vertex {
     position: glam::Vec2,
     color: glam::Vec3,
+    tex_coord: glam::Vec2,
 }
 
 const VERTICES: [Vertex; 4] = [
     Vertex {
         position: glam::Vec2::new(-0.5, -0.5),
         color: glam::Vec3::new(1.0, 0.0, 0.0),
+        tex_coord: glam::Vec2::new(1.0, 0.0),
     },
     Vertex {
         position: glam::Vec2::new(0.5, -0.5),
         color: glam::Vec3::new(0.0, 1.0, 0.0),
+        tex_coord: glam::Vec2::new(0.0, 0.0),
     },
     Vertex {
         position: glam::Vec2::new(0.5, 0.5),
         color: glam::Vec3::new(0.0, 0.0, 1.0),
+        tex_coord: glam::Vec2::new(0.0, 1.0),
     },
     Vertex {
         position: glam::Vec2::new(-0.5, 0.5),
         color: glam::Vec3::new(1.0, 1.0, 1.0),
+        tex_coord: glam::Vec2::new(1.0, 1.0),
     },
 ];
 
@@ -1266,7 +1273,7 @@ impl Vertex {
             .input_rate(vk::VertexInputRate::VERTEX)
     }
 
-    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 2] {
+    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
         [
             vk::VertexInputAttributeDescription::default()
                 // the binding in glsl; matched with other vulkan structs as well
@@ -1285,6 +1292,11 @@ impl Vertex {
                 .location(1)
                 .format(vk::Format::R32G32B32_SFLOAT)
                 .offset(std::mem::offset_of!(Vertex, color) as u32),
+            vk::VertexInputAttributeDescription::default()
+                .binding(0)
+                .location(2)
+                .format(vk::Format::R32G32_SFLOAT)
+                .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
         ]
     }
 }
@@ -1474,13 +1486,19 @@ struct UniformBufferObject {
 }
 
 fn create_descriptor_set_layout(device: &ash::Device) -> Result<vk::DescriptorSetLayout, BoxError> {
-    let layout_binding = vk::DescriptorSetLayoutBinding::default()
+    let ubo_layout_binding = vk::DescriptorSetLayoutBinding::default()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::VERTEX);
 
-    let bindings = [layout_binding];
+    let sampler_layout_binding = vk::DescriptorSetLayoutBinding::default()
+        .binding(1)
+        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(1)
+        .stage_flags(vk::ShaderStageFlags::FRAGMENT);
+
+    let bindings = [ubo_layout_binding, sampler_layout_binding];
     let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
     let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
@@ -1574,10 +1592,14 @@ fn update_uniform_buffer(
 }
 
 fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, BoxError> {
-    let pool_size = vk::DescriptorPoolSize::default()
+    let ubo_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
-    let pool_sizes = [pool_size];
+    let sampler_pool_size = vk::DescriptorPoolSize::default()
+        .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+        .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
+
+    let pool_sizes = [ubo_pool_size, sampler_pool_size];
     let pool_create_info = vk::DescriptorPoolCreateInfo::default()
         .pool_sizes(&pool_sizes)
         .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
@@ -1592,6 +1614,8 @@ fn create_descriptor_sets(
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layout: vk::DescriptorSetLayout,
     uniform_buffers: &[vk::Buffer],
+    texture_image_view: vk::ImageView,
+    texture_sampler: vk::Sampler,
 ) -> Result<Vec<vk::DescriptorSet>, BoxError> {
     let set_layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
     let alloc_info = vk::DescriptorSetAllocateInfo::default()
@@ -1602,14 +1626,14 @@ fn create_descriptor_sets(
 
     for i in 0..MAX_FRAMES_IN_FLIGHT {
         let buffer = uniform_buffers[i];
+        let dst_set = descriptor_sets[i];
+
         let buffer_info = vk::DescriptorBufferInfo::default()
             .buffer(buffer)
             .offset(0)
             .range(std::mem::size_of::<UniformBufferObject>() as u64);
-
         let buffer_info = [buffer_info];
-        let dst_set = descriptor_sets[i];
-        let write = vk::WriteDescriptorSet::default()
+        let ubo_write = vk::WriteDescriptorSet::default()
             .dst_set(dst_set)
             .dst_binding(0)
             .dst_array_element(0)
@@ -1617,8 +1641,21 @@ fn create_descriptor_sets(
             .descriptor_count(1)
             .buffer_info(&buffer_info);
 
-        // you can avoid calling this twice, but the ownership gets wonky
-        let writes = [write];
+        let image_info = vk::DescriptorImageInfo::default()
+            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+            .image_view(texture_image_view)
+            .sampler(texture_sampler);
+        let image_info = [image_info];
+        let image_write = vk::WriteDescriptorSet::default()
+            .dst_set(dst_set)
+            .dst_binding(1)
+            .dst_array_element(0)
+            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+            .descriptor_count(1)
+            .image_info(&image_info);
+
+        let writes = [ubo_write, image_write];
+
         unsafe { device.update_descriptor_sets(&writes, &[]) };
     }
 
