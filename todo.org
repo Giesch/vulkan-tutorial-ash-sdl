@@ -25,9 +25,12 @@
 - [ ] add shader hot reload
 - [ ] try generating Vertex struct
 
-- [ ] look at Sascha Willems' examples
-  https://github.com/SaschaWillems/Vulkan
-  - [ ] 1.3 dynamic rendering triangle
+- [ ] 1.3 dynamic rendering triangle
+  - [ ] look at Sascha Willems' 1.3 triangle example
+    https://github.com/SaschaWillems/Vulkan
+  - [ ] read this other post
+    https://lesleylai.info/en/vk-khr-dynamic-rendering/
+- [ ] look at Sascha Willems' other examples
 - [ ] move on to https://vkguide.dev/ ?
 - [ ] consider adding a separate queue & command buffer for memory transfer
   https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue
@@ -44,3 +47,5 @@
   "The color attachment differs for every swap chain image, but the same depth image can be used by all of them because only a single subpass is running at the same time due to our semaphores."
   so we'd need to do a depth image per swapchain image if there were multiple subpasses using them?
   how does SDL3_gpu handle that?
+
+- [ ] try out using draw indirect & gpu culling

@@ -38,6 +38,9 @@ pub struct Renderer {
     swapchain_device_ext: ash::khr::swapchain::Device,
 
     // fields that change
+    #[expect(unused)] // this model is not updated after load
+    vertices: Vec<Vertex>,
+    indices: Vec<u32>,
     image_format: vk::Format,
     image_extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
@@ -202,12 +205,15 @@ impl Renderer {
         )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
+        let (vertices, indices) = load_model()?;
+
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
             &device,
             physical_device,
             command_pool,
             graphics_queue,
+            &vertices,
         )?;
 
         let (index_buffer, index_buffer_memory) = create_index_buffer(
@@ -216,6 +222,7 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
+            &indices,
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
@@ -249,6 +256,8 @@ impl Renderer {
             graphics_queue,
             presentation_queue,
             swapchain_device_ext,
+            vertices,
+            indices,
             image_format,
             image_extent,
             swapchain,
@@ -361,7 +370,7 @@ impl Renderer {
                 command_buffer,
                 self.index_buffer,
                 0,
-                vk::IndexType::UINT16,
+                vk::IndexType::UINT32,
             );
 
             let descriptor_sets = [self.descriptor_sets[self.current_frame]];
@@ -375,7 +384,7 @@ impl Renderer {
             );
 
             self.device
-                .cmd_draw_indexed(command_buffer, INDICES.len() as u32, 1, 0, 0, 0);
+                .cmd_draw_indexed(command_buffer, self.indices.len() as u32, 1, 0, 0, 0);
         }
 
         // END RENDER PASS
@@ -1319,55 +1328,54 @@ struct Vertex {
     tex_coord: glam::Vec2,
 }
 
-const VERTICES: [Vertex; 8] = [
-    Vertex {
-        position: glam::Vec3::new(-0.5, -0.5, 0.0),
-        color: glam::Vec3::new(1.0, 0.0, 0.0),
-        tex_coord: glam::Vec2::new(1.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, -0.5, 0.0),
-        color: glam::Vec3::new(0.0, 1.0, 0.0),
-        tex_coord: glam::Vec2::new(0.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, 0.5, 0.0),
-        color: glam::Vec3::new(0.0, 0.0, 1.0),
-        tex_coord: glam::Vec2::new(0.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, 0.5, 0.0),
-        color: glam::Vec3::new(1.0, 1.0, 1.0),
-        tex_coord: glam::Vec2::new(1.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, -0.5, -0.5),
-        color: glam::Vec3::new(1.0, 0.0, 0.0),
-        tex_coord: glam::Vec2::new(1.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, -0.5, -0.5),
-        color: glam::Vec3::new(0.0, 1.0, 0.0),
-        tex_coord: glam::Vec2::new(0.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, 0.5, -0.5),
-        color: glam::Vec3::new(0.0, 0.0, 1.0),
-        tex_coord: glam::Vec2::new(0.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, 0.5, -0.5),
-        color: glam::Vec3::new(1.0, 1.0, 1.0),
-        tex_coord: glam::Vec2::new(1.0, 1.0),
-    },
-];
+// const VERTICES: [Vertex; 8] = [
+//     Vertex {
+//         position: glam::Vec3::new(-0.5, -0.5, 0.0),
+//         color: glam::Vec3::new(1.0, 0.0, 0.0),
+//         tex_coord: glam::Vec2::new(1.0, 0.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(0.5, -0.5, 0.0),
+//         color: glam::Vec3::new(0.0, 1.0, 0.0),
+//         tex_coord: glam::Vec2::new(0.0, 0.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(0.5, 0.5, 0.0),
+//         color: glam::Vec3::new(0.0, 0.0, 1.0),
+//         tex_coord: glam::Vec2::new(0.0, 1.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(-0.5, 0.5, 0.0),
+//         color: glam::Vec3::new(1.0, 1.0, 1.0),
+//         tex_coord: glam::Vec2::new(1.0, 1.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(-0.5, -0.5, -0.5),
+//         color: glam::Vec3::new(1.0, 0.0, 0.0),
+//         tex_coord: glam::Vec2::new(1.0, 0.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(0.5, -0.5, -0.5),
+//         color: glam::Vec3::new(0.0, 1.0, 0.0),
+//         tex_coord: glam::Vec2::new(0.0, 0.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(0.5, 0.5, -0.5),
+//         color: glam::Vec3::new(0.0, 0.0, 1.0),
+//         tex_coord: glam::Vec2::new(0.0, 1.0),
+//     },
+//     Vertex {
+//         position: glam::Vec3::new(-0.5, 0.5, -0.5),
+//         color: glam::Vec3::new(1.0, 1.0, 1.0),
+//         tex_coord: glam::Vec2::new(1.0, 1.0),
+//     },
+// ];
 
-// NOTE this can be u16 or u32
-#[rustfmt::skip]
-const INDICES: [u16; 12] = [
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4,
-];
+// #[rustfmt::skip]
+// const INDICES: [u32; 12] = [
+//     0, 1, 2, 2, 3, 0,
+//     4, 5, 6, 6, 7, 4,
+// ];
 
 impl Vertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -1414,8 +1422,9 @@ fn create_vertex_buffer(
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
+    vertices: &[Vertex],
 ) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
-    let buffer_size = (std::mem::size_of::<Vertex>() * VERTICES.len()) as u64;
+    let buffer_size = (std::mem::size_of::<Vertex>() * vertices.len()) as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
         device,
@@ -1429,7 +1438,7 @@ fn create_vertex_buffer(
         let mapped_dst =
             device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
                 as *mut Vertex;
-        std::ptr::copy_nonoverlapping(VERTICES.as_ptr(), mapped_dst, VERTICES.len());
+        std::ptr::copy_nonoverlapping(vertices.as_ptr(), mapped_dst, vertices.len());
         device.unmap_memory(staging_buffer_memory);
     };
 
@@ -1465,8 +1474,9 @@ fn create_index_buffer(
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
+    indices: &[u32],
 ) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
-    let buffer_size = (std::mem::size_of::<u16>() * INDICES.len()) as u64;
+    let buffer_size = (std::mem::size_of::<u32>() * indices.len()) as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
         device,
@@ -1479,8 +1489,8 @@ fn create_index_buffer(
     unsafe {
         let mapped_dst =
             device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
-                as *mut u16;
-        std::ptr::copy_nonoverlapping(INDICES.as_ptr(), mapped_dst, INDICES.len());
+                as *mut u32;
+        std::ptr::copy_nonoverlapping(indices.as_ptr(), mapped_dst, indices.len());
         device.unmap_memory(staging_buffer_memory);
     };
 
@@ -1664,7 +1674,7 @@ fn update_uniform_buffer(
     image_extent: vk::Extent2D,
     mapped_uniform_buffer: *mut UniformBufferObject,
 ) -> Result<(), BoxError> {
-    const DEGREES_PER_SECOND: f32 = 90.0;
+    const DEGREES_PER_SECOND: f32 = 30.0;
     let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
     let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
 
@@ -1776,7 +1786,7 @@ fn create_texture_image(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Image, vk::DeviceMemory), BoxError> {
-    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"]
+    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
         .iter()
         .collect();
 
@@ -2214,4 +2224,48 @@ fn has_stencil_component(format: vk::Format) -> bool {
         vk::Format::D24_UNORM_S8_UINT,
     ]
     .contains(&format)
+}
+
+// From unknownue's rust version
+// https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
+fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), BoxError> {
+    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
+        .iter()
+        .collect();
+
+    let (mut models, _materials) = tobj::load_obj(file_path, &tobj::GPU_LOAD_OPTIONS)?;
+
+    debug_assert!(models.len() == 1);
+    let model = models.remove(0);
+
+    let mut vertices = vec![];
+    let mesh = model.mesh;
+    let vertices_count = mesh.positions.len() / 3;
+    for i in 0..vertices_count {
+        let position = {
+            let offset = i * 3;
+            glam::Vec3::new(
+                mesh.positions[offset],
+                mesh.positions[offset + 1],
+                mesh.positions[offset + 2],
+            )
+        };
+
+        let tex_coord = {
+            let offset = i * 2;
+            let u = mesh.texcoords[offset];
+            let v = 1.0 - mesh.texcoords[offset + 1];
+            glam::Vec2::new(u, v)
+        };
+
+        let vertex = Vertex {
+            position,
+            color: glam::Vec3::splat(1.0),
+            tex_coord,
+        };
+
+        vertices.push(vertex);
+    }
+
+    Ok((vertices, mesh.indices))
 }
