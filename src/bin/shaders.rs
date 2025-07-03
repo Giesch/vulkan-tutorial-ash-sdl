@@ -1,15 +1,16 @@
+use std::fs;
 use std::process::Command;
 
-const SHADERS_SOURCE_DIR: &'static str = "./shaders/source";
-const SHADERS_COMPILED_DIR: &'static str = "./shaders/compiled";
+const SHADERS_SOURCE_DIR: &str = "./shaders/source";
+const SHADERS_COMPILED_DIR: &str = "./shaders/compiled";
 
 /// Compiles each glsl source shader into spv
 /// Depends on an installed glslc (from the vulkan sdk)
 pub fn main() {
-    let shader_source_dir = std::fs::read_dir(SHADERS_SOURCE_DIR).unwrap();
+    let shader_source_dir = fs::read_dir(SHADERS_SOURCE_DIR).unwrap();
 
-    if !std::fs::exists(SHADERS_COMPILED_DIR).unwrap() {
-        std::fs::create_dir(SHADERS_COMPILED_DIR).unwrap();
+    if !fs::exists(SHADERS_COMPILED_DIR).unwrap() {
+        fs::create_dir(SHADERS_COMPILED_DIR).unwrap();
     }
 
     for entry in shader_source_dir {
@@ -28,7 +29,7 @@ pub fn main() {
         } else if file_name.contains(".frag") {
             "frag"
         } else {
-            panic!("unable to determine shader stage for {}", file_name);
+            panic!("unable to determine shader stage for {file_name}");
         };
 
         let output = Command::new("glslc")

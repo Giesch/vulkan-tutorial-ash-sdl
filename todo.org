@@ -42,10 +42,15 @@
   ie, use lifecycle methods from
 
 - [ ] understand stage & access masks better
-  in ImageMemoryBarrier & in SubpassDependency
+  - [ ] review usage in ImageMemoryBarrier & in SubpassDependency
   re: creating framebuffers using the same depth image:
   "The color attachment differs for every swap chain image, but the same depth image can be used by all of them because only a single subpass is running at the same time due to our semaphores."
   so we'd need to do a depth image per swapchain image if there were multiple subpasses using them?
   how does SDL3_gpu handle that?
+- [ ] review how barriers are used in the mipmap chapter
 
 - [ ] try out using draw indirect & gpu culling
+
+- [ ] generate build-time mipmaps
+  - [ ] generate & use separate half-sized files with image-rs
+  - [ ] combine & use into one packed sheet
