@@ -16,6 +16,8 @@ pub mod debug;
 mod platform;
 
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
+/// applies MSAA-like sampling within textures
+const ENABLE_SAMPLE_SHADING: bool = false;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
@@ -36,6 +38,7 @@ pub struct Renderer {
     graphics_queue: vk::Queue,
     presentation_queue: vk::Queue,
     swapchain_device_ext: ash::khr::swapchain::Device,
+    msaa_samples: vk::SampleCountFlags,
 
     // fields that change
     #[expect(unused)] // currently not used after init
@@ -51,6 +54,9 @@ pub struct Renderer {
     pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
+    color_image: vk::Image,
+    color_image_memory: vk::DeviceMemory,
+    color_image_view: vk::ImageView,
     depth_image: vk::Image,
     depth_image_memory: vk::DeviceMemory,
     depth_image_view: vk::ImageView,
@@ -142,6 +148,8 @@ impl Renderer {
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
 
+        let msaa_samples = get_max_usable_sample_count(physical_device_properties);
+
         let graphics_queue = unsafe { device.get_device_queue(queue_family_indices.graphics, 0) };
         let presentation_queue =
             unsafe { device.get_device_queue(queue_family_indices.presentation, 0) };
@@ -165,15 +173,30 @@ impl Renderer {
         let swapchain_image_views =
             create_swapchain_image_views(&device, image_format, &swapchain_images)?;
 
-        let render_pass = create_render_pass(&instance, physical_device, &device, image_format)?;
+        let render_pass = create_render_pass(
+            &instance,
+            physical_device,
+            &device,
+            image_format,
+            msaa_samples,
+        )?;
 
         let descriptor_set_layout = create_descriptor_set_layout(&device)?;
 
         let (pipeline_layout, pipeline) =
-            create_graphics_pipeline(&device, render_pass, descriptor_set_layout)?;
+            create_graphics_pipeline(&device, render_pass, descriptor_set_layout, msaa_samples)?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
+
+        let (color_image, color_image_memory, color_image_view) = create_color_image(
+            &instance,
+            &device,
+            physical_device,
+            image_extent,
+            image_format,
+            msaa_samples,
+        )?;
 
         let (depth_image, depth_image_memory, depth_image_view) = create_depth_image(
             &instance,
@@ -182,6 +205,7 @@ impl Renderer {
             command_pool,
             graphics_queue,
             image_extent,
+            msaa_samples,
         )?;
 
         let swapchain_framebuffers = create_framebuffers(
@@ -190,6 +214,7 @@ impl Renderer {
             &swapchain_image_views,
             image_extent,
             depth_image_view,
+            color_image_view,
         )?;
 
         let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
@@ -198,6 +223,7 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
+            msaa_samples,
         )?;
         let texture_image_view = create_image_view(
             &device,
@@ -259,6 +285,7 @@ impl Renderer {
             graphics_queue,
             presentation_queue,
             swapchain_device_ext,
+            msaa_samples,
             vertices,
             indices,
             image_format,
@@ -271,6 +298,9 @@ impl Renderer {
             pipeline_layout,
             pipeline,
             swapchain_framebuffers,
+            color_image,
+            color_image_memory,
+            color_image_view,
             depth_image,
             depth_image_memory,
             depth_image_view,
@@ -502,6 +532,11 @@ impl Renderer {
             self.device.destroy_image(self.depth_image, None);
             self.device.free_memory(self.depth_image_memory, None);
         }
+        unsafe {
+            self.device.destroy_image_view(self.color_image_view, None);
+            self.device.destroy_image(self.color_image, None);
+            self.device.free_memory(self.color_image_memory, None);
+        }
 
         let CreatedSwapchain {
             swapchain,
@@ -532,10 +567,23 @@ impl Renderer {
             self.command_pool,
             self.graphics_queue,
             self.image_extent,
+            self.msaa_samples,
         )?;
         self.depth_image = depth_image;
         self.depth_image_memory = depth_image_memory;
         self.depth_image_view = depth_image_view;
+
+        let (color_image, color_image_memory, color_image_view) = create_color_image(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.image_extent,
+            self.image_format,
+            self.msaa_samples,
+        )?;
+        self.color_image = color_image;
+        self.color_image_memory = color_image_memory;
+        self.color_image_view = color_image_view;
 
         self.swapchain_framebuffers = create_framebuffers(
             &self.device,
@@ -545,6 +593,7 @@ impl Renderer {
             &self.swapchain_image_views,
             image_extent,
             self.depth_image_view,
+            self.color_image_view,
         )?;
 
         Ok(())
@@ -602,6 +651,10 @@ impl Drop for Renderer {
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.depth_image, None);
             self.device.free_memory(self.depth_image_memory, None);
+
+            self.device.destroy_image_view(self.color_image_view, None);
+            self.device.destroy_image(self.color_image, None);
+            self.device.free_memory(self.color_image_memory, None);
 
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
@@ -976,7 +1029,9 @@ fn create_logical_device(
         queue_create_infos.push(queue_create_info);
     }
 
-    let features = vk::PhysicalDeviceFeatures::default().sampler_anisotropy(true);
+    let features = vk::PhysicalDeviceFeatures::default()
+        .sampler_anisotropy(true)
+        .sample_rate_shading(ENABLE_SAMPLE_SHADING);
 
     let enabled_extension_names: Vec<_> = REQUIRED_DEVICE_EXTENSIONS
         .iter()
@@ -1050,14 +1105,15 @@ fn create_render_pass(
     physical_device: vk::PhysicalDevice,
     device: &ash::Device,
     swapchain_format: vk::Format,
+    msaa_samples: vk::SampleCountFlags,
 ) -> Result<vk::RenderPass, BoxError> {
     let color_attachment = vk::AttachmentDescription::default()
         .format(swapchain_format)
-        .samples(vk::SampleCountFlags::TYPE_1)
+        .samples(msaa_samples)
         .load_op(vk::AttachmentLoadOp::CLEAR)
         .store_op(vk::AttachmentStoreOp::STORE)
         .initial_layout(vk::ImageLayout::UNDEFINED)
-        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+        .final_layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
 
     let color_attachment_ref = vk::AttachmentReference::default()
         .attachment(0)
@@ -1066,7 +1122,7 @@ fn create_render_pass(
     let depth_format = find_depth_format(instance, physical_device);
     let depth_attachment = vk::AttachmentDescription::default()
         .format(depth_format)
-        .samples(vk::SampleCountFlags::TYPE_1)
+        .samples(msaa_samples)
         .load_op(vk::AttachmentLoadOp::CLEAR)
         .store_op(vk::AttachmentStoreOp::DONT_CARE)
         .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
@@ -1078,13 +1134,29 @@ fn create_render_pass(
         .attachment(1)
         .layout(vk::ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
+    let color_attachment_resolve = vk::AttachmentDescription::default()
+        .format(swapchain_format)
+        .samples(vk::SampleCountFlags::TYPE_1)
+        .load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .store_op(vk::AttachmentStoreOp::STORE)
+        .stencil_load_op(vk::AttachmentLoadOp::DONT_CARE)
+        .stencil_store_op(vk::AttachmentStoreOp::DONT_CARE)
+        .initial_layout(vk::ImageLayout::UNDEFINED)
+        .final_layout(vk::ImageLayout::PRESENT_SRC_KHR);
+
+    let color_attachment_resolve_ref = vk::AttachmentReference::default()
+        .attachment(2)
+        .layout(vk::ImageLayout::COLOR_ATTACHMENT_OPTIMAL);
+
     let color_attachment_refs = [color_attachment_ref];
+    let resolve_attachment_refs = [color_attachment_resolve_ref];
     let subpass = vk::SubpassDescription::default()
         .pipeline_bind_point(vk::PipelineBindPoint::GRAPHICS)
         // NOTE the index in this array is the one referred to by
         // 'layout(location = 0) out' in the frag shader
         .color_attachments(&color_attachment_refs)
-        .depth_stencil_attachment(&depth_attachment_ref);
+        .depth_stencil_attachment(&depth_attachment_ref)
+        .resolve_attachments(&resolve_attachment_refs);
 
     // NOTE an alternative to doing this would be to
     // change the wait stages of image_available to include TOP_OF_PIPE
@@ -1096,7 +1168,10 @@ fn create_render_pass(
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
                 | vk::PipelineStageFlags::LATE_FRAGMENT_TESTS,
         )
-        .src_access_mask(vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE)
+        .src_access_mask(
+            vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE
+                | vk::AccessFlags::COLOR_ATTACHMENT_WRITE,
+        )
         .dst_stage_mask(
             vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT
                 | vk::PipelineStageFlags::EARLY_FRAGMENT_TESTS,
@@ -1106,7 +1181,7 @@ fn create_render_pass(
                 | vk::AccessFlags::DEPTH_STENCIL_ATTACHMENT_WRITE,
         );
 
-    let attachments = [color_attachment, depth_attachment];
+    let attachments = [color_attachment, depth_attachment, color_attachment_resolve];
     let subpasses = [subpass];
     let dependencies = [subpass_dep];
     let render_pass_create_info = vk::RenderPassCreateInfo::default()
@@ -1140,6 +1215,7 @@ fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
     descriptor_set_layout: vk::DescriptorSetLayout,
+    msaa_samples: vk::SampleCountFlags,
 ) -> Result<(vk::PipelineLayout, vk::Pipeline), BoxError> {
     let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
     let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
@@ -1189,8 +1265,9 @@ fn create_graphics_pipeline(
         .depth_bias_enable(false);
 
     let multisample_state = vk::PipelineMultisampleStateCreateInfo::default()
-        .sample_shading_enable(false)
-        .rasterization_samples(vk::SampleCountFlags::TYPE_1);
+        .sample_shading_enable(ENABLE_SAMPLE_SHADING)
+        .min_sample_shading(if ENABLE_SAMPLE_SHADING { 0.2 } else { 0.0 })
+        .rasterization_samples(msaa_samples);
 
     // color blend per attached framebuffer
     let color_blend_attachment = vk::PipelineColorBlendAttachmentState::default()
@@ -1249,11 +1326,12 @@ fn create_framebuffers(
     swapchain_image_views: &[vk::ImageView],
     image_extent: vk::Extent2D,
     depth_image_view: vk::ImageView,
+    color_image_view: vk::ImageView,
 ) -> Result<Vec<vk::Framebuffer>, BoxError> {
     let mut framebuffers = Vec::with_capacity(swapchain_image_views.len());
 
-    for &image_view in swapchain_image_views {
-        let attachments = [image_view, depth_image_view];
+    for &swapchain_image_view in swapchain_image_views {
+        let attachments = [color_image_view, depth_image_view, swapchain_image_view];
 
         let framebuffer_info = vk::FramebufferCreateInfo::default()
             .render_pass(render_pass)
@@ -1789,6 +1867,7 @@ fn create_texture_image(
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
+    msaa_samples: vk::SampleCountFlags,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), BoxError> {
     let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
         .iter()
@@ -1835,6 +1914,7 @@ fn create_texture_image(
             | vk::ImageUsageFlags::TRANSFER_SRC, // for mipmap
         memory_properties: vk::MemoryPropertyFlags::DEVICE_LOCAL,
         mip_levels,
+        msaa_samples: vk::SampleCountFlags::TYPE_1,
     };
     let (vk_image, image_memory) =
         create_vk_image(instance, device, physical_device, image_options)?;
@@ -1898,6 +1978,7 @@ struct ImageOptions {
     usage: vk::ImageUsageFlags,
     memory_properties: vk::MemoryPropertyFlags,
     mip_levels: u32,
+    msaa_samples: vk::SampleCountFlags,
 }
 
 fn create_vk_image(
@@ -1916,7 +1997,7 @@ fn create_vk_image(
         .initial_layout(vk::ImageLayout::UNDEFINED)
         .usage(options.usage)
         .sharing_mode(vk::SharingMode::EXCLUSIVE)
-        .samples(vk::SampleCountFlags::TYPE_1);
+        .samples(options.msaa_samples);
 
     let vk_image = unsafe { device.create_image(&image_create_info, None)? };
 
@@ -2168,6 +2249,7 @@ fn create_depth_image(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
     swapchain_extent: vk::Extent2D,
+    msaa_samples: vk::SampleCountFlags,
 ) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), BoxError> {
     let depth_format = find_depth_format(instance, physical_device);
 
@@ -2180,6 +2262,7 @@ fn create_depth_image(
         usage: vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT,
         memory_properties: vk::MemoryPropertyFlags::DEVICE_LOCAL,
         mip_levels,
+        msaa_samples,
     };
 
     let (depth_image, depth_image_memory) =
@@ -2206,9 +2289,6 @@ fn create_depth_image(
 
     Ok((depth_image, depth_image_memory, depth_image_view))
 }
-
-// VkFormat findSupportedFormat(const std::vector<VkFormat>& candidates,
-// VkImageTiling tiling, VkFormatFeatureFlags features) {
 
 fn find_supported_format(
     instance: &ash::Instance,
@@ -2447,4 +2527,69 @@ fn generate_mipmaps(
     end_single_time_commands(device, command_pool, graphics_queue, command_buffer)?;
 
     Ok(())
+}
+
+fn get_max_usable_sample_count(
+    physical_device_properties: vk::PhysicalDeviceProperties,
+) -> vk::SampleCountFlags {
+    let vk::PhysicalDeviceLimits {
+        framebuffer_color_sample_counts,
+        framebuffer_depth_sample_counts,
+        ..
+    } = physical_device_properties.limits;
+    let counts = framebuffer_color_sample_counts & framebuffer_depth_sample_counts;
+
+    // NOTE; it may be better to choose less than the maximum available
+    // for performance reasons
+    let descending_options = [
+        vk::SampleCountFlags::TYPE_64,
+        vk::SampleCountFlags::TYPE_32,
+        vk::SampleCountFlags::TYPE_16,
+        vk::SampleCountFlags::TYPE_8,
+        vk::SampleCountFlags::TYPE_4,
+        vk::SampleCountFlags::TYPE_2,
+    ];
+
+    for option in descending_options {
+        if counts.contains(option) {
+            return option;
+        }
+    }
+
+    // TODO this will trigger a validation error;
+    // supposed to not use resolve attachment setup at all if not using msaa
+    vk::SampleCountFlags::TYPE_1
+}
+
+fn create_color_image(
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    swapchain_extent: vk::Extent2D,
+    color_format: vk::Format,
+    msaa_samples: vk::SampleCountFlags,
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), BoxError> {
+    let mip_levels = 1;
+    let image_options = ImageOptions {
+        extent: swapchain_extent,
+        format: color_format,
+        tiling: vk::ImageTiling::OPTIMAL,
+        usage: vk::ImageUsageFlags::TRANSIENT_ATTACHMENT | vk::ImageUsageFlags::COLOR_ATTACHMENT,
+        memory_properties: vk::MemoryPropertyFlags::DEVICE_LOCAL,
+        mip_levels,
+        msaa_samples,
+    };
+
+    let (color_image, color_image_memory) =
+        create_vk_image(instance, device, physical_device, image_options)?;
+
+    let color_image_view = create_image_view(
+        device,
+        color_image,
+        color_format,
+        vk::ImageAspectFlags::COLOR,
+        mip_levels,
+    )?;
+
+    Ok((color_image, color_image_memory, color_image_view))
 }
