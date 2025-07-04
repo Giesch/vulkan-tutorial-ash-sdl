@@ -1,3 +1,5 @@
+#![allow(clippy::type_complexity, clippy::too_many_arguments)]
+
 use std::collections::BTreeSet;
 use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
@@ -24,7 +26,7 @@ const MAX_FRAMES_IN_FLIGHT: usize = 2;
 pub struct Renderer {
     start_time: Instant,
     // fields that are created once
-    #[allow(unused)]
+    #[expect(unused)]
     entry: ash::Entry,
     window: Window,
     instance: ash::Instance,
@@ -223,7 +225,6 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
-            msaa_samples,
         )?;
         let texture_image_view = create_image_view(
             &device,
@@ -1677,7 +1678,7 @@ fn find_memory_type_index(
     Err("failed to find suitable memory type".into())
 }
 
-#[allow(unused)] // mapped directly to gpu
+#[expect(unused)] // mapped directly to gpu
 struct UniformBufferObject {
     model: glam::Mat4,
     view: glam::Mat4,
@@ -1756,7 +1757,7 @@ fn update_uniform_buffer(
     image_extent: vk::Extent2D,
     mapped_uniform_buffer: *mut UniformBufferObject,
 ) -> Result<(), BoxError> {
-    const DEGREES_PER_SECOND: f32 = 30.0;
+    const DEGREES_PER_SECOND: f32 = 05.0;
     let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
     let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
 
@@ -1867,7 +1868,6 @@ fn create_texture_image(
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
-    msaa_samples: vk::SampleCountFlags,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), BoxError> {
     let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
         .iter()
@@ -2556,7 +2556,7 @@ fn get_max_usable_sample_count(
         }
     }
 
-    // TODO this will trigger a validation error;
+    // NOTE this will trigger a validation error;
     // supposed to not use resolve attachment setup at all if not using msaa
     vk::SampleCountFlags::TYPE_1
 }
