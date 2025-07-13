@@ -12,6 +12,8 @@ use image::ImageReader;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
+use crate::shaders;
+
 use super::BoxError;
 
 pub mod debug;
@@ -24,8 +26,10 @@ const ENABLE_SAMPLE_SHADING: bool = false;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
-    start_time: Instant,
     // fields that are created once
+    start_time: Instant,
+    #[expect(unused)]
+    compiled_shaders: shaders::CompiledShaderModule,
     #[expect(unused)]
     entry: ash::Entry,
     window: Window,
@@ -92,6 +96,8 @@ impl Renderer {
     pub fn init(window: Window) -> Result<Self, BoxError> {
         let start_time = Instant::now();
 
+        let compiled_shaders = shaders::compile_slang_shaders();
+
         let entry = ash::Entry::linked();
 
         check_required_extensions(&entry)?;
@@ -102,7 +108,7 @@ impl Renderer {
             .engine_name(c"No Engine")
             .application_version(vk::make_api_version(0, 0, 1, 0))
             .engine_version(vk::make_api_version(0, 0, 1, 0))
-            .api_version(vk::API_VERSION_1_0);
+            .api_version(vk::API_VERSION_1_3);
 
         let mut enabled_extension_names = vec![];
         let window_required_extensions: Vec<_> = window
@@ -185,8 +191,13 @@ impl Renderer {
 
         let descriptor_set_layout = create_descriptor_set_layout(&device)?;
 
-        let (pipeline_layout, pipeline) =
-            create_graphics_pipeline(&device, render_pass, descriptor_set_layout, msaa_samples)?;
+        let (pipeline_layout, pipeline) = create_graphics_pipeline(
+            &device,
+            render_pass,
+            descriptor_set_layout,
+            msaa_samples,
+            &compiled_shaders,
+        )?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
@@ -235,7 +246,8 @@ impl Renderer {
         )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
-        let (vertices, indices) = load_model()?;
+        // let (vertices, indices) = load_model()?;
+        let (vertices, indices) = (VERTICES.to_vec(), INDICES.to_vec());
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
@@ -273,6 +285,7 @@ impl Renderer {
 
         Ok(Self {
             start_time,
+            compiled_shaders,
             window: window.clone(),
             entry,
             instance,
@@ -1196,6 +1209,7 @@ fn create_render_pass(
 }
 
 /// usage: read_shader_spv("triangle.vert.spv");
+#[expect(unused)]
 fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
     let shader_path: PathBuf = [
         env!("CARGO_MANIFEST_DIR"),
@@ -1217,12 +1231,16 @@ fn create_graphics_pipeline(
     render_pass: vk::RenderPass,
     descriptor_set_layout: vk::DescriptorSetLayout,
     msaa_samples: vk::SampleCountFlags,
+    compiled_shaders: &shaders::CompiledShaderModule,
 ) -> Result<(vk::PipelineLayout, vk::Pipeline), BoxError> {
-    let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
-    let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
+    // let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
+    // let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
 
-    let vert_create_info = vk::ShaderModuleCreateInfo::default().code(&vert_shader_spv);
-    let frag_create_info = vk::ShaderModuleCreateInfo::default().code(&frag_shader_spv);
+    let vert_shader_spv = &compiled_shaders.vertex_shader.spv_bytes;
+    let frag_shader_spv = &compiled_shaders.fragment_shader.spv_bytes;
+
+    let vert_create_info = vk::ShaderModuleCreateInfo::default().code(vert_shader_spv);
+    let frag_create_info = vk::ShaderModuleCreateInfo::default().code(frag_shader_spv);
 
     let vert_shader = unsafe { device.create_shader_module(&vert_create_info, None)? };
     let frag_shader = unsafe { device.create_shader_module(&frag_create_info, None)? };
@@ -1403,7 +1421,7 @@ fn create_sync_objects(
     Ok((image_available, render_finished, frames_in_flight))
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[repr(C, align(16))]
 struct Vertex {
     position: glam::Vec3,
@@ -1411,54 +1429,54 @@ struct Vertex {
     tex_coord: glam::Vec2,
 }
 
-// const VERTICES: [Vertex; 8] = [
-//     Vertex {
-//         position: glam::Vec3::new(-0.5, -0.5, 0.0),
-//         color: glam::Vec3::new(1.0, 0.0, 0.0),
-//         tex_coord: glam::Vec2::new(1.0, 0.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(0.5, -0.5, 0.0),
-//         color: glam::Vec3::new(0.0, 1.0, 0.0),
-//         tex_coord: glam::Vec2::new(0.0, 0.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(0.5, 0.5, 0.0),
-//         color: glam::Vec3::new(0.0, 0.0, 1.0),
-//         tex_coord: glam::Vec2::new(0.0, 1.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(-0.5, 0.5, 0.0),
-//         color: glam::Vec3::new(1.0, 1.0, 1.0),
-//         tex_coord: glam::Vec2::new(1.0, 1.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(-0.5, -0.5, -0.5),
-//         color: glam::Vec3::new(1.0, 0.0, 0.0),
-//         tex_coord: glam::Vec2::new(1.0, 0.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(0.5, -0.5, -0.5),
-//         color: glam::Vec3::new(0.0, 1.0, 0.0),
-//         tex_coord: glam::Vec2::new(0.0, 0.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(0.5, 0.5, -0.5),
-//         color: glam::Vec3::new(0.0, 0.0, 1.0),
-//         tex_coord: glam::Vec2::new(0.0, 1.0),
-//     },
-//     Vertex {
-//         position: glam::Vec3::new(-0.5, 0.5, -0.5),
-//         color: glam::Vec3::new(1.0, 1.0, 1.0),
-//         tex_coord: glam::Vec2::new(1.0, 1.0),
-//     },
-// ];
+const VERTICES: [Vertex; 8] = [
+    Vertex {
+        position: glam::Vec3::new(-0.5, -0.5, 0.0),
+        color: glam::Vec3::new(1.0, 0.0, 0.0),
+        tex_coord: glam::Vec2::new(1.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, -0.5, 0.0),
+        color: glam::Vec3::new(0.0, 1.0, 0.0),
+        tex_coord: glam::Vec2::new(0.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, 0.5, 0.0),
+        color: glam::Vec3::new(0.0, 0.0, 1.0),
+        tex_coord: glam::Vec2::new(0.0, 1.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(-0.5, 0.5, 0.0),
+        color: glam::Vec3::new(1.0, 1.0, 1.0),
+        tex_coord: glam::Vec2::new(1.0, 1.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(-0.5, -0.5, -0.5),
+        color: glam::Vec3::new(1.0, 0.0, 0.0),
+        tex_coord: glam::Vec2::new(1.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, -0.5, -0.5),
+        color: glam::Vec3::new(0.0, 1.0, 0.0),
+        tex_coord: glam::Vec2::new(0.0, 0.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(0.5, 0.5, -0.5),
+        color: glam::Vec3::new(0.0, 0.0, 1.0),
+        tex_coord: glam::Vec2::new(0.0, 1.0),
+    },
+    Vertex {
+        position: glam::Vec3::new(-0.5, 0.5, -0.5),
+        color: glam::Vec3::new(1.0, 1.0, 1.0),
+        tex_coord: glam::Vec2::new(1.0, 1.0),
+    },
+];
 
-// #[rustfmt::skip]
-// const INDICES: [u32; 12] = [
-//     0, 1, 2, 2, 3, 0,
-//     4, 5, 6, 6, 7, 4,
-// ];
+#[rustfmt::skip]
+const INDICES: [u32; 12] = [
+    0, 1, 2, 2, 3, 0,
+    4, 5, 6, 6, 7, 4,
+];
 
 impl Vertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -1599,6 +1617,7 @@ fn create_index_buffer(
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);
     }
+
     Ok((index_buffer, index_buffer_memory))
 }
 
@@ -1678,7 +1697,7 @@ fn find_memory_type_index(
     Err("failed to find suitable memory type".into())
 }
 
-#[expect(unused)] // mapped directly to gpu
+#[repr(C, align(16))]
 struct UniformBufferObject {
     model: glam::Mat4,
     view: glam::Mat4,
@@ -1869,7 +1888,8 @@ fn create_texture_image(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), BoxError> {
-    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
+    // let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
+    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"]
         .iter()
         .collect();
 
@@ -2340,6 +2360,7 @@ fn has_stencil_component(format: vk::Format) -> bool {
 
 // From unknownue's rust version
 // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
+#[expect(unused)]
 fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), BoxError> {
     let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
         .iter()

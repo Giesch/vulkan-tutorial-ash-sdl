@@ -5,7 +5,7 @@ const SHADERS_SOURCE_DIR: &str = "./shaders/source";
 const SHADERS_COMPILED_DIR: &str = "./shaders/compiled";
 
 /// Compiles each glsl source shader into spv
-/// Depends on an installed glslc (from the vulkan sdk)
+/// requires glslc on the path (ie, from the vulkan sdk)
 pub fn main() {
     let shader_source_dir = fs::read_dir(SHADERS_SOURCE_DIR).unwrap();
 
@@ -20,6 +20,13 @@ pub fn main() {
 
         let file_name = entry.file_name();
         let file_name = file_name.to_string_lossy();
+
+        if !file_name.ends_with(".glsl") {
+            // Slang shaders are compiled on startup by the renderer
+            continue;
+        }
+
+        // GLSL shader
 
         let out_file_name = file_name.replace("glsl", "spv");
         let out_path = format!("{SHADERS_COMPILED_DIR}/{out_file_name}");

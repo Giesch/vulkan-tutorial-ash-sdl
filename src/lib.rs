@@ -1,5 +1,6 @@
 mod app;
 mod renderer;
+mod shaders;
 
 pub use app::App;
 pub use renderer::Renderer;
