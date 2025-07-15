@@ -1,3 +1,5 @@
+// https://docs.vulkan.org/tutorial/latest/_attachments/27_shader_depth.slang
+
 struct VSInput {
     float3 inPosition;
     float3 inColor;

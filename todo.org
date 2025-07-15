@@ -1,12 +1,32 @@
 #+title: Todo
 
 * Next
-- [-] get a good-enough slang pipeline & workflow
-  - [X] compile shaders at startup
-  - [ ] editor syntax highlighting
-  - [ ] translate the final model shader
+- [ ] read about dynamic rendering
+  - [ ] sascha's 1.3 triangle
 
-- [-] finish official vulkan tutorial
+- [ ] rewrite renderer in a new repo
+  - use a cargo workspace
+    make it easy to keep multiple working examples
+  - group one-time initialized fields into a sub-struct w/methods
+  - group sync primitive arrays with their resources in some way
+    ie make it clear what's per-swapchain-image vs per-in-flight-frame
+  - use anyhow for errors
+  - use an env var for vulkan validation layer
+    https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
+    maybe for logging too? ie always compile w/verbose
+  - also switch to dynamic rendering?
+    in the future, try out bindless with slang support
+
+- [ ] vkguide implementation
+  - use egui w/ash crate
+
+- [X] get a good-enough slang pipeline & workflow
+  - [X] compile shaders at startup
+  - [X] slang editor syntax highlighting
+  - [X] use slang shader for viking room example
+  - [X] remove glsl workflow
+
+- [X] finish official vulkan tutorial
   https://docs.vulkan.org/tutorial/latest
   - [X] drawing a triangle
   - [X] vertex buffers
@@ -16,34 +36,36 @@
   - [X] loading models
   - [X] generating mipmaps
   - [X] multisampling
-  - [ ] compute shader?
-
-* Cleanup
-- [X] avoid option unwraps after setup
-- [ ] replace ENABLE_VALIDATION with an env var
-  https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
 
 * Future
-- [ ] rework renderer to be re-usable with different examples
-  break out example binaries? workspace? new repo?
 - [ ] make a spinning cube from scratch in slang
+
 - [ ] add shader hot reload
+  - [ ] inotify file watcher
+  - [ ] recompile
+  - [ ] rebuild pipeline w/new shader modules
+
 - [ ] try generating Vertex struct via slang reflection
 
-- [ ] 1.3 dynamic rendering triangle
+- [ ] vulkan-tutorial extras
+  - [ ] compute shader
+
+- [-] 1.3 dynamic rendering triangle
   - [ ] look at Sascha Willems' 1.3 triangle example
     https://github.com/SaschaWillems/Vulkan
-  - [ ] read this other post
+  - [X] read this other post
     https://lesleylai.info/en/vk-khr-dynamic-rendering/
 - [ ] look at Sascha Willems' other examples
 - [ ] move on to https://vkguide.dev/ ?
+
 - [ ] consider adding a separate queue & command buffer for memory transfer
   https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue
+
 - [ ] learn how to use a gpu memory allocator
   particularly the two crates the ash egui crate integrates with
 - [ ] start recreating bevy 2d platformer with this tech stack?
 
-- [ ] find out if reloading pipeline code is possible
+- [ ] find out if hot-reloading pipeline code is possible
   ie, use lifecycle methods from
 
 - [ ] understand stage & access masks better
@@ -59,3 +81,5 @@
 - [ ] generate build-time mipmaps
   - [ ] generate & use separate half-sized files with image-rs
   - [ ] combine & use into one packed sheet
+
+- [ ] regenerate reflection structs during hot reload

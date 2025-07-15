@@ -6,15 +6,9 @@ check:
 run:
     cargo run
 
-# NOTE: this depends on an installed glslc from the vulkan sdk
-# compile glsl shaders to spv
-[unix]
-shaders:
-    cargo run --bin shaders
-
 slang_version := "2025.12.1"
 
-# download Slang
+# download Slang shader compiler
 [linux]
 setup:
     mkdir -p vendor/slang

@@ -19,11 +19,21 @@ use super::BoxError;
 pub mod debug;
 mod platform;
 
+/// enables both the validation layer and debug utils logging
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 /// applies MSAA-like sampling within textures
 const ENABLE_SAMPLE_SHADING: bool = false;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
+enum Example {
+    #[allow(unused)]
+    DepthTexture,
+    #[allow(unused)]
+    VikingRoom,
+}
+
+const CURRENT_EXAMPLE: Example = Example::VikingRoom;
 
 pub struct Renderer {
     // fields that are created once
@@ -46,7 +56,7 @@ pub struct Renderer {
     swapchain_device_ext: ash::khr::swapchain::Device,
     msaa_samples: vk::SampleCountFlags,
 
-    // fields that change
+    // fields that change, at least in theory
     #[expect(unused)] // currently not used after init
     vertices: Vec<Vertex>,
     indices: Vec<u32>,
@@ -246,8 +256,10 @@ impl Renderer {
         )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
-        // let (vertices, indices) = load_model()?;
-        let (vertices, indices) = (VERTICES.to_vec(), INDICES.to_vec());
+        let (vertices, indices) = match CURRENT_EXAMPLE {
+            Example::DepthTexture => (VERTICES.to_vec(), INDICES.to_vec()),
+            Example::VikingRoom => load_model()?,
+        };
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
@@ -1248,11 +1260,11 @@ fn create_graphics_pipeline(
     let vert_create_info = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::VERTEX)
         .module(vert_shader)
-        .name(c"main");
+        .name(&compiled_shaders.vertex_shader.entry_point_name);
     let frag_create_info = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::FRAGMENT)
         .module(frag_shader)
-        .name(c"main");
+        .name(&compiled_shaders.fragment_shader.entry_point_name);
     let stages = [vert_create_info, frag_create_info];
 
     let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
@@ -1888,10 +1900,11 @@ fn create_texture_image(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), BoxError> {
-    // let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"]
-    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"]
-        .iter()
-        .collect();
+    let file_path = match CURRENT_EXAMPLE {
+        Example::DepthTexture => [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"],
+        Example::VikingRoom => [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"],
+    };
+    let file_path: PathBuf = file_path.iter().collect();
 
     let image = ImageReader::open(file_path)?.decode()?;
     let expected_size = image.width() * image.height() * 4;
@@ -2360,7 +2373,6 @@ fn has_stencil_component(format: vk::Format) -> bool {
 
 // From unknownue's rust version
 // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
-#[expect(unused)]
 fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), BoxError> {
     let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
         .iter()

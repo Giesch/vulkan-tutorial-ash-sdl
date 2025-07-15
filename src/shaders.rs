@@ -4,17 +4,18 @@ use slang::Downcast;
 
 pub fn compile_slang_shaders() -> CompiledShaderModule {
     let global_session = slang::GlobalSession::new().unwrap();
-    let search_path = std::ffi::CString::new("shaders/source").unwrap();
+    let search_path = CString::new("shaders/source").unwrap();
 
     let session_options = slang::CompilerOptions::default()
+        .vulkan_use_entry_point_name(true)
+        .language(slang::SourceLanguage::Slang)
         .optimization(slang::OptimizationLevel::High)
         .emit_spirv_directly(true)
-        // TODO why does slang recommend row-major?
-        // does it only matter for targeting DX?
         .matrix_layout_column(true);
 
     let target_desc = slang::TargetDesc::default()
         .format(slang::CompileTarget::Spirv)
+        // TODO also need to specify glsl_450?
         .profile(global_session.find_profile("spirv_1_5"));
 
     let targets = [target_desc];
@@ -31,7 +32,7 @@ pub fn compile_slang_shaders() -> CompiledShaderModule {
     let module = session.load_module(source_file_name).unwrap();
 
     // the examples have 1 vert and 1 frag shader
-    debug_assert!(module.entry_points().len() == 2);
+    assert!(module.entry_points().len() == 2);
 
     let mut vert: Option<CompiledShader> = None;
     let mut frag: Option<CompiledShader> = None;
