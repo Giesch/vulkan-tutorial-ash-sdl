@@ -2,9 +2,11 @@ use std::ffi::CString;
 
 use slang::Downcast;
 
-pub fn compile_slang_shaders() -> CompiledShaderModule {
+use crate::BoxError;
+
+pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     let global_session = slang::GlobalSession::new().unwrap();
-    let search_path = CString::new("shaders/source").unwrap();
+    let search_path = CString::new("shaders/source")?;
 
     let session_options = slang::CompilerOptions::default()
         .vulkan_use_entry_point_name(true)
@@ -29,15 +31,15 @@ pub fn compile_slang_shaders() -> CompiledShaderModule {
     let session = global_session.create_session(&session_desc).unwrap();
     // TODO glob for all .slang files
     let source_file_name = "depth_texture.slang";
-    let module = session.load_module(source_file_name).unwrap();
+    let module = session.load_module(source_file_name)?;
 
     // the examples have 1 vert and 1 frag shader
-    assert!(module.entry_points().len() == 2);
+    debug_assert!(module.entry_points().len() == 2);
 
     let mut vert: Option<CompiledShader> = None;
     let mut frag: Option<CompiledShader> = None;
     for entry_point in module.entry_points() {
-        let compiled_shader = compile_shader(&entry_point, &session, &module);
+        let compiled_shader = compile_shader(&entry_point, &session, &module)?;
 
         if compiled_shader.stage == slang::Stage::Vertex {
             vert = Some(compiled_shader)
@@ -47,12 +49,15 @@ pub fn compile_slang_shaders() -> CompiledShaderModule {
     }
 
     match (vert, frag) {
-        (Some(vertex_shader), Some(fragment_shader)) => CompiledShaderModule {
+        (Some(vertex_shader), Some(fragment_shader)) => Ok(CompiledShaderModule {
             source_file_name: source_file_name.into(),
             vertex_shader,
             fragment_shader,
-        },
-        _ => panic!("failed to load vert and frag entry points for: {source_file_name}"),
+        }),
+
+        _ => {
+            Err(format!("failed to load vert and frag entry points for: {source_file_name}").into())
+        }
     }
 }
 
@@ -86,17 +91,15 @@ fn compile_shader(
     entry_point: &slang::EntryPoint,
     session: &slang::Session,
     module: &slang::Module,
-) -> CompiledShader {
-    let program = session
-        .create_composite_component_type(&[
-            module.downcast().clone(),
-            entry_point.downcast().clone(),
-        ])
-        .unwrap();
+) -> Result<CompiledShader, BoxError> {
+    let program = session.create_composite_component_type(&[
+        module.downcast().clone(),
+        entry_point.downcast().clone(),
+    ])?;
 
-    let linked_program = program.link().unwrap();
+    let linked_program = program.link()?;
 
-    let reflection = linked_program.layout(0).unwrap();
+    let reflection = linked_program.layout(0)?;
 
     // for param in reflection.parameters() {
     //     let binding = param.binding_index();
@@ -111,15 +114,15 @@ fn compile_shader(
     let reflection_entry_point = refl_entry_points.next().unwrap();
     let stage = reflection_entry_point.stage();
 
-    let shader_bytecode: slang::Blob = linked_program.entry_point_code(0, 0).unwrap();
+    let shader_bytecode: slang::Blob = linked_program.entry_point_code(0, 0)?;
     let byte_reader = &mut std::io::Cursor::new(shader_bytecode.as_slice());
-    let spv_bytes = ash::util::read_spv(byte_reader).unwrap();
+    let spv_bytes = ash::util::read_spv(byte_reader)?;
 
-    let entry_point_name = CString::new(reflection_entry_point.name()).unwrap();
+    let entry_point_name = CString::new(reflection_entry_point.name())?;
 
-    CompiledShader {
+    Ok(CompiledShader {
         entry_point_name,
         stage,
         spv_bytes,
-    }
+    })
 }

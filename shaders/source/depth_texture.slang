@@ -23,9 +23,13 @@ struct VSOutput
 [shader("vertex")]
 VSOutput vertMain(VSInput input) {
     VSOutput output;
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
+
+    // unused in viking room example
     output.fragColor = input.inColor;
+
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
     output.fragTexCoord = input.inTexCoord;
+
     return output;
 }
 
@@ -33,5 +37,12 @@ Sampler2D texture;
 
 [shader("fragment")]
 float4 fragMain(VSOutput vertIn) : SV_TARGET {
-   return texture.Sample(vertIn.fragTexCoord);
+    let textureColor = texture.Sample(vertIn.fragTexCoord);
+
+    let debugColor = 1.0;
+    // let debugColor = float3(1.0, 0.0, 0.0);
+
+    let tweakedColor: float3 = debugColor * textureColor.rgb;
+
+    return float4(tweakedColor, 1.0);
 }

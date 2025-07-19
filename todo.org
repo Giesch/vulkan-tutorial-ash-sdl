@@ -1,8 +1,18 @@
 #+title: Todo
 
 * Next
+- [X] add shader hot reload
+  - [X] inotify file watcher
+  - [X] recompile
+  - [X] rebuild pipeline w/new shader modules
+  - [X] easy example
+- [ ] add shader printf
+
 - [ ] read about dynamic rendering
   - [ ] sascha's 1.3 triangle
+
+- [ ] signed distance fields
+   https://danielchasehooper.com/posts/code-animated-rick/
 
 - [ ] rewrite renderer in a new repo
   - use a cargo workspace
@@ -16,47 +26,20 @@
     maybe for logging too? ie always compile w/verbose
   - also switch to dynamic rendering?
     in the future, try out bindless with slang support
-
-- [ ] vkguide implementation
-  - use egui w/ash crate
-
-- [X] get a good-enough slang pipeline & workflow
-  - [X] compile shaders at startup
-  - [X] slang editor syntax highlighting
-  - [X] use slang shader for viking room example
-  - [X] remove glsl workflow
-
-- [X] finish official vulkan tutorial
-  https://docs.vulkan.org/tutorial/latest
-  - [X] drawing a triangle
-  - [X] vertex buffers
-  - [X] uniform buffers
-  - [X] texture mapping
-  - [X] depth buffering
-  - [X] loading models
-  - [X] generating mipmaps
-  - [X] multisampling
+  - avoid runtime mipmap generation
+    use an build task
 
 * Future
 - [ ] make a spinning cube from scratch in slang
-
-- [ ] add shader hot reload
-  - [ ] inotify file watcher
-  - [ ] recompile
-  - [ ] rebuild pipeline w/new shader modules
 
 - [ ] try generating Vertex struct via slang reflection
 
 - [ ] vulkan-tutorial extras
   - [ ] compute shader
 
-- [-] 1.3 dynamic rendering triangle
-  - [ ] look at Sascha Willems' 1.3 triangle example
-    https://github.com/SaschaWillems/Vulkan
-  - [X] read this other post
-    https://lesleylai.info/en/vk-khr-dynamic-rendering/
 - [ ] look at Sascha Willems' other examples
 - [ ] move on to https://vkguide.dev/ ?
+  - use egui w/ash crate
 
 - [ ] consider adding a separate queue & command buffer for memory transfer
   https://docs.vulkan.org/tutorial/latest/04_Vertex_buffers/02_Staging_buffer.html#_transfer_queue

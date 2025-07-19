@@ -1,5 +1,7 @@
 mod app;
 mod renderer;
+#[cfg(debug_assertions)]
+mod shader_watcher;
 mod shaders;
 
 pub use app::App;

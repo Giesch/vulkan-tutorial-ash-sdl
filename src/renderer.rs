@@ -9,9 +9,13 @@ use std::time::Instant;
 
 use ash::vk;
 use image::ImageReader;
+#[allow(unused)]
+use log::*;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
+#[cfg(debug_assertions)]
+use crate::shader_watcher;
 use crate::shaders;
 
 use super::BoxError;
@@ -37,9 +41,14 @@ const CURRENT_EXAMPLE: Example = Example::VikingRoom;
 
 pub struct Renderer {
     // fields that are created once
+    total_frames: usize,
     start_time: Instant,
-    #[expect(unused)]
+    #[allow(unused)]
     compiled_shaders: shaders::CompiledShaderModule,
+    #[cfg(debug_assertions)]
+    shader_changes: shader_watcher::ShaderChanges,
+    #[cfg(debug_assertions)]
+    old_pipelines: Vec<(usize, vk::Pipeline, vk::PipelineLayout)>,
     #[expect(unused)]
     entry: ash::Entry,
     window: Window,
@@ -99,6 +108,7 @@ pub struct Renderer {
     render_finished: Vec<vk::Semaphore>,
     /// frame fences indexed by current frame
     frames_in_flight: Vec<vk::Fence>,
+    /// looping index
     current_frame: usize,
 }
 
@@ -106,7 +116,10 @@ impl Renderer {
     pub fn init(window: Window) -> Result<Self, BoxError> {
         let start_time = Instant::now();
 
-        let compiled_shaders = shaders::compile_slang_shaders();
+        let compiled_shaders = shaders::compile_slang_shaders()?;
+
+        #[cfg(debug_assertions)]
+        let shader_changes = shader_watcher::watch()?;
 
         let entry = ash::Entry::linked();
 
@@ -296,8 +309,13 @@ impl Renderer {
             create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
+            total_frames: 0,
             start_time,
             compiled_shaders,
+            #[cfg(debug_assertions)]
+            shader_changes,
+            #[cfg(debug_assertions)]
+            old_pipelines: vec![],
             window: window.clone(),
             entry,
             instance,
@@ -456,6 +474,10 @@ impl Renderer {
     }
 
     pub fn draw_frame(&mut self) -> Result<(), BoxError> {
+        self.total_frames += 1;
+        #[cfg(debug_assertions)]
+        self.check_for_shader_recompile()?;
+
         let command_buffer = self.command_buffers[self.current_frame];
 
         let fences = [self.frames_in_flight[self.current_frame]];
@@ -638,6 +660,71 @@ impl Renderer {
             self.swapchain_device_ext
                 .destroy_swapchain(self.swapchain, None);
         }
+    }
+
+    #[cfg(debug_assertions)]
+    fn check_for_shader_recompile(&mut self) -> Result<(), BoxError> {
+        unsafe {
+            let mut to_remove = vec![];
+            for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
+                self.old_pipelines.iter().enumerate()
+            {
+                let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
+                if !unused {
+                    continue;
+                }
+
+                self.device.destroy_pipeline(*old_pipeline, None);
+                self.device
+                    .destroy_pipeline_layout(*old_pipeline_layout, None);
+                to_remove.push(i);
+            }
+
+            for i in to_remove {
+                self.old_pipelines.swap_remove(i);
+            }
+        }
+
+        let edit_events = self.shader_changes.events()?;
+
+        if !edit_events.is_empty() {
+            info!("recompiling shaders...");
+            self.try_shader_recompile(&edit_events)?;
+        }
+
+        Ok(())
+    }
+
+    // shader hot reload
+    #[cfg(debug_assertions)]
+    fn try_shader_recompile(&mut self, _edit_events: &[notify::Event]) -> Result<(), BoxError> {
+        let compiled_shaders = match shaders::compile_slang_shaders() {
+            Ok(cs) => cs,
+            Err(e) => {
+                error!("failed to compile shaders: {e}");
+                return Ok(());
+            }
+        };
+
+        self.old_pipelines
+            .push((self.total_frames, self.pipeline, self.pipeline_layout));
+
+        self.compiled_shaders = compiled_shaders;
+
+        let (pipeline_layout, pipeline) = create_graphics_pipeline(
+            &self.device,
+            self.render_pass,
+            self.descriptor_set_layout,
+            self.msaa_samples,
+            &self.compiled_shaders,
+        )?;
+
+        self.pipeline_layout = pipeline_layout;
+        self.pipeline = pipeline;
+
+        info!("finished recompiling shaders");
+
+        Ok(())
     }
 }
 
