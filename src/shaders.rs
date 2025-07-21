@@ -24,12 +24,10 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
 
     let target_desc = slang::TargetDesc::default()
         .format(slang::CompileTarget::Spirv)
-        // TODO also need to specify glsl_450?
-        .profile(global_session.find_profile("spirv_1_5"));
+        .profile(global_session.find_profile("glsl_450+spirv_1_5"));
 
     let targets = [target_desc];
     let search_paths = [search_path.as_ptr()];
-
     let session_desc = slang::SessionDesc::default()
         .targets(&targets)
         .search_paths(&search_paths)
@@ -109,11 +107,21 @@ fn compile_shader(
     let reflection = linked_program.layout(0)?;
 
     // for param in reflection.parameters() {
-    //     let binding = param.binding_index();
-    //     let category = param.category();
     //     let type_layout = param.type_layout();
-    //     let kind = type_layout.kind();
-    //     dbg!(&binding, &category, &kind, type_layout.name());
+    //     let type_layout_name = type_layout.name();
+    //     let binding_range_count = type_layout.binding_range_count();
+    //     dbg!(&type_layout_name, &binding_range_count);
+    //     for i in 0..binding_range_count {
+    //         println!("before leaf layout");
+    //         let leaf_layout = type_layout.binding_range_leaf_type_layout(i);
+    //         let leaf_layout_ty = leaf_layout.ty().unwrap();
+    //         // dbg!(&leaf_layout_ty);
+    //         println!("after leaf layout");
+    //         let semantic = type_layout.binding_range_leaf_variable(i).name();
+    //         dbg!(&semantic);
+    //         let type_name = leaf_layout.name();
+    //         dbg!(&type_name);
+    //     }
     // }
 
     let mut refl_entry_points = reflection.entry_points();

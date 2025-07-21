@@ -6,6 +6,7 @@ struct VSInput {
     float2 inTexCoord;
 };
 
+// see renderer::UniformBufferObject
 struct UniformBuffer {
     float4x4 model;
     float4x4 view;
@@ -13,6 +14,7 @@ struct UniformBuffer {
 };
 ConstantBuffer<UniformBuffer> ubo;
 
+// see renderer::Vertex
 struct VSOutput
 {
     float4 pos : SV_Position;
@@ -21,8 +23,12 @@ struct VSOutput
 };
 
 [shader("vertex")]
-VSOutput vertMain(VSInput input) {
+VSOutput vertMain(uint vertexIndex : SV_VertexID, VSInput input) {
     VSOutput output;
+
+    if (vertexIndex == 0) {
+        printf("FIRST VERTEX");
+    }
 
     // unused in viking room example
     output.fragColor = input.inColor;

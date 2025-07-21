@@ -1142,19 +1142,49 @@ fn create_logical_device(
         queue_create_infos.push(queue_create_info);
     }
 
-    let features = vk::PhysicalDeviceFeatures::default()
+    let mut features = vk::PhysicalDeviceFeatures::default()
         .sampler_anisotropy(true)
         .sample_rate_shading(ENABLE_SAMPLE_SHADING);
+    if cfg!(debug_assertions) {
+        // features used by shader println
+        features = features
+            .fragment_stores_and_atomics(true)
+            .vertex_pipeline_stores_and_atomics(true)
+            .shader_int64(true);
+    }
 
     let enabled_extension_names: Vec<_> = REQUIRED_DEVICE_EXTENSIONS
         .iter()
         .map(|cstr| cstr.as_ptr())
         .collect();
 
-    let create_info = vk::DeviceCreateInfo::default()
+    let mut create_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(&queue_create_infos)
         .enabled_features(&features)
         .enabled_extension_names(&enabled_extension_names);
+
+    // features used by shader println
+    #[cfg(debug_assertions)]
+    let mut timeline_semaphore_features =
+        vk::PhysicalDeviceTimelineSemaphoreFeatures::default().timeline_semaphore(true);
+    #[cfg(debug_assertions)]
+    let mut memory_model_features = vk::PhysicalDeviceVulkanMemoryModelFeatures::default()
+        .vulkan_memory_model(true)
+        .vulkan_memory_model_device_scope(true);
+    #[cfg(debug_assertions)]
+    let mut buffer_device_address_features =
+        vk::PhysicalDeviceBufferDeviceAddressFeatures::default().buffer_device_address(true);
+    #[cfg(debug_assertions)]
+    let mut eight_bit_storage_features =
+        vk::PhysicalDevice8BitStorageFeatures::default().storage_buffer8_bit_access(true);
+    #[cfg(debug_assertions)]
+    {
+        create_info = create_info
+            .push_next(&mut timeline_semaphore_features)
+            .push_next(&mut memory_model_features)
+            .push_next(&mut buffer_device_address_features)
+            .push_next(&mut eight_bit_storage_features);
+    }
 
     let device = unsafe { instance.create_device(physical_device, &create_info, None)? };
 

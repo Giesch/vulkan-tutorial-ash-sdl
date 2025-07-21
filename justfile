@@ -6,6 +6,9 @@ check:
 run:
     cargo run
 
+run-release:
+    cargo run --release
+
 slang_version := "2025.12.1"
 
 # download Slang shader compiler
