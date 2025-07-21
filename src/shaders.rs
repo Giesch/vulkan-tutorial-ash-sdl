@@ -4,6 +4,9 @@ use slang::Downcast;
 
 use crate::BoxError;
 
+/// whether to use column-major or row-major matricies with slang
+pub const COLUMN_MAJOR: bool = true;
+
 pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source")?;
@@ -12,8 +15,12 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
         .vulkan_use_entry_point_name(true)
         .language(slang::SourceLanguage::Slang)
         .optimization(slang::OptimizationLevel::High)
-        .emit_spirv_directly(true)
-        .matrix_layout_column(true);
+        .emit_spirv_directly(true);
+    let session_options = if COLUMN_MAJOR {
+        session_options.matrix_layout_column(true)
+    } else {
+        session_options.matrix_layout_row(true)
+    };
 
     let target_desc = slang::TargetDesc::default()
         .format(slang::CompileTarget::Spirv)

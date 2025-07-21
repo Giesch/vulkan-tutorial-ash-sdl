@@ -1902,6 +1902,12 @@ fn update_uniform_buffer(
     // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
     ubo.projection.y_axis.y *= -1.0;
 
+    if !shaders::COLUMN_MAJOR {
+        ubo.model = ubo.model.transpose();
+        ubo.view = ubo.view.transpose();
+        ubo.projection = ubo.projection.transpose();
+    }
+
     unsafe {
         std::ptr::copy_nonoverlapping(&ubo, mapped_uniform_buffer, 1);
     }

@@ -27,7 +27,10 @@ VSOutput vertMain(VSInput input) {
     // unused in viking room example
     output.fragColor = input.inColor;
 
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
+    let combinedMatrix = mul(ubo.proj, mul(ubo.view, ubo.model));
+    let homogenousPosition = float4(input.inPosition, 1.0);
+    output.pos = mul(combinedMatrix, homogenousPosition);
+
     output.fragTexCoord = input.inTexCoord;
 
     return output;
