@@ -24,7 +24,7 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
 
     let target_desc = slang::TargetDesc::default()
         .format(slang::CompileTarget::Spirv)
-        .profile(global_session.find_profile("glsl_450+spirv_1_5"));
+        .profile(global_session.find_profile("glsl_450+spirv_1_6"));
 
     let targets = [target_desc];
     let search_paths = [search_path.as_ptr()];

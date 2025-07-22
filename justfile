@@ -10,7 +10,8 @@ run:
 shader-debug:
     RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
 
-run-release:
+[linux]
+run-release: prepare-shaders
     cargo run --release
 
 slang_version := "2025.12.1"
@@ -22,3 +23,8 @@ setup:
     wget -O vendor/slang.tar.gz https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-linux-x86_64.tar.gz
     tar xzf vendor/slang.tar.gz --directory=vendor/slang
     rm vendor/slang.tar.gz
+
+# pre-compile shaders for reflection info
+[linux]
+prepare-shaders:
+    cargo run --bin prepare_shaders
