@@ -10,12 +10,13 @@
 - [X] add shader printf
 - [ ] use separate .env file & justfile task for shader printf
 
-- [ ] offline shader compilation
+- [ ] offline shader compilation for reflection info
   - [ ] use cli's json reflection data
     - [ ] deserialize json reflection data
     - [ ] generate rust files based on reflection data
-  - [ ] in dev, do both offline (for type checking) and hot reload
+  - [ ] in dev, do both offline (for type checking) and hot reloada
     - see if it's possible for the cli to do only reflection json
+  - [ ] someday, use hash of input text in output dir for dependency tracking
 
 - [ ] set up switching between intel & nvidia graphics w/POP_OS
   - figure out why it started using intel graphics
@@ -82,3 +83,8 @@
 
 - [ ] see if it's possible to use slang-rs compiler options CapabilityID
   instead of cli-style profile '+spirv_1_5'
+
+- [ ] better printf and validation layers setup
+  control the validation layers with env vars
+  use the env vars described here:
+  https://www.lunarg.com/wp-content/uploads/2021/08/Using-Debug-Printf-02August2021.pdf

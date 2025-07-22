@@ -6,6 +6,10 @@ check:
 run:
     cargo run
 
+# run with shader printf and vk validation layers at 'info'
+shader-debug:
+    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
+
 run-release:
     cargo run --release
 
