@@ -26,18 +26,18 @@ struct VSOutput
 VSOutput vertMain(uint vertexIndex : SV_VertexID, VSInput input) {
     VSOutput output;
 
+    let homogenousPosition = float4(input.inPosition, 1.0);
+    let mvpMatrix = mul(ubo.proj, mul(ubo.view, ubo.model));
+    output.pos = mul(mvpMatrix, homogenousPosition);
+
     if (vertexIndex == 0) {
-        printf("FIRST VERTEX");
+        printf("first vertex pos: %u, %u, %u\n", output.pos.x, output.pos.y, output.pos.z);
     }
+
+    output.fragTexCoord = input.inTexCoord;
 
     // unused in viking room example
     output.fragColor = input.inColor;
-
-    let combinedMatrix = mul(ubo.proj, mul(ubo.view, ubo.model));
-    let homogenousPosition = float4(input.inPosition, 1.0);
-    output.pos = mul(combinedMatrix, homogenousPosition);
-
-    output.fragTexCoord = input.inTexCoord;
 
     return output;
 }

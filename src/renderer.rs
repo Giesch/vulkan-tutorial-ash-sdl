@@ -1933,6 +1933,8 @@ fn update_uniform_buffer(
     ubo.projection.y_axis.y *= -1.0;
 
     if !shaders::COLUMN_MAJOR {
+        // it's also possible to avoid this by reversing the mul() calls in shaders
+        // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
         ubo.model = ubo.model.transpose();
         ubo.view = ubo.view.transpose();
         ubo.projection = ubo.projection.transpose();

@@ -8,12 +8,21 @@
   - [X] easy example
 
 - [X] add shader printf
+- [ ] use separate .env file & justfile task for shader printf
+
+- [ ] offline shader compilation
+  - [ ] use cli's json reflection data
+    - [ ] deserialize json reflection data
+    - [ ] generate rust files based on reflection data
+  - [ ] in dev, do both offline (for type checking) and hot reload
+    - see if it's possible for the cli to do only reflection json
 
 - [ ] set up switching between intel & nvidia graphics w/POP_OS
   - figure out why it started using intel graphics
 
 - [ ] read about dynamic rendering
   - [ ] sascha's 1.3 triangle
+  - [ ] vkguide?
 
 - [ ] signed distance fields
    https://danielchasehooper.com/posts/code-animated-rick/
@@ -70,3 +79,6 @@
   - [ ] combine & use into one packed sheet
 
 - [ ] regenerate reflection structs during hot reload
+
+- [ ] see if it's possible to use slang-rs compiler options CapabilityID
+  instead of cli-style profile '+spirv_1_5'
