@@ -1,15 +1,6 @@
 #+title: Todo
 
 * Next
-- [X] add shader hot reload
-  - [X] inotify file watcher
-  - [X] recompile
-  - [X] rebuild pipeline w/new shader modules
-  - [X] easy example
-
-- [X] add shader printf
-- [X] use separate .env file & justfile task for shader printf
-
 - [-] offline shader compilation for reflection info
   - [-] use cli's json reflection data
     - [X] generate reflection json and offline spv
@@ -26,15 +17,17 @@
         then iterate through those entry points with cli invocations,
         providing entrypoint and generating 1.0 spirv via glsl
     - this might be a reason to stick to plain vulkan?
+  - [ ] generate Vertex & other structs via slang reflection
+    - triangle example first
 
-- [ ] try generating Vertex struct via slang reflection
+- [ ] signed distance fields
+   https://danielchasehooper.com/posts/code-animated-rick/
 
 - [ ] read about dynamic rendering
   - [ ] sascha's 1.3 triangle
   - [ ] vkguide?
 
-- [ ] signed distance fields
-   https://danielchasehooper.com/posts/code-animated-rick/
+- [ ] go through 'learn opengl' with this renderer
 
 - [ ] rewrite renderer in a new repo
   - use a cargo workspace
@@ -48,8 +41,9 @@
     maybe for logging too? ie always compile w/verbose
   - also switch to dynamic rendering?
     in the future, try out bindless with slang support
-  - avoid runtime mipmap generation
-    use an build task
+  - maybe pregenerate mipmaps offline instead of doing it in vulkan at runtime
+    can image-rs do this? need to pack them as well
+    see if theres an stb tool or something
 
 * Future
 - [ ] make a spinning cube from scratch in slang
