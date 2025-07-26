@@ -2,7 +2,8 @@ use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::EventPump;
 
-use crate::{BoxError, Renderer};
+use crate::renderer::Renderer;
+use crate::util::*;
 
 pub struct App {
     pub quit: bool,

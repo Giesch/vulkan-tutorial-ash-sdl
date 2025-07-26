@@ -4,7 +4,7 @@ use std::sync::mpsc;
 use log::*;
 use notify::{Event, RecursiveMode, Watcher};
 
-use crate::BoxError;
+use crate::util::*;
 
 pub struct ShaderChanges {
     #[expect(unused)]
@@ -43,8 +43,7 @@ pub fn watch() -> notify::Result<ShaderChanges> {
 
     let mut watcher = notify::recommended_watcher(tx)?;
 
-    let path = [env!("CARGO_MANIFEST_DIR"), "shaders", "source"];
-    let path: PathBuf = path.iter().collect();
+    let path = manifest_path(["shaders", "source"]);
 
     watcher.watch(&path, RecursiveMode::Recursive)?;
 

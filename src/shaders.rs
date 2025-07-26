@@ -1,8 +1,8 @@
-use std::ffi::CString;
+use std::{ffi::CString, path::PathBuf};
 
 use slang::Downcast;
 
-use crate::BoxError;
+use crate::util::*;
 
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
@@ -68,7 +68,6 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
 
 #[derive(Debug)]
 pub struct CompiledShaderModule {
-    #[expect(unused)]
     pub source_file_name: String,
     pub vertex_shader: CompiledShader,
     pub fragment_shader: CompiledShader,

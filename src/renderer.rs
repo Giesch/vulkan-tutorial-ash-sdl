@@ -16,9 +16,8 @@ use sdl3::video::Window;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
-use crate::shaders;
-
-use super::BoxError;
+use crate::shaders::{self, CompiledShaderModule};
+use crate::util::*;
 
 pub mod debug;
 mod platform;
@@ -113,10 +112,8 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: Window) -> Result<Self, BoxError> {
+    pub fn init(window: Window, compiled_shaders: CompiledShaderModule) -> Result<Self, BoxError> {
         let start_time = Instant::now();
-
-        let compiled_shaders = shaders::compile_slang_shaders()?;
 
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
@@ -1550,14 +1547,6 @@ fn create_sync_objects(
     Ok((image_available, render_finished, frames_in_flight))
 }
 
-#[derive(Debug, Clone)]
-#[repr(C, align(16))]
-struct Vertex {
-    position: glam::Vec3,
-    color: glam::Vec3,
-    tex_coord: glam::Vec2,
-}
-
 const VERTICES: [Vertex; 8] = [
     Vertex {
         position: glam::Vec3::new(-0.5, -0.5, 0.0),
@@ -1606,6 +1595,14 @@ const INDICES: [u32; 12] = [
     0, 1, 2, 2, 3, 0,
     4, 5, 6, 6, 7, 4,
 ];
+
+#[derive(Debug, Clone)]
+#[repr(C, align(16))]
+struct Vertex {
+    position: glam::Vec3,
+    color: glam::Vec3,
+    tex_coord: glam::Vec2,
+}
 
 impl Vertex {
     fn binding_description() -> vk::VertexInputBindingDescription {
@@ -1905,11 +1902,11 @@ fn update_uniform_buffer(
     image_extent: vk::Extent2D,
     mapped_uniform_buffer: *mut UniformBufferObject,
 ) -> Result<(), BoxError> {
-    const DEGREES_PER_SECOND: f32 = 05.0;
+    const DEGREES_PER_SECOND: f32 = 5.0;
     let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
     let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
 
-    let model = glam::Mat4::IDENTITY * glam::Mat4::from_rotation_z(turn_radians);
+    let model = glam::Mat4::from_rotation_z(turn_radians);
     let view = glam::Mat4::look_at_rh(
         glam::Vec3::splat(2.0),
         glam::Vec3::splat(0.0),
