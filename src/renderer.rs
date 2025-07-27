@@ -2106,18 +2106,6 @@ fn create_texture_image(
         vk::Format::R8G8B8A8_SRGB,
     )?;
 
-    // // TODO removed; WIP generate mipmaps
-    // transition_image_layout(
-    //     device,
-    //     command_pool,
-    //     graphics_queue,
-    //     vk_image,
-    //     vk::Format::R8G8B8A8_SRGB,
-    //     vk::ImageLayout::TRANSFER_DST_OPTIMAL,
-    //     vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-    //     mip_levels,
-    // )?;
-
     unsafe {
         device.destroy_buffer(staging_buffer, None);
         device.free_memory(staging_buffer_memory, None);

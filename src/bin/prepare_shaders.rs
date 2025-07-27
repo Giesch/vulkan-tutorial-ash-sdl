@@ -59,6 +59,11 @@ pub fn main() {
             serde_json::from_str(&json).expect(&format!("failed to parse json file: {in_path}"));
 
         // TODO use the parsed json to generate rust structs
+        //   iterate through global parameter bindings
+        //   iterate through vertex shader passed parameter bindings
+        //   for every binding
+        //     make a type structure
+        //     track vertex metadata
     }
 }
 
@@ -81,13 +86,14 @@ struct GlobalParameter {
 #[serde(rename_all = "camelCase")]
 #[serde(tag = "kind")]
 enum GlobalParameterType {
-    ConstantBuffer(ParameterTypeConstantBuffer),
-    Resource(ParameterTypeResource),
+    ConstantBuffer(GlobalParameterTypeConstantBuffer),
+    Resource(GlobalParameterTypeResource),
+    ParameterBlock(GlobalParameterTypeParameterBlock),
 }
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ParameterTypeConstantBuffer {
+struct GlobalParameterTypeConstantBuffer {
     element_type: ElementType,
     container_var_layout: ContainerVarLayout,
     element_var_layout: ElementVarLayout,
@@ -166,9 +172,17 @@ struct VaryingOutputBinding {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ParameterTypeResource {
+struct GlobalParameterTypeResource {
     base_shape: ResourceBaseShape,
     result_type: ElementType,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct GlobalParameterTypeParameterBlock {
+    element_type: ElementType,
+    container_var_layout: ContainerVarLayout,
+    element_var_layout: ElementVarLayout,
 }
 
 #[derive(Deserialize, Debug)]
@@ -201,6 +215,14 @@ enum ElementType {
     Matrix(ElementTypeMatrix),
     Scalar(ElementTypeScalar),
     Vector(ElementTypeVector),
+    Resource(ElementTypeResource),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct ElementTypeResource {
+    base_shape: String,
+    result_type: Box<ElementType>,
 }
 
 #[derive(Deserialize, Debug)]

@@ -8,6 +8,18 @@ use crate::util::*;
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
 
+pub fn precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
+    // TODO glob for all .slang/.spv files
+    let spv_file_name = "depth_texture.spv";
+    let path = manifest_path(["shaders", "compiled", spv_file_name]);
+
+    let shader_bytecode = std::fs::read(&path).unwrap();
+    let byte_reader = &mut std::io::Cursor::new(shader_bytecode.as_slice());
+    let spv_bytes = ash::util::read_spv(byte_reader)?;
+
+    todo!()
+}
+
 pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source")?;
@@ -42,6 +54,8 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     // the examples have 1 vert and 1 frag shader
     debug_assert!(module.entry_points().len() == 2);
 
+    // TODO use one compiled spirv file per source code file,
+    // instead of one compiled spirv file per entry point
     let mut vert: Option<CompiledShader> = None;
     let mut frag: Option<CompiledShader> = None;
     for entry_point in module.entry_points() {

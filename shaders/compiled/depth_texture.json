@@ -1,13 +1,13 @@
 {
     "parameters": [
         {
-            "name": "ubo",
+            "name": "mvp",
             "binding": {"kind": "descriptorTableSlot", "index": 0},
             "type": {
                 "kind": "constantBuffer",
                 "elementType": {
                     "kind": "struct",
-                    "name": "UniformBuffer",
+                    "name": "MVP",
                     "fields": [
                         {
                             "name": "model",
@@ -56,7 +56,7 @@
                 "elementVarLayout": {
                     "type": {
                         "kind": "struct",
-                        "name": "UniformBuffer",
+                        "name": "MVP",
                         "fields": [
                             {
                                 "name": "model",
@@ -134,15 +134,15 @@
                     }
                 },
                 {
-                    "name": "input",
+                    "name": "vertex",
                     "stage": "vertex",
                     "binding": {"kind": "varyingInput", "index": 0, "count": 3},
                     "type": {
                         "kind": "struct",
-                        "name": "VSInput",
+                        "name": "Vertex",
                         "fields": [
                             {
-                                "name": "inPosition",
+                                "name": "position",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 3,
@@ -155,7 +155,7 @@
                                 "binding": {"kind": "varyingInput", "index": 0}
                             },
                             {
-                                "name": "inColor",
+                                "name": "color",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 3,
@@ -168,7 +168,7 @@
                                 "binding": {"kind": "varyingInput", "index": 1}
                             },
                             {
-                                "name": "inTexCoord",
+                                "name": "texCoord",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 2,
@@ -189,10 +189,10 @@
                 "binding": {"kind": "varyingOutput", "index": 0, "count": 2},
                 "type": {
                     "kind": "struct",
-                    "name": "VSOutput",
+                    "name": "FragVertex",
                     "fields": [
                         {
-                            "name": "pos",
+                            "name": "position",
                             "type": {
                                 "kind": "vector",
                                 "elementCount": 4,
@@ -204,7 +204,7 @@
                             "semanticName": "SV_POSITION"
                         },
                         {
-                            "name": "fragColor",
+                            "name": "color",
                             "type": {
                                 "kind": "vector",
                                 "elementCount": 3,
@@ -217,7 +217,7 @@
                             "binding": {"kind": "varyingOutput", "index": 0}
                         },
                         {
-                            "name": "fragTexCoord",
+                            "name": "texCoord",
                             "type": {
                                 "kind": "vector",
                                 "elementCount": 2,
@@ -234,7 +234,7 @@
             },
             "bindings": [
                 {
-                    "name": "ubo",
+                    "name": "mvp",
                     "binding": {"kind": "descriptorTableSlot", "index": 0}
                 },
                 {
@@ -248,15 +248,15 @@
             "stage": "fragment",
             "parameters": [
                 {
-                    "name": "vertIn",
+                    "name": "fragVertex",
                     "stage": "fragment",
                     "binding": {"kind": "varyingInput", "index": 0, "count": 2},
                     "type": {
                         "kind": "struct",
-                        "name": "VSOutput",
+                        "name": "FragVertex",
                         "fields": [
                             {
-                                "name": "pos",
+                                "name": "position",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 4,
@@ -268,7 +268,7 @@
                                 "semanticName": "SV_POSITION"
                             },
                             {
-                                "name": "fragColor",
+                                "name": "color",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 3,
@@ -281,7 +281,7 @@
                                 "binding": {"kind": "varyingInput", "index": 0}
                             },
                             {
-                                "name": "fragTexCoord",
+                                "name": "texCoord",
                                 "type": {
                                     "kind": "vector",
                                     "elementCount": 2,
@@ -312,7 +312,7 @@
             },
             "bindings": [
                 {
-                    "name": "ubo",
+                    "name": "mvp",
                     "binding": {"kind": "descriptorTableSlot", "index": 0}
                 },
                 {
@@ -323,7 +323,7 @@
         }
     ],
     "hashedStrings": {
-        "first vertex pos: %u, %u, %u\n": -1108620028
+        "first vertex position: %u, %u, %u\n": -1862185801
     }
 
 }
