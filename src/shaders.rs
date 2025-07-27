@@ -1,4 +1,4 @@
-use std::{ffi::CString, path::PathBuf};
+use std::ffi::CString;
 
 use slang::Downcast;
 

@@ -4,10 +4,10 @@
 - [-] offline shader compilation for reflection info
   - [-] use cli's json reflection data
     - [X] generate reflection json and offline spv
-    - [ ] deserialize json reflection data
+    - [X] deserialize json reflection data
     - [ ] generate rust files based on reflection data
   - [ ] in dev, do both offline (for type checking) and hot reload
-    - see if it's possible for the cli to do only reflection json
+    - see if it's possible for the cli to only generate reflection json (not spirv)
   - [ ] someday, use hash of input text in output dir for dependency tracking
     or use a fancy build system with its own dependency tracking; cmake? ninja?
   - [ ] multiple entry points with SDL_gpu?
@@ -17,8 +17,11 @@
         then iterate through those entry points with cli invocations,
         providing entrypoint and generating 1.0 spirv via glsl
     - this might be a reason to stick to plain vulkan?
+    - does passing entry point name avoid this problem?
+      not for SDL_gpu, it would still depend on a recent spirv version
   - [ ] generate Vertex & other structs via slang reflection
-    - triangle example first
+    https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
+    - triangle example first?
 
 - [ ] signed distance fields
    https://danielchasehooper.com/posts/code-animated-rick/

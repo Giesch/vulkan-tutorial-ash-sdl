@@ -95,8 +95,22 @@ struct ParameterTypeConstantBuffer {
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct ContainerVarLayout {
+#[serde(untagged)]
+enum ContainerVarLayout {
+    Single(SingleBindingContainerVarLayout),
+    Multi(MultiBindingContainerVarLayout),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct SingleBindingContainerVarLayout {
     binding: Binding,
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct MultiBindingContainerVarLayout {
+    bindings: Vec<Binding>,
 }
 
 #[derive(Deserialize, Debug)]
@@ -114,6 +128,13 @@ enum Binding {
     DescriptorTableSlot(DescriptorTableSlotBinding),
     VaryingInput(VaryingInputBinding),
     VaryingOutput(VaryingOutputBinding),
+    SubElementRegisterSpace(SubElementRegisterSpaceBinding),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct SubElementRegisterSpaceBinding {
+    index: usize,
 }
 
 #[derive(Deserialize, Debug)]
@@ -232,7 +253,7 @@ struct EntryPoint {
 struct EntryPointResult {
     stage: ShaderStage,
     binding: Binding,
-    // like ElementType, but with no bindings; unlikely to be used in codegen
+    // like ElementType, but withOUT bindings; unlikely to be used in codegen
     // r#type: serde_json::Value,
 }
 
@@ -273,7 +294,8 @@ struct PrimitiveEntryPointParameter {
 #[serde(rename_all = "camelCase")]
 struct BoundEntryPointParameter {
     name: String,
-    stage: ShaderStage,
+    // None = multiple?
+    stage: Option<ShaderStage>,
     binding: Binding,
     r#type: EntryPointParameterType,
 }
@@ -286,6 +308,16 @@ enum EntryPointParameterType {
     Matrix(EntryPointParameterTypeMatrix),
     Scalar(EntryPointParameterTypeScalar),
     Vector(EntryPointParameterTypeVector),
+    ParameterBlock(EntryPointParameterTypeParameterBlock),
+}
+
+#[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+#[serde(tag = "kind")]
+struct EntryPointParameterTypeParameterBlock {
+    element_type: ElementType,
+    container_var_layout: ContainerVarLayout,
+    element_var_layout: ElementVarLayout,
 }
 
 #[derive(Deserialize, Debug)]
@@ -444,5 +476,126 @@ mod tests {
     #[test]
     fn scalar_param() {
         let _parsed: PrimitiveEntryPointParameter = serde_json::from_str(&SCALAR_PARAM).unwrap();
+    }
+
+    const PARAMETER_BLOCK_TYPE: &str = r#"
+        {
+            "kind": "parameterBlock",
+            "elementType": {
+                "kind": "struct",
+                "name": "VSInput",
+                "fields": [
+                    {
+                        "name": "inPosition",
+                        "type": {
+                            "kind": "vector",
+                            "elementCount": 3,
+                            "elementType": {
+                                "kind": "scalar",
+                                "scalarType": "float32"
+                            }
+                        },
+                        "binding": {"kind": "uniform", "offset": 0, "size": 12}
+                    },
+                    {
+                        "name": "inColor",
+                        "type": {
+                            "kind": "vector",
+                            "elementCount": 3,
+                            "elementType": {
+                                "kind": "scalar",
+                                "scalarType": "float32"
+                            }
+                        },
+                        "binding": {"kind": "uniform", "offset": 16, "size": 12}
+                    },
+                    {
+                        "name": "inTexCoord",
+                        "type": {
+                            "kind": "vector",
+                            "elementCount": 2,
+                            "elementType": {
+                                "kind": "scalar",
+                                "scalarType": "float32"
+                            }
+                        },
+                        "binding": {"kind": "uniform", "offset": 32, "size": 8}
+                    }
+                ]
+            },
+            "containerVarLayout": {
+                "bindings": [
+                    {"kind": "descriptorTableSlot", "index": 0},
+                    {"kind": "subElementRegisterSpace", "index": 0}
+                ]
+            },
+            "elementVarLayout": {
+                "type": {
+                    "kind": "struct",
+                    "name": "VSInput",
+                    "fields": [
+                        {
+                            "name": "inPosition",
+                            "type": {
+                                "kind": "vector",
+                                "elementCount": 3,
+                                "elementType": {
+                                    "kind": "scalar",
+                                    "scalarType": "float32"
+                                }
+                            },
+                            "binding": {"kind": "uniform", "offset": 0, "size": 12}
+                        },
+                        {
+                            "name": "inColor",
+                            "type": {
+                                "kind": "vector",
+                                "elementCount": 3,
+                                "elementType": {
+                                    "kind": "scalar",
+                                    "scalarType": "float32"
+                                }
+                            },
+                            "binding": {"kind": "uniform", "offset": 16, "size": 12}
+                        },
+                        {
+                            "name": "inTexCoord",
+                            "type": {
+                                "kind": "vector",
+                                "elementCount": 2,
+                                "elementType": {
+                                    "kind": "scalar",
+                                    "scalarType": "float32"
+                                }
+                            },
+                            "binding": {"kind": "uniform", "offset": 32, "size": 8}
+                        }
+                    ]
+                },
+                "binding": {"kind": "uniform", "offset": 0, "size": 48}
+            }
+        }
+    "#;
+
+    #[test]
+    fn parameter_block() {
+        let _parsed: EntryPointParameterType = serde_json::from_str(&PARAMETER_BLOCK_TYPE).unwrap();
+    }
+
+    #[test]
+    fn parameter_block_entry_point() {
+        // NOTE the {{ and }} syntax is escaping single { and } for the format macro
+        let parameter_block_entry_point: String = format!(
+            r#"
+        {{
+            "name": "input",
+            "binding": {{"kind": "subElementRegisterSpace", "index": 0}},
+            "type": {PARAMETER_BLOCK_TYPE}
+        }}
+        "#
+        );
+
+        let _parsed: BoundEntryPointParameter =
+            serde_json::from_str(&parameter_block_entry_point).unwrap();
     }
 }
