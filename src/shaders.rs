@@ -1,6 +1,7 @@
 use std::ffi::CString;
 
-use slang::Downcast;
+use shader_slang as slang;
+use shader_slang::Downcast;
 
 use crate::util::*;
 

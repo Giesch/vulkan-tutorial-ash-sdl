@@ -90,7 +90,7 @@ dependencies = [
  "sdl3",
  "serde",
  "serde_json",
- "slang",
+ "shader-slang",
  "tobj",
 ]
 
@@ -125,9 +125,9 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
-version = "0.71.1"
+version = "0.72.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5f58bf3d7db68cfbac37cfc485a8d711e87e064c3d0fe0435b92f7a407f9d6b3"
+checksum = "4f72209734318d0b619a5e0f5129918b848c416e122a3c4ce054e03cb87b726f"
 dependencies = [
  "bitflags 2.9.1",
  "cexpr",
@@ -1129,6 +1129,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "shader-slang"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f87ca0837663794c1d9db2c8c9383832557605a354a60ae754c7e56015596b7"
+dependencies = [
+ "shader-slang-sys",
+]
+
+[[package]]
+name = "shader-slang-sys"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "279effb991b113c13e73108899aad05fabbf0d7a62b51c646ebad0512c40a1e3"
+dependencies = [
+ "bindgen",
+]
+
+[[package]]
 name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1147,22 +1165,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "95890f873bec569a0362c235787f3aca6e1e887302ba4840839bcc6459c42da6"
 dependencies = [
  "quote",
-]
-
-[[package]]
-name = "slang"
-version = "0.1.0"
-source = "git+https://github.com/FloatyMonkey/slang-rs#46bffa3c7b4ff0d242192f43e8a771b49fd4ee0d"
-dependencies = [
- "slang-sys",
-]
-
-[[package]]
-name = "slang-sys"
-version = "0.1.0"
-source = "git+https://github.com/FloatyMonkey/slang-rs#46bffa3c7b4ff0d242192f43e8a771b49fd4ee0d"
-dependencies = [
- "bindgen",
 ]
 
 [[package]]
