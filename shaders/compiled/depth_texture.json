@@ -1,121 +1,163 @@
 {
     "parameters": [
         {
-            "name": "mvp",
-            "binding": {"kind": "descriptorTableSlot", "index": 0},
+            "name": "depthTexture",
+            "binding": {"kind": "subElementRegisterSpace", "index": 0},
             "type": {
-                "kind": "constantBuffer",
+                "kind": "parameterBlock",
                 "elementType": {
                     "kind": "struct",
-                    "name": "MVP",
+                    "name": "DepthTexture",
                     "fields": [
                         {
-                            "name": "model",
+                            "name": "mvp",
                             "type": {
-                                "kind": "matrix",
-                                "rowCount": 4,
-                                "columnCount": 4,
-                                "elementType": {
-                                    "kind": "scalar",
-                                    "scalarType": "float32"
-                                }
+                                "kind": "struct",
+                                "name": "MVP",
+                                "fields": [
+                                    {
+                                        "name": "model",
+                                        "type": {
+                                            "kind": "matrix",
+                                            "rowCount": 4,
+                                            "columnCount": 4,
+                                            "elementType": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            }
+                                        },
+                                        "binding": {"kind": "uniform", "offset": 0, "size": 64}
+                                    },
+                                    {
+                                        "name": "view",
+                                        "type": {
+                                            "kind": "matrix",
+                                            "rowCount": 4,
+                                            "columnCount": 4,
+                                            "elementType": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            }
+                                        },
+                                        "binding": {"kind": "uniform", "offset": 64, "size": 64}
+                                    },
+                                    {
+                                        "name": "proj",
+                                        "type": {
+                                            "kind": "matrix",
+                                            "rowCount": 4,
+                                            "columnCount": 4,
+                                            "elementType": {
+                                                "kind": "scalar",
+                                                "scalarType": "float32"
+                                            }
+                                        },
+                                        "binding": {"kind": "uniform", "offset": 128, "size": 64}
+                                    }
+                                ]
                             },
-                            "binding": {"kind": "uniform", "offset": 0, "size": 64}
+                            "binding": {"kind": "uniform", "offset": 0, "size": 192}
                         },
                         {
-                            "name": "view",
+                            "name": "texture",
                             "type": {
-                                "kind": "matrix",
-                                "rowCount": 4,
-                                "columnCount": 4,
-                                "elementType": {
-                                    "kind": "scalar",
-                                    "scalarType": "float32"
+                                "kind": "resource",
+                                "baseShape": "texture2D",
+                                "resultType": {
+                                    "kind": "vector",
+                                    "elementCount": 4,
+                                    "elementType": {
+                                        "kind": "scalar",
+                                        "scalarType": "float32"
+                                    }
                                 }
                             },
-                            "binding": {"kind": "uniform", "offset": 64, "size": 64}
-                        },
-                        {
-                            "name": "proj",
-                            "type": {
-                                "kind": "matrix",
-                                "rowCount": 4,
-                                "columnCount": 4,
-                                "elementType": {
-                                    "kind": "scalar",
-                                    "scalarType": "float32"
-                                }
-                            },
-                            "binding": {"kind": "uniform", "offset": 128, "size": 64}
+                            "binding": {"kind": "descriptorTableSlot", "index": 1}
                         }
                     ]
                 },
                 "containerVarLayout": {
-                    "binding": {"kind": "descriptorTableSlot", "index": 0}
+                    "bindings": [
+                        {"kind": "descriptorTableSlot", "index": 0},
+                        {"kind": "subElementRegisterSpace", "index": 0}
+                    ]
                 },
                 "elementVarLayout": {
                     "type": {
                         "kind": "struct",
-                        "name": "MVP",
+                        "name": "DepthTexture",
                         "fields": [
                             {
-                                "name": "model",
+                                "name": "mvp",
                                 "type": {
-                                    "kind": "matrix",
-                                    "rowCount": 4,
-                                    "columnCount": 4,
-                                    "elementType": {
-                                        "kind": "scalar",
-                                        "scalarType": "float32"
-                                    }
+                                    "kind": "struct",
+                                    "name": "MVP",
+                                    "fields": [
+                                        {
+                                            "name": "model",
+                                            "type": {
+                                                "kind": "matrix",
+                                                "rowCount": 4,
+                                                "columnCount": 4,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 0, "size": 64}
+                                        },
+                                        {
+                                            "name": "view",
+                                            "type": {
+                                                "kind": "matrix",
+                                                "rowCount": 4,
+                                                "columnCount": 4,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 64, "size": 64}
+                                        },
+                                        {
+                                            "name": "proj",
+                                            "type": {
+                                                "kind": "matrix",
+                                                "rowCount": 4,
+                                                "columnCount": 4,
+                                                "elementType": {
+                                                    "kind": "scalar",
+                                                    "scalarType": "float32"
+                                                }
+                                            },
+                                            "binding": {"kind": "uniform", "offset": 128, "size": 64}
+                                        }
+                                    ]
                                 },
-                                "binding": {"kind": "uniform", "offset": 0, "size": 64}
+                                "binding": {"kind": "uniform", "offset": 0, "size": 192}
                             },
                             {
-                                "name": "view",
+                                "name": "texture",
                                 "type": {
-                                    "kind": "matrix",
-                                    "rowCount": 4,
-                                    "columnCount": 4,
-                                    "elementType": {
-                                        "kind": "scalar",
-                                        "scalarType": "float32"
+                                    "kind": "resource",
+                                    "baseShape": "texture2D",
+                                    "resultType": {
+                                        "kind": "vector",
+                                        "elementCount": 4,
+                                        "elementType": {
+                                            "kind": "scalar",
+                                            "scalarType": "float32"
+                                        }
                                     }
                                 },
-                                "binding": {"kind": "uniform", "offset": 64, "size": 64}
-                            },
-                            {
-                                "name": "proj",
-                                "type": {
-                                    "kind": "matrix",
-                                    "rowCount": 4,
-                                    "columnCount": 4,
-                                    "elementType": {
-                                        "kind": "scalar",
-                                        "scalarType": "float32"
-                                    }
-                                },
-                                "binding": {"kind": "uniform", "offset": 128, "size": 64}
+                                "binding": {"kind": "descriptorTableSlot", "index": 0}
                             }
                         ]
                     },
-                    "binding": {"kind": "uniform", "offset": 0, "size": 192}
-                }
-            }
-        },
-        {
-            "name": "texture",
-            "binding": {"kind": "descriptorTableSlot", "index": 1},
-            "type": {
-                "kind": "resource",
-                "baseShape": "texture2D",
-                "resultType": {
-                    "kind": "vector",
-                    "elementCount": 4,
-                    "elementType": {
-                        "kind": "scalar",
-                        "scalarType": "float32"
-                    }
+                    "bindings": [
+                        {"kind": "descriptorTableSlot", "index": 1},
+                        {"kind": "uniform", "offset": 0, "size": 192}
+                    ]
                 }
             }
         }
@@ -234,12 +276,8 @@
             },
             "bindings": [
                 {
-                    "name": "mvp",
-                    "binding": {"kind": "descriptorTableSlot", "index": 0}
-                },
-                {
-                    "name": "texture",
-                    "binding": {"kind": "descriptorTableSlot", "index": 1}
+                    "name": "depthTexture",
+                    "binding": {"kind": "subElementRegisterSpace", "index": 0}
                 }
             ]
         },
@@ -312,12 +350,8 @@
             },
             "bindings": [
                 {
-                    "name": "mvp",
-                    "binding": {"kind": "descriptorTableSlot", "index": 0}
-                },
-                {
-                    "name": "texture",
-                    "binding": {"kind": "descriptorTableSlot", "index": 1}
+                    "name": "depthTexture",
+                    "binding": {"kind": "subElementRegisterSpace", "index": 0}
                 }
             ]
         }

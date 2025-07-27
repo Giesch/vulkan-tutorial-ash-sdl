@@ -96,7 +96,7 @@ pub struct Renderer {
     index_buffer_memory: vk::DeviceMemory,
     uniform_buffers: Vec<vk::Buffer>,
     uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    uniform_buffers_mapped: Vec<*mut UniformBufferObject>,
+    uniform_buffers_mapped: Vec<*mut MVPMatrices>,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     descriptor_pool: vk::DescriptorPool,
@@ -1824,14 +1824,14 @@ fn find_memory_type_index(
 }
 
 #[repr(C, align(16))]
-struct UniformBufferObject {
+struct MVPMatrices {
     model: glam::Mat4,
     view: glam::Mat4,
     projection: glam::Mat4,
 }
 
 fn create_descriptor_set_layout(device: &ash::Device) -> Result<vk::DescriptorSetLayout, BoxError> {
-    let ubo_layout_binding = vk::DescriptorSetLayoutBinding::default()
+    let uniform_buffer_layout_binding = vk::DescriptorSetLayoutBinding::default()
         .binding(0)
         .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(1)
@@ -1843,7 +1843,7 @@ fn create_descriptor_set_layout(device: &ash::Device) -> Result<vk::DescriptorSe
         .descriptor_count(1)
         .stage_flags(vk::ShaderStageFlags::FRAGMENT);
 
-    let bindings = [ubo_layout_binding, sampler_layout_binding];
+    let bindings = [uniform_buffer_layout_binding, sampler_layout_binding];
     let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
 
     let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
@@ -1859,11 +1859,11 @@ fn create_uniform_buffers(
     (
         Vec<vk::Buffer>,
         Vec<vk::DeviceMemory>,
-        Vec<*mut UniformBufferObject>,
+        Vec<*mut MVPMatrices>,
     ),
     BoxError,
 > {
-    let buffer_size = std::mem::size_of::<UniformBufferObject>() as vk::DeviceSize;
+    let buffer_size = std::mem::size_of::<MVPMatrices>() as vk::DeviceSize;
 
     let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
     let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
@@ -1883,8 +1883,7 @@ fn create_uniform_buffers(
         uniform_buffers_memory.push(memory);
 
         let mapped = unsafe {
-            device.map_memory(memory, 0, buffer_size, Default::default())?
-                as *mut UniformBufferObject
+            device.map_memory(memory, 0, buffer_size, Default::default())? as *mut MVPMatrices
         };
 
         uniform_buffers_mapped.push(mapped);
@@ -1900,7 +1899,7 @@ fn create_uniform_buffers(
 fn update_uniform_buffer(
     start_time: Instant,
     image_extent: vk::Extent2D,
-    mapped_uniform_buffer: *mut UniformBufferObject,
+    mapped_uniform_buffer: *mut MVPMatrices,
 ) -> Result<(), BoxError> {
     const DEGREES_PER_SECOND: f32 = 5.0;
     let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
@@ -1915,7 +1914,7 @@ fn update_uniform_buffer(
     let aspect_ratio = image_extent.width as f32 / image_extent.height as f32;
     let projection = glam::Mat4::perspective_rh(45.0_f32.to_radians(), aspect_ratio, 0.1, 10.0);
 
-    let mut ubo = UniformBufferObject {
+    let mut mvp = MVPMatrices {
         model,
         view,
         projection,
@@ -1927,32 +1926,32 @@ fn update_uniform_buffer(
     // on the scaling factor of the Y axis in the projection matrix.
     // If you don’t do this, then the image will be rendered upside down."
     // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
-    ubo.projection.y_axis.y *= -1.0;
+    mvp.projection.y_axis.y *= -1.0;
 
     if !shaders::COLUMN_MAJOR {
         // it's also possible to avoid this by reversing the mul() calls in shaders
         // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
-        ubo.model = ubo.model.transpose();
-        ubo.view = ubo.view.transpose();
-        ubo.projection = ubo.projection.transpose();
+        mvp.model = mvp.model.transpose();
+        mvp.view = mvp.view.transpose();
+        mvp.projection = mvp.projection.transpose();
     }
 
     unsafe {
-        std::ptr::copy_nonoverlapping(&ubo, mapped_uniform_buffer, 1);
+        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
     }
 
     Ok(())
 }
 
 fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, BoxError> {
-    let ubo_pool_size = vk::DescriptorPoolSize::default()
+    let uniform_buffer_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::UNIFORM_BUFFER)
         .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
     let sampler_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
         .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
 
-    let pool_sizes = [ubo_pool_size, sampler_pool_size];
+    let pool_sizes = [uniform_buffer_pool_size, sampler_pool_size];
     let pool_create_info = vk::DescriptorPoolCreateInfo::default()
         .pool_sizes(&pool_sizes)
         .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
@@ -1984,9 +1983,9 @@ fn create_descriptor_sets(
         let buffer_info = vk::DescriptorBufferInfo::default()
             .buffer(buffer)
             .offset(0)
-            .range(std::mem::size_of::<UniformBufferObject>() as u64);
+            .range(std::mem::size_of::<MVPMatrices>() as u64);
         let buffer_info = [buffer_info];
-        let ubo_write = vk::WriteDescriptorSet::default()
+        let uniform_buffer_write = vk::WriteDescriptorSet::default()
             .dst_set(dst_set)
             .dst_binding(0)
             .dst_array_element(0)
@@ -2007,7 +2006,7 @@ fn create_descriptor_sets(
             .descriptor_count(1)
             .image_info(&image_info);
 
-        let writes = [ubo_write, image_write];
+        let writes = [uniform_buffer_write, image_write];
 
         unsafe { device.update_descriptor_sets(&writes, &[]) };
     }

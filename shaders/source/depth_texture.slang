@@ -1,11 +1,15 @@
+// modified from the official tutorial example here:
 // https://docs.vulkan.org/tutorial/latest/_attachments/27_shader_depth.slang
 
-ConstantBuffer<MVP> mvp;
+ParameterBlock<DepthTexture> depthTexture;
 
-Sampler2D texture;
+struct DepthTexture {
+    MVPMatrices mvp;
+    Sampler2D texture;
+}
 
-// see renderer::UniformBufferObject
-struct MVP {
+// see renderer::MVPMatrices
+struct MVPMatrices {
     float4x4 model;
     float4x4 view;
     float4x4 proj;
@@ -18,15 +22,10 @@ struct Vertex {
     float2 texCoord;
 };
 
-// ParameterBlock<Sampler2D> texture;
-// ParameterBlock<MVP> mvp;
-
 [shader("vertex")]
-FragVertex vertMain(
-    uint vertexIndex : SV_VertexID,
-    Vertex vertex
-    // ParameterBlock<Vertex> vertex
-) {
+FragVertex vertMain(uint vertexIndex : SV_VertexID, Vertex vertex) {
+    let mvp = depthTexture.mvp;
+
     FragVertex output;
 
     let homogenousPosition = float4(vertex.position, 1.0);
@@ -52,6 +51,8 @@ struct FragVertex
 
 [shader("fragment")]
 float4 fragMain(FragVertex fragVertex) : SV_TARGET {
+    let texture = depthTexture.texture;
+
     let textureColor = texture.Sample(fragVertex.texCoord);
 
     let debugColor = 1.0;
