@@ -42,6 +42,4 @@ pub fn main() {
             panic!("failed to compile shader");
         }
     }
-
-    // TODO only use reflection/compilation API, instead of CLI or reflection json
 }

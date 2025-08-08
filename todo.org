@@ -1,27 +1,23 @@
 #+title: Todo
 
 * Next
-- [-] offline shader compilation for reflection info
-  - [-] use cli's json reflection data
-    - [X] generate reflection json and offline spv
-    - [X] deserialize json reflection data
-    - [ ] generate rust files based on reflection data
-  - [ ] in dev, do both offline (for type checking) and hot reload
-    - see if it's possible for the cli to only generate reflection json (not spirv)
-  - [ ] someday, use hash of input text in output dir for dependency tracking
-    or use a fancy build system with its own dependency tracking; cmake? ninja?
-  - [ ] multiple entry points with SDL_gpu?
-    - with cli, this compiles to a single spirv file
-      this is incompatible with SDL_gpu (because of vulkan/spirv 1.0 requirement)
-      - solution: use slang-rs or a cli prepass w/reflection json to get entry points
-        then iterate through those entry points with cli invocations,
-        providing entrypoint and generating 1.0 spirv via glsl
-    - this might be a reason to stick to plain vulkan?
-    - does passing entry point name avoid this problem?
-      not for SDL_gpu, it would still depend on a recent spirv version
-  - [ ] generate Vertex & other structs via slang reflection
-    https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
-    - triangle example first?
+- [ ] slang reflection codegen
+  - [ ] descriptor sets from parameter blocks
+    https://docs.shader-slang.org/en/latest/parameter-blocks.html#what-goes-into-a-descriptor-set-layout
+
+  - [ ] generate Rust structs from field info?
+    just use align 16 for now
+    later, use const assertions like thread in slang discord
+
+  - [ ] generate shader cursor interface
+
+  - [ ] handle regenerated binding code in dev mode somehow
+    - just panic for now
+    - later, move compilation to a background thread
+      send a message to rebuild the pipeline
+      need some way to ensure hot reload of the rust happens first
+      use hash of input shader source in output dir for dependency tracking?
+
 
 - [ ] signed distance fields
    https://danielchasehooper.com/posts/code-animated-rick/
