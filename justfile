@@ -14,11 +14,12 @@ shader-debug:
 run-release: prepare-shaders
     cargo run --release
 
-slang_version := "2025.12.1"
+slang_version := "2025.14.3"
 
 # download Slang shader compiler
 [linux]
 setup:
+    rm -rf vendor/slang
     mkdir -p vendor/slang
     wget -O vendor/slang.tar.gz https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-linux-x86_64.tar.gz
     tar xzf vendor/slang.tar.gz --directory=vendor/slang
