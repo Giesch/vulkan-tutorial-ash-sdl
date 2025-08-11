@@ -3,6 +3,8 @@ use std::ffi::CString;
 use shader_slang as slang;
 use shader_slang::Downcast;
 
+use ash::vk::{self, Handle};
+
 use crate::util::*;
 
 /// whether to use column-major or row-major matricies with slang
@@ -54,8 +56,6 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     // the examples have 1 vert and 1 frag shader
     debug_assert!(module.entry_points().len() == 2);
 
-    // TODO use one compiled spirv file per source code file,
-    // instead of one compiled spirv file per entry point
     let mut vert: Option<CompiledShader> = None;
     let mut frag: Option<CompiledShader> = None;
     for entry_point in module.entry_points() {
@@ -75,9 +75,10 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
             fragment_shader,
         }),
 
-        _ => {
-            Err(format!("failed to load vert and frag entry points for: {source_file_name}").into())
-        }
+        _ => Err(format!(
+            "failed to load vertex and/or fragment entry points for: {source_file_name}"
+        )
+        .into()),
     }
 }
 
@@ -120,24 +121,6 @@ fn compile_shader(
 
     let reflection = linked_program.layout(0)?;
 
-    // for param in reflection.parameters() {
-    //     let type_layout = param.type_layout();
-    //     let type_layout_name = type_layout.name();
-    //     let binding_range_count = type_layout.binding_range_count();
-    //     dbg!(&type_layout_name, &binding_range_count);
-    //     for i in 0..binding_range_count {
-    //         println!("before leaf layout");
-    //         let leaf_layout = type_layout.binding_range_leaf_type_layout(i);
-    //         let leaf_layout_ty = leaf_layout.ty().unwrap();
-    //         // dbg!(&leaf_layout_ty);
-    //         println!("after leaf layout");
-    //         let semantic = type_layout.binding_range_leaf_variable(i).name();
-    //         dbg!(&semantic);
-    //         let type_name = leaf_layout.name();
-    //         dbg!(&type_name);
-    //     }
-    // }
-
     let mut refl_entry_points = reflection.entry_points();
     assert!(refl_entry_points.len() == 1);
     let reflection_entry_point = refl_entry_points.next().unwrap();
@@ -154,4 +137,244 @@ fn compile_shader(
         stage,
         spv_bytes,
     })
+}
+
+// slang reflection based vulkan builders
+// https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
+
+#[derive(Default)]
+pub struct PipelineLayoutBuilder {
+    descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
+    push_constant_ranges: Vec<vk::PushConstantRange>,
+}
+
+impl PipelineLayoutBuilder {
+    pub fn add_descriptor_set_parameter_block(
+        &mut self,
+        device: &ash::Device,
+        parameter_block_type_layout: slang::reflection::TypeLayout,
+    ) -> Result<(), BoxError> {
+        let mut descriptor_set_layout_builder = DescriptorSetLayoutBuilder::default();
+        descriptor_set_layout_builder.add_descriptor_ranges_for_parameter_block_element(
+            parameter_block_type_layout.element_type_layout(),
+            self,
+        );
+
+        descriptor_set_layout_builder.build_and_add(device, self)?;
+
+        Ok(())
+    }
+
+    fn add_sub_object_ranges(&mut self, type_layout: &slang::reflection::TypeLayout) {
+        for sub_object_range_index in 0..type_layout.sub_object_range_count() {
+            self.add_sub_object_range(type_layout, sub_object_range_index);
+        }
+    }
+
+    fn add_sub_object_range(
+        &mut self,
+        type_layout: &slang::reflection::TypeLayout,
+        sub_object_range_index: i64,
+    ) {
+        let binding_range_index =
+            type_layout.sub_object_range_binding_range_index(sub_object_range_index);
+        let binding_type = type_layout.binding_range_type(binding_range_index);
+
+        use slang::BindingType;
+
+        match binding_type {
+            // TODO
+            // https://docs.shader-slang.org/en/latest/parameter-blocks.html#nested-parameter-blocks
+            BindingType::ParameterBlock => todo!(),
+            BindingType::PushConstant => todo!(),
+
+            // BindingType::Unknown => todo!(),
+            // BindingType::Sampler => todo!(),
+            // BindingType::Texture => todo!(),
+            // BindingType::ConstantBuffer => todo!(),
+            // BindingType::TypedBuffer => todo!(),
+            // BindingType::RawBuffer => todo!(),
+            // BindingType::CombinedTextureSampler => todo!(),
+            // BindingType::InputRenderTarget => todo!(),
+            // BindingType::InlineUniformData => todo!(),
+            // BindingType::RayTracingAccelerationStructure => todo!(),
+            // BindingType::VaryingInput => todo!(),
+            // BindingType::VaryingOutput => todo!(),
+            // BindingType::ExistentialValue => todo!(),
+            // BindingType::MutableFlag => todo!(),
+            // BindingType::MutableTeture => todo!(),
+            // BindingType::MutableTypedBuffer => todo!(),
+            // BindingType::MutableRawBuffer => todo!(),
+            // BindingType::BaseMask => todo!(),
+            // BindingType::ExtMask => todo!(),
+            _ => {}
+        }
+    }
+
+    pub fn build(&mut self, device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
+        // a null here represents an unused reserved slot for a ParameterBlock
+        // that ended up only containing other ParameterBlockes
+        // https://docs.shader-slang.org/en/latest/parameter-blocks.html#empty-parameter-blocks
+        self.descriptor_set_layouts
+            .retain(|layout| !layout.is_null());
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&self.descriptor_set_layouts)
+            .push_constant_ranges(&self.push_constant_ranges);
+
+        let pipeline_layout =
+            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
+
+        Ok(pipeline_layout)
+    }
+}
+
+#[derive(Default)]
+pub struct DescriptorSetLayoutBuilder<'a> {
+    set_index: usize,
+    binding_ranges: Vec<vk::DescriptorSetLayoutBinding<'a>>,
+}
+
+impl<'a> DescriptorSetLayoutBuilder<'a> {
+    pub fn new(pipeline_layout_builder: &mut PipelineLayoutBuilder) -> Self {
+        // reserve a layout slot to be filled in later
+        // this preserves the correct index order for nested ParameterBlocks
+        // https://docs.shader-slang.org/en/latest/parameter-blocks.html#ordering-of-nested-parameter-blocks
+
+        let set_index = pipeline_layout_builder.descriptor_set_layouts.len();
+
+        pipeline_layout_builder
+            .descriptor_set_layouts
+            .push(vk::DescriptorSetLayout::null());
+
+        let binding_ranges = vec![];
+
+        Self {
+            set_index,
+            binding_ranges,
+        }
+    }
+
+    pub fn add_descriptor_ranges_for_parameter_block_element(
+        &mut self,
+        element_layout: &slang::reflection::TypeLayout,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+    ) {
+        // TODO is this the right way to get the right category?
+        //   ie, is this going to be ParameterBlock or the inner one
+        //   if this is right, why is it an argument?
+        // should the category just always be uniform buffer?
+        let category = element_layout.parameter_category();
+        if element_layout.size(category) > 0 {
+            self.add_automatically_introduced_uniform_buffer();
+        }
+
+        self.add_descriptor_ranges(element_layout);
+        pipeline_layout_builder.add_sub_object_ranges(element_layout);
+    }
+
+    fn add_automatically_introduced_uniform_buffer(&mut self) {
+        let vk_binding_index = self.binding_ranges.len();
+
+        let binding = vk::DescriptorSetLayoutBinding::default()
+            .stage_flags(vk::ShaderStageFlags::ALL)
+            .binding(vk_binding_index as u32)
+            .descriptor_count(1)
+            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER);
+
+        self.binding_ranges.push(binding)
+    }
+
+    fn add_descriptor_ranges(&mut self, type_layout: &slang::reflection::TypeLayout) {
+        // NOTE this means we are only querying the first descriptor set
+        let relative_set_index = 0;
+
+        let range_count = type_layout.descriptor_set_descriptor_range_count(relative_set_index);
+
+        for range_index in 0..range_count {
+            self.add_descriptor_range(type_layout, relative_set_index, range_index);
+        }
+    }
+
+    fn add_descriptor_range(
+        &mut self,
+        type_layout: &slang::reflection::TypeLayout,
+        relative_set_index: i64,
+        range_index: i64,
+    ) {
+        let binding_type =
+            type_layout.descriptor_set_descriptor_range_type(relative_set_index, range_index);
+        if binding_type == slang::BindingType::PushConstant {
+            return;
+        }
+
+        let descriptor_count = type_layout
+            .descriptor_set_descriptor_range_descriptor_count(relative_set_index, range_index);
+
+        // TODO what goes in the '...' here?
+        // https://docs.shader-slang.org/en/latest/parameter-blocks.html#descriptor-ranges
+
+        let binding_index = self.binding_ranges.len();
+        let descriptor_type = map_slang_binding_type_to_vk_descriptor_type(binding_type);
+
+        let descriptor_set_layout_binding = vk::DescriptorSetLayoutBinding::default()
+            .binding(binding_index as u32)
+            .descriptor_count(descriptor_count as u32)
+            // TODO where to get these from? '_currentStageFlags' in the docs
+            .stage_flags(vk::ShaderStageFlags::ALL)
+            .descriptor_type(descriptor_type);
+
+        self.binding_ranges.push(descriptor_set_layout_binding);
+    }
+
+    pub fn build_and_add(
+        &self,
+        device: &ash::Device,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+    ) -> Result<(), BoxError> {
+        if self.binding_ranges.is_empty() {
+            return Ok(());
+        }
+
+        let create_info =
+            vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.binding_ranges);
+
+        let layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
+
+        pipeline_layout_builder.descriptor_set_layouts[self.set_index] = layout;
+
+        Ok(())
+    }
+}
+
+fn map_slang_binding_type_to_vk_descriptor_type(
+    binding_type: slang::BindingType,
+) -> vk::DescriptorType {
+    use slang::BindingType;
+
+    match binding_type {
+        BindingType::Sampler => vk::DescriptorType::SAMPLER,
+        BindingType::Texture => vk::DescriptorType::SAMPLED_IMAGE,
+
+        BindingType::ConstantBuffer => todo!(),
+        BindingType::ParameterBlock => todo!(),
+
+        BindingType::VaryingInput => todo!(),
+        BindingType::VaryingOutput => todo!(),
+        BindingType::PushConstant => todo!(),
+        BindingType::TypedBuffer => todo!(),
+        BindingType::RawBuffer => todo!(),
+        BindingType::CombinedTextureSampler => todo!(),
+        BindingType::InputRenderTarget => todo!(),
+        BindingType::InlineUniformData => todo!(),
+        BindingType::RayTracingAccelerationStructure => todo!(),
+        BindingType::ExistentialValue => todo!(),
+        BindingType::MutableFlag => todo!(),
+        BindingType::MutableTeture => todo!(),
+        BindingType::MutableTypedBuffer => todo!(),
+        BindingType::MutableRawBuffer => todo!(),
+        BindingType::BaseMask => todo!(),
+        BindingType::ExtMask => todo!(),
+        BindingType::Unknown => todo!(),
+    }
 }
