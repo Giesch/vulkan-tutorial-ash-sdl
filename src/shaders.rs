@@ -185,7 +185,14 @@ impl PipelineLayoutBuilder {
         match binding_type {
             // TODO
             // https://docs.shader-slang.org/en/latest/parameter-blocks.html#nested-parameter-blocks
-            BindingType::ParameterBlock => todo!(),
+            // https://docs.shader-slang.org/en/latest/parameter-blocks.html#sub-object-ranges
+            BindingType::ParameterBlock => {
+                let parameter_block_type_layout =
+                    type_layout.binding_range_leaf_type_layout(binding_range_index);
+                // TODO
+                // self.add_descriptor_set_parameter_block(device, parameter_block_type_layout);
+            }
+
             BindingType::PushConstant => todo!(),
 
             // BindingType::Unknown => todo!(),
@@ -211,12 +218,12 @@ impl PipelineLayoutBuilder {
         }
     }
 
+    // aka 'finishBuilding' in the docs
     pub fn build(&mut self, device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
-        // a null here represents an unused reserved slot for a ParameterBlock
-        // that ended up only containing other ParameterBlockes
+        // a null here represents an unused reserved slot for a
+        // ParameterBlock that ended up only containing other ParameterBlocks
         // https://docs.shader-slang.org/en/latest/parameter-blocks.html#empty-parameter-blocks
-        self.descriptor_set_layouts
-            .retain(|layout| !layout.is_null());
+        self.descriptor_set_layouts.retain(|l| !l.is_null());
 
         let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
             .set_layouts(&self.descriptor_set_layouts)
@@ -260,12 +267,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         element_layout: &slang::reflection::TypeLayout,
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) {
-        // TODO is this the right way to get the right category?
-        //   ie, is this going to be ParameterBlock or the inner one
-        //   if this is right, why is it an argument?
-        // should the category just always be uniform buffer?
-        let category = element_layout.parameter_category();
-        if element_layout.size(category) > 0 {
+        // in the cpp header there's a default argument overload for Uniform
+        if element_layout.size(slang::ParameterCategory::Uniform) > 0 {
             self.add_automatically_introduced_uniform_buffer();
         }
 
@@ -274,6 +277,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
     }
 
     fn add_automatically_introduced_uniform_buffer(&mut self) {
+        // this relies on using no manual binding annotations
         let vk_binding_index = self.binding_ranges.len();
 
         let binding = vk::DescriptorSetLayoutBinding::default()
@@ -287,6 +291,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 
     fn add_descriptor_ranges(&mut self, type_layout: &slang::reflection::TypeLayout) {
         // NOTE this means we are only querying the first descriptor set
+        // doing this is vulkan-specific
         let relative_set_index = 0;
 
         let range_count = type_layout.descriptor_set_descriptor_range_count(relative_set_index);
@@ -305,6 +310,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         let binding_type =
             type_layout.descriptor_set_descriptor_range_type(relative_set_index, range_index);
         if binding_type == slang::BindingType::PushConstant {
+            // this is accounted for in add_sub_object_range
+            // TODO should this also skip a nested ParameterBlock?
             return;
         }
 
@@ -314,11 +321,12 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         // TODO what goes in the '...' here?
         // https://docs.shader-slang.org/en/latest/parameter-blocks.html#descriptor-ranges
 
-        let binding_index = self.binding_ranges.len();
+        // this relies on using no manual binding annotations
+        let vk_binding_index = self.binding_ranges.len();
         let descriptor_type = map_slang_binding_type_to_vk_descriptor_type(binding_type);
 
         let descriptor_set_layout_binding = vk::DescriptorSetLayoutBinding::default()
-            .binding(binding_index as u32)
+            .binding(vk_binding_index as u32)
             .descriptor_count(descriptor_count as u32)
             // TODO where to get these from? '_currentStageFlags' in the docs
             .stage_flags(vk::ShaderStageFlags::ALL)
@@ -327,6 +335,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         self.binding_ranges.push(descriptor_set_layout_binding);
     }
 
+    // aka 'finishBuilding' in the docs
+    // creates a vulkan DescriptorSetLayout and adds it to the PipelineLayoutBuilder
     pub fn build_and_add(
         &self,
         device: &ash::Device,
@@ -338,7 +348,6 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 
         let create_info =
             vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.binding_ranges);
-
         let layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
 
         pipeline_layout_builder.descriptor_set_layouts[self.set_index] = layout;
@@ -356,7 +365,8 @@ fn map_slang_binding_type_to_vk_descriptor_type(
         BindingType::Sampler => vk::DescriptorType::SAMPLER,
         BindingType::Texture => vk::DescriptorType::SAMPLED_IMAGE,
 
-        BindingType::ConstantBuffer => todo!(),
+        BindingType::ConstantBuffer => vk::DescriptorType::UNIFORM_BUFFER,
+
         BindingType::ParameterBlock => todo!(),
 
         BindingType::VaryingInput => todo!(),

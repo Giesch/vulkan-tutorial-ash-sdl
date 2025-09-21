@@ -1,0 +1,20 @@
+#+title: Docs Notes
+
+- descriptorRanges renamed to bindingRanges
+  and 'descriptorRange' vec
+- 'buildering' class
+- addRanges vs addDescriptorRanges?
+  be consistent with bindingRanges (or something else)
+
+- this bit has multiple wrong names in it, to the point I have no idea what's going on
+  addRanges is also add_descriptor_ranges_for_parameter_block_element?
+  and they left out the automatically added uniform buffer handling
+  #+begin_src slang
+    void DescriptorSetLayoutBuilder::addRanges(
+        slang::TypeLayoutReflection* typeLayout)
+    {
+        addDescriptorRanges(typeLayout);
+        pipelineLayoutBuilder->addSubObjectRanges(typeLayout);
+    }
+  #+end_src
+
