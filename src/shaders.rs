@@ -17,7 +17,7 @@ pub fn precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
 
     let shader_bytecode = std::fs::read(&path).unwrap();
     let byte_reader = &mut std::io::Cursor::new(shader_bytecode.as_slice());
-    let spv_bytes = ash::util::read_spv(byte_reader)?;
+    let _spv_bytes = ash::util::read_spv(byte_reader)?;
 
     todo!()
 }
@@ -142,40 +142,44 @@ fn compile_shader(
 // slang reflection based vulkan builders
 // https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
 
-#[derive(Default)]
 pub struct PipelineLayoutBuilder {
+    device: ash::Device,
     descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
     push_constant_ranges: Vec<vk::PushConstantRange>,
 }
 
 impl PipelineLayoutBuilder {
-    pub fn add_descriptor_set_parameter_block(
+    pub fn add_descriptor_set_for_parameter_block(
         &mut self,
-        device: &ash::Device,
-        parameter_block_type_layout: slang::reflection::TypeLayout,
+        parameter_block_type_layout: &slang::reflection::TypeLayout,
     ) -> Result<(), BoxError> {
         let mut descriptor_set_layout_builder = DescriptorSetLayoutBuilder::default();
         descriptor_set_layout_builder.add_descriptor_ranges_for_parameter_block_element(
             parameter_block_type_layout.element_type_layout(),
             self,
-        );
+        )?;
 
-        descriptor_set_layout_builder.build_and_add(device, self)?;
+        descriptor_set_layout_builder.build_and_add(self)?;
 
         Ok(())
     }
 
-    fn add_sub_object_ranges(&mut self, type_layout: &slang::reflection::TypeLayout) {
+    fn add_sub_object_ranges(
+        &mut self,
+        type_layout: &slang::reflection::TypeLayout,
+    ) -> Result<(), BoxError> {
         for sub_object_range_index in 0..type_layout.sub_object_range_count() {
-            self.add_sub_object_range(type_layout, sub_object_range_index);
+            self.add_sub_object_range(type_layout, sub_object_range_index)?;
         }
+
+        Ok(())
     }
 
     fn add_sub_object_range(
         &mut self,
         type_layout: &slang::reflection::TypeLayout,
         sub_object_range_index: i64,
-    ) {
+    ) -> Result<(), BoxError> {
         let binding_range_index =
             type_layout.sub_object_range_binding_range_index(sub_object_range_index);
         let binding_type = type_layout.binding_range_type(binding_range_index);
@@ -183,16 +187,13 @@ impl PipelineLayoutBuilder {
         use slang::BindingType;
 
         match binding_type {
-            // TODO
-            // https://docs.shader-slang.org/en/latest/parameter-blocks.html#nested-parameter-blocks
-            // https://docs.shader-slang.org/en/latest/parameter-blocks.html#sub-object-ranges
             BindingType::ParameterBlock => {
                 let parameter_block_type_layout =
                     type_layout.binding_range_leaf_type_layout(binding_range_index);
-                // TODO
-                // self.add_descriptor_set_parameter_block(device, parameter_block_type_layout);
+                self.add_descriptor_set_for_parameter_block(parameter_block_type_layout)?;
             }
 
+            // TODO https://docs.shader-slang.org/en/latest/parameter-blocks.html#push-constant-ranges
             BindingType::PushConstant => todo!(),
 
             // BindingType::Unknown => todo!(),
@@ -216,10 +217,12 @@ impl PipelineLayoutBuilder {
             // BindingType::ExtMask => todo!(),
             _ => {}
         }
+
+        Ok(())
     }
 
     // aka 'finishBuilding' in the docs
-    pub fn build(&mut self, device: &ash::Device) -> Result<vk::PipelineLayout, BoxError> {
+    pub fn build(&mut self) -> Result<vk::PipelineLayout, BoxError> {
         // a null here represents an unused reserved slot for a
         // ParameterBlock that ended up only containing other ParameterBlocks
         // https://docs.shader-slang.org/en/latest/parameter-blocks.html#empty-parameter-blocks
@@ -229,8 +232,10 @@ impl PipelineLayoutBuilder {
             .set_layouts(&self.descriptor_set_layouts)
             .push_constant_ranges(&self.push_constant_ranges);
 
-        let pipeline_layout =
-            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
+        let pipeline_layout = unsafe {
+            self.device
+                .create_pipeline_layout(&pipeline_layout_info, None)?
+        };
 
         Ok(pipeline_layout)
     }
@@ -266,14 +271,16 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         &mut self,
         element_layout: &slang::reflection::TypeLayout,
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
-    ) {
+    ) -> Result<(), BoxError> {
         // in the cpp header there's a default argument overload for Uniform
         if element_layout.size(slang::ParameterCategory::Uniform) > 0 {
             self.add_automatically_introduced_uniform_buffer();
         }
 
         self.add_descriptor_ranges(element_layout);
-        pipeline_layout_builder.add_sub_object_ranges(element_layout);
+        pipeline_layout_builder.add_sub_object_ranges(element_layout)?;
+
+        Ok(())
     }
 
     fn add_automatically_introduced_uniform_buffer(&mut self) {
@@ -339,7 +346,6 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
     // creates a vulkan DescriptorSetLayout and adds it to the PipelineLayoutBuilder
     pub fn build_and_add(
         &self,
-        device: &ash::Device,
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) -> Result<(), BoxError> {
         if self.binding_ranges.is_empty() {
@@ -348,7 +354,11 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
 
         let create_info =
             vk::DescriptorSetLayoutCreateInfo::default().bindings(&self.binding_ranges);
-        let layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
+        let layout = unsafe {
+            pipeline_layout_builder
+                .device
+                .create_descriptor_set_layout(&create_info, None)?
+        };
 
         pipeline_layout_builder.descriptor_set_layouts[self.set_index] = layout;
 
