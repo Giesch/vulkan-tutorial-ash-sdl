@@ -164,6 +164,32 @@ impl PipelineLayoutBuilder {
         Ok(())
     }
 
+    pub fn add_push_constatant_range_for_constant_buffer(
+        &mut self,
+        constant_buffer_type_layout: &slang::reflection::TypeLayout,
+    ) {
+        // TODO https://docs.shader-slang.org/en/latest/parameter-blocks.html#push-constant-ranges
+
+        let element_type_layout = constant_buffer_type_layout.element_type_layout();
+        let element_size = element_type_layout.size(slang::ParameterCategory::Uniform);
+
+        if element_size == 0 {
+            return;
+        }
+
+        // NOTE this relies on the way the slang compiler
+        // only ever uses one push constant range per entry point
+        let offset = 0;
+
+        let vk_push_constant_range = vk::PushConstantRange::default()
+            // TODO use correct stage flags
+            .stage_flags(vk::ShaderStageFlags::ALL)
+            .offset(offset)
+            .size(element_size as u32);
+
+        self.push_constant_ranges.push(vk_push_constant_range);
+    }
+
     fn add_sub_object_ranges(
         &mut self,
         type_layout: &slang::reflection::TypeLayout,
@@ -193,8 +219,11 @@ impl PipelineLayoutBuilder {
                 self.add_descriptor_set_for_parameter_block(parameter_block_type_layout)?;
             }
 
-            // TODO https://docs.shader-slang.org/en/latest/parameter-blocks.html#push-constant-ranges
-            BindingType::PushConstant => todo!(),
+            BindingType::PushConstant => {
+                let constant_buffer_type_layout =
+                    type_layout.binding_range_leaf_type_layout(binding_range_index);
+                self.add_push_constatant_range_for_constant_buffer(constant_buffer_type_layout);
+            }
 
             // BindingType::Unknown => todo!(),
             // BindingType::Sampler => todo!(),
