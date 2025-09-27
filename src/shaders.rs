@@ -119,9 +119,9 @@ fn compile_shader(
 
     let linked_program = program.link()?;
 
-    let reflection = linked_program.layout(0)?;
+    let program_layout = linked_program.layout(0)?;
 
-    let mut refl_entry_points = reflection.entry_points();
+    let mut refl_entry_points = program_layout.entry_points();
     assert!(refl_entry_points.len() == 1);
     let reflection_entry_point = refl_entry_points.next().unwrap();
     let stage = reflection_entry_point.stage();
@@ -149,27 +149,18 @@ pub struct PipelineLayoutBuilder {
 }
 
 impl PipelineLayoutBuilder {
-    pub fn add_descriptor_set_for_parameter_block(
-        &mut self,
-        parameter_block_type_layout: &slang::reflection::TypeLayout,
-    ) -> Result<(), BoxError> {
-        let mut descriptor_set_layout_builder = DescriptorSetLayoutBuilder::default();
-        descriptor_set_layout_builder.add_descriptor_ranges_for_parameter_block_element(
-            parameter_block_type_layout.element_type_layout(),
-            self,
-        )?;
-
-        descriptor_set_layout_builder.build_and_add(self)?;
-
-        Ok(())
+    pub fn new(device: ash::Device) -> Self {
+        Self {
+            device,
+            descriptor_set_layouts: vec![],
+            push_constant_ranges: vec![],
+        }
     }
 
     pub fn add_push_constatant_range_for_constant_buffer(
         &mut self,
         constant_buffer_type_layout: &slang::reflection::TypeLayout,
     ) {
-        // TODO https://docs.shader-slang.org/en/latest/parameter-blocks.html#push-constant-ranges
-
         let element_type_layout = constant_buffer_type_layout.element_type_layout();
         let element_size = element_type_layout.size(slang::ParameterCategory::Uniform);
 
@@ -246,6 +237,21 @@ impl PipelineLayoutBuilder {
             // BindingType::ExtMask => todo!(),
             _ => {}
         }
+
+        Ok(())
+    }
+
+    pub fn add_descriptor_set_for_parameter_block(
+        &mut self,
+        parameter_block_type_layout: &slang::reflection::TypeLayout,
+    ) -> Result<(), BoxError> {
+        let mut descriptor_set_layout_builder = DescriptorSetLayoutBuilder::default();
+        descriptor_set_layout_builder.add_descriptor_ranges_for_parameter_block_element(
+            parameter_block_type_layout.element_type_layout(),
+            self,
+        )?;
+
+        descriptor_set_layout_builder.build_and_add(self)?;
 
         Ok(())
     }
@@ -426,4 +432,23 @@ fn map_slang_binding_type_to_vk_descriptor_type(
         BindingType::ExtMask => todo!(),
         BindingType::Unknown => todo!(),
     }
+}
+
+fn create_pipeline_layout(
+    device: ash::Device,
+    program_layout: &slang::reflection::Shader,
+) -> Result<vk::PipelineLayout, BoxError> {
+    let mut pipeline_layout_builder = PipelineLayoutBuilder::new(device);
+
+    // this will hold top-level non-parameter-block shader parameters
+    let default_descriptor_set_layout_builder =
+        DescriptorSetLayoutBuilder::new(&mut pipeline_layout_builder);
+
+    // TODO add these
+    // default_descriptor_set_layout_builder.add_global_scope_parameters(program_layout);
+    // default_descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
+
+    default_descriptor_set_layout_builder.build_and_add(&mut pipeline_layout_builder)?;
+
+    pipeline_layout_builder.build()
 }

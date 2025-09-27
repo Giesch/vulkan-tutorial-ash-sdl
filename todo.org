@@ -1,10 +1,21 @@
 #+title: Todo
 
+* Current
+shaders::create_pipeline_layout
+** link
+[[https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope]]
+
+** notes/quotes
+- "That layout needs to account for the top-level shader parameters of the program: both the global-scope shader parameters and any uniform entry-point parameters."
+- "The global scope can automatically introduce zero or one uniform buffer, and each entry point can introduce zero or one uniform buffer."
+- the default descriptor set holds all uniforms not in a ParameterBlock
+  ie, potentially one from each entry point and one global one
+- a rust slang::reflection::Shader is a wrapped cpp slang::ProgramLayout
+
 * Next
 - [ ] slang reflection codegen
   - [ ] descriptor sets from parameter blocks
-    https://docs.shader-slang.org/en/latest/parameter-blocks.html#what-goes-into-a-descriptor-set-layout
-
+    [[https://docs.shader-slang.org/en/latest/parameter-blocks.html#what-goes-into-a-descriptor-set-layout]]
   - [ ] generate Rust structs from field info?
     just use align 16 for now
     later, use const assertions like thread in slang discord
@@ -18,9 +29,8 @@
       need some way to ensure hot reload of the rust happens first
       use hash of input shader source in output dir for dependency tracking?
 
-
-- [ ] signed distance fields
-   https://danielchasehooper.com/posts/code-animated-rick/
+- [ ] signed distance fields / animated rick
+   [[https://danielchasehooper.com/posts/code-animated-rick]]
 
 - [ ] read about dynamic rendering
   - [ ] sascha's 1.3 triangle
