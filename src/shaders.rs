@@ -174,6 +174,9 @@ impl PipelineLayoutBuilder {
 
         let vk_push_constant_range = vk::PushConstantRange::default()
             // TODO use correct stage flags
+            // I guess '_currentStageFlags' is a cpp global and not a builder field
+            // TODO move it to a field on this builder,
+            // and make this builder a field in the desc set one?
             .stage_flags(vk::ShaderStageFlags::ALL)
             .offset(offset)
             .size(element_size as u32);
@@ -322,7 +325,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         let vk_binding_index = self.binding_ranges.len();
 
         let binding = vk::DescriptorSetLayoutBinding::default()
-            .stage_flags(vk::ShaderStageFlags::ALL)
+            .stage_flags(self.current_stage_flags)
             .binding(vk_binding_index as u32)
             .descriptor_count(1)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER);
@@ -369,8 +372,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         let descriptor_set_layout_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(vk_binding_index as u32)
             .descriptor_count(descriptor_count as u32)
-            // TODO where to get these from? '_currentStageFlags' in the docs
-            .stage_flags(vk::ShaderStageFlags::ALL)
+            .stage_flags(self.current_stage_flags)
             .descriptor_type(descriptor_type);
 
         self.binding_ranges.push(descriptor_set_layout_binding);
@@ -392,8 +394,20 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         Ok(())
     }
 
-    pub fn add_entry_point_parameters(&mut self, program_layout: &slang::reflection::Shader) {
-        // TODO
+    pub fn add_entry_point_parameters(
+        &mut self,
+        program_layout: &slang::reflection::Shader,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+    ) -> Result<(), BoxError> {
+        for entry_point in program_layout.entry_points() {
+            self.current_stage_flags = slang_to_vk_stage_flags(entry_point.stage());
+            self.add_descriptor_ranges_for_parameter_block_element(
+                entry_point.type_layout(),
+                pipeline_layout_builder,
+            )?;
+        }
+
+        Ok(())
     }
 
     // aka 'finishBuilding' in the docs
@@ -453,7 +467,7 @@ fn map_slang_binding_type_to_vk_descriptor_type(
     }
 }
 
-fn create_pipeline_layout(
+pub fn create_pipeline_layout(
     device: ash::Device,
     program_layout: &slang::reflection::Shader,
 ) -> Result<vk::PipelineLayout, BoxError> {
@@ -462,11 +476,39 @@ fn create_pipeline_layout(
     let mut default_descriptor_set_layout_builder =
         DescriptorSetLayoutBuilder::reserve_slot(&mut pipeline_layout_builder);
 
+    // TODO should pipeline_layout_builder just be a desc builder field?
+    // do we ever need multiple of these going at once, or is that an error?
     default_descriptor_set_layout_builder
         .add_global_scope_parameters(program_layout, &mut pipeline_layout_builder)?;
-    default_descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
+    default_descriptor_set_layout_builder
+        .add_entry_point_parameters(program_layout, &mut pipeline_layout_builder)?;
 
     default_descriptor_set_layout_builder.build_and_add(&mut pipeline_layout_builder)?;
 
     pipeline_layout_builder.build()
+}
+
+fn slang_to_vk_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
+    match stage {
+        // basic
+        shader_slang::Stage::Vertex => vk::ShaderStageFlags::VERTEX,
+        shader_slang::Stage::Fragment => vk::ShaderStageFlags::FRAGMENT,
+        shader_slang::Stage::Compute => vk::ShaderStageFlags::COMPUTE,
+        shader_slang::Stage::None => vk::ShaderStageFlags::empty(),
+
+        // raycasting (khr vs nv versions?)
+        shader_slang::Stage::RayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
+        shader_slang::Stage::Intersection => vk::ShaderStageFlags::INTERSECTION_KHR,
+        shader_slang::Stage::AnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
+        shader_slang::Stage::ClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
+        shader_slang::Stage::Miss => vk::ShaderStageFlags::MISS_KHR,
+        shader_slang::Stage::Callable => vk::ShaderStageFlags::CALLABLE_KHR,
+
+        // mesh
+        shader_slang::Stage::Mesh => vk::ShaderStageFlags::MESH_EXT,
+        shader_slang::Stage::Amplification => vk::ShaderStageFlags::TASK_EXT,
+
+        // tesselation / other
+        _ => unimplemented!("tesselation shaders are not supported"),
+    }
 }

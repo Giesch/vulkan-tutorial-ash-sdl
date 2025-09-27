@@ -1,33 +1,24 @@
 #+title: Todo
 
 * Current
-shaders::create_pipeline_layout
-** link
-[[https://docs.shader-slang.org/en/latest/parameter-blocks.html#entry-points]]
-
-** notes/quotes
-- "That layout needs to account for the top-level shader parameters of the program: both the global-scope shader parameters and any uniform entry-point parameters."
-- "The global scope can automatically introduce zero or one uniform buffer, and each entry point can introduce zero or one uniform buffer."
-- the default descriptor set holds all uniforms not in a ParameterBlock
-  ie, potentially one from each entry point and one global one
-- a rust slang::reflection::Shader is a wrapped cpp slang::ProgramLayout
+- [ ] try to use the reflection-based vk pipeline layout in the renderer
+  shaders::create_pipeline_layout
+  [[[[https://docs.shader-slang.org/en/latest/parameter-blocks.html]]]]
+  - [ ] first compare the outputs w/debug
 
 * Next
 - [ ] slang reflection codegen
-  - [ ] descriptor sets from parameter blocks
-    [[https://docs.shader-slang.org/en/latest/parameter-blocks.html#what-goes-into-a-descriptor-set-layout]]
   - [ ] generate Rust structs from field info?
     just use align 16 for now
     later, use const assertions like thread in slang discord
-
-  - [ ] generate shader cursor interface
-
   - [ ] handle regenerated binding code in dev mode somehow
     - just panic for now
     - later, move compilation to a background thread
       send a message to rebuild the pipeline
       need some way to ensure hot reload of the rust happens first
       use hash of input shader source in output dir for dependency tracking?
+  - [ ] generate shader cursor interface
+    this is a lot
 
 - [ ] signed distance fields / animated rick
    [[https://danielchasehooper.com/posts/code-animated-rick]]
@@ -101,3 +92,7 @@ shaders::create_pipeline_layout
   control the validation layers with env vars
   use the env vars described here:
   https://www.lunarg.com/wp-content/uploads/2021/08/Using-Debug-Printf-02August2021.pdf
+
+- [ ] pre-compute the reflection-based vk pipeline layout
+  ie, avoid doing shader reflection at startup in a release build
+  does the shader-slang crate's serde support solve this?
