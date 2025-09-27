@@ -3,7 +3,7 @@
 * Current
 shaders::create_pipeline_layout
 ** link
-[[https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope]]
+[[https://docs.shader-slang.org/en/latest/parameter-blocks.html#entry-points]]
 
 ** notes/quotes
 - "That layout needs to account for the top-level shader parameters of the program: both the global-scope shader parameters and any uniform entry-point parameters."

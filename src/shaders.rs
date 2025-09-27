@@ -280,25 +280,24 @@ impl PipelineLayoutBuilder {
 pub struct DescriptorSetLayoutBuilder<'a> {
     set_index: usize,
     binding_ranges: Vec<vk::DescriptorSetLayoutBinding<'a>>,
+    current_stage_flags: vk::ShaderStageFlags,
 }
 
 impl<'a> DescriptorSetLayoutBuilder<'a> {
-    pub fn new(pipeline_layout_builder: &mut PipelineLayoutBuilder) -> Self {
+    #[doc(alias = "new")]
+    pub fn reserve_slot(pipeline_layout_builder: &mut PipelineLayoutBuilder) -> Self {
         // reserve a layout slot to be filled in later
         // this preserves the correct index order for nested ParameterBlocks
         // https://docs.shader-slang.org/en/latest/parameter-blocks.html#ordering-of-nested-parameter-blocks
-
         let set_index = pipeline_layout_builder.descriptor_set_layouts.len();
-
         pipeline_layout_builder
             .descriptor_set_layouts
             .push(vk::DescriptorSetLayout::null());
 
-        let binding_ranges = vec![];
-
         Self {
             set_index,
-            binding_ranges,
+            binding_ranges: vec![],
+            current_stage_flags: vk::ShaderStageFlags::ALL,
         }
     }
 
@@ -377,6 +376,26 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         self.binding_ranges.push(descriptor_set_layout_binding);
     }
 
+    pub fn add_global_scope_parameters(
+        &mut self,
+        program_layout: &slang::reflection::Shader,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+    ) -> Result<(), BoxError> {
+        // NOTE we could also track usage using the reflection API
+        // but it's simpler to just only use entry points and shared globals
+        self.current_stage_flags = vk::ShaderStageFlags::ALL;
+        self.add_descriptor_ranges_for_parameter_block_element(
+            program_layout.global_params_type_layout(),
+            pipeline_layout_builder,
+        )?;
+
+        Ok(())
+    }
+
+    pub fn add_entry_point_parameters(&mut self, program_layout: &slang::reflection::Shader) {
+        // TODO
+    }
+
     // aka 'finishBuilding' in the docs
     // creates a vulkan DescriptorSetLayout and adds it to the PipelineLayoutBuilder
     pub fn build_and_add(
@@ -440,13 +459,12 @@ fn create_pipeline_layout(
 ) -> Result<vk::PipelineLayout, BoxError> {
     let mut pipeline_layout_builder = PipelineLayoutBuilder::new(device);
 
-    // this will hold top-level non-parameter-block shader parameters
-    let default_descriptor_set_layout_builder =
-        DescriptorSetLayoutBuilder::new(&mut pipeline_layout_builder);
+    let mut default_descriptor_set_layout_builder =
+        DescriptorSetLayoutBuilder::reserve_slot(&mut pipeline_layout_builder);
 
-    // TODO add these
-    // default_descriptor_set_layout_builder.add_global_scope_parameters(program_layout);
-    // default_descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
+    default_descriptor_set_layout_builder
+        .add_global_scope_parameters(program_layout, &mut pipeline_layout_builder)?;
+    default_descriptor_set_layout_builder.add_entry_point_parameters(program_layout);
 
     default_descriptor_set_layout_builder.build_and_add(&mut pipeline_layout_builder)?;
 

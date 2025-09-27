@@ -18,3 +18,14 @@
     }
   #+end_src
 
+- _slangProgramLayout has to be a missed variable rename here:
+  https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope
+  #+begin_src cpp
+  void DescriptorSetLayoutBuilder::addGlobalScopeParameters(
+      slang::ProgramLayout* programLayout)
+  {
+      _currentStageFlags = VK_SHADER_STAGE_ALL;
+      addRangesForParameterBlockElement(
+          _slangProgramLayout->getGlobalParamsTypeLayout());
+  }
+  #+end_src
