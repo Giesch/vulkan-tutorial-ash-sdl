@@ -12,8 +12,6 @@ const FRAME_DELAY: Duration = Duration::from_millis(15);
 fn main() -> Result<(), BoxError> {
     pretty_env_logger::init();
 
-    let compiled_shaders = shaders::compile_slang_shaders()?;
-
     let sdl = sdl3::init()?;
     let video_subsystem = sdl.video()?;
 
@@ -24,7 +22,7 @@ fn main() -> Result<(), BoxError> {
         .vulkan()
         .build()?;
 
-    let renderer = Renderer::init(window, compiled_shaders)?;
+    let renderer = Renderer::init(window)?;
 
     let mut app = App {
         quit: false,

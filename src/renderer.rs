@@ -16,7 +16,7 @@ use sdl3::video::Window;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
-use crate::shaders::{self, CompiledShaderModule};
+use crate::shaders;
 use crate::util::*;
 
 pub mod debug;
@@ -112,7 +112,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: Window, compiled_shaders: CompiledShaderModule) -> Result<Self, BoxError> {
+    pub fn init(window: Window) -> Result<Self, BoxError> {
         let start_time = Instant::now();
 
         #[cfg(debug_assertions)]
@@ -175,6 +175,7 @@ impl Renderer {
         let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
+        let compiled_shaders = shaders::compile_slang_shaders(device.clone())?;
 
         let msaa_samples = get_max_usable_sample_count(physical_device_properties);
 
@@ -695,7 +696,7 @@ impl Renderer {
     // shader hot reload
     #[cfg(debug_assertions)]
     fn try_shader_recompile(&mut self, _edit_events: &[notify::Event]) -> Result<(), BoxError> {
-        let compiled_shaders = match shaders::compile_slang_shaders() {
+        let compiled_shaders = match shaders::compile_slang_shaders(self.device.clone()) {
             Ok(cs) => cs,
             Err(e) => {
                 error!("failed to compile shaders: {e}");
@@ -743,6 +744,10 @@ impl Drop for Renderer {
                 .destroy_descriptor_pool(self.descriptor_pool, None);
             self.device
                 .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
+            for &desc_set_layout in &self.compiled_shaders.vk_descriptor_set_layouts {
+                self.device
+                    .destroy_descriptor_set_layout(desc_set_layout, None);
+            }
 
             self.device.destroy_command_pool(self.command_pool, None);
 
@@ -769,6 +774,8 @@ impl Drop for Renderer {
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
                 .destroy_pipeline_layout(self.pipeline_layout, None);
+            self.device
+                .destroy_pipeline_layout(self.compiled_shaders.vk_pipeline_layout, None);
 
             self.device.destroy_render_pass(self.render_pass, None);
 
@@ -1424,7 +1431,6 @@ fn create_graphics_pipeline(
         .logic_op_enable(false)
         .attachments(&color_attachments);
 
-    // handle not struct; to be used later
     let set_layouts = [descriptor_set_layout];
     let pipeline_layout_create_info =
         vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);

@@ -9,7 +9,7 @@ use crate::util::*;
 pub fn create_pipeline_layout(
     device: ash::Device,
     program_layout: &slang::reflection::Shader,
-) -> Result<vk::PipelineLayout, BoxError> {
+) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), BoxError> {
     let mut pipeline_layout_builder = PipelineLayoutBuilder::new(device);
 
     let mut default_descriptor_set_layout_builder =
@@ -24,7 +24,9 @@ pub fn create_pipeline_layout(
 
     default_descriptor_set_layout_builder.build_and_add(&mut pipeline_layout_builder)?;
 
-    pipeline_layout_builder.build()
+    let layouts = pipeline_layout_builder.build()?;
+
+    Ok(layouts)
 }
 
 pub struct PipelineLayoutBuilder {
@@ -145,7 +147,7 @@ impl PipelineLayoutBuilder {
     }
 
     // aka 'finishBuilding' in the docs
-    pub fn build(&mut self) -> Result<vk::PipelineLayout, BoxError> {
+    pub fn build(mut self) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), BoxError> {
         // a null here represents an unused reserved slot for a
         // ParameterBlock that ended up only containing other ParameterBlocks
         // https://docs.shader-slang.org/en/latest/parameter-blocks.html#empty-parameter-blocks
@@ -160,7 +162,7 @@ impl PipelineLayoutBuilder {
                 .create_pipeline_layout(&pipeline_layout_info, None)?
         };
 
-        Ok(pipeline_layout)
+        Ok((pipeline_layout, self.descriptor_set_layouts))
     }
 }
 
@@ -324,6 +326,7 @@ fn slang_to_vk_descriptor_type(binding_type: slang::BindingType) -> vk::Descript
         slang::BindingType::Sampler => vk::DescriptorType::SAMPLER,
         slang::BindingType::Texture => vk::DescriptorType::SAMPLED_IMAGE,
         slang::BindingType::ConstantBuffer => vk::DescriptorType::UNIFORM_BUFFER,
+        slang::BindingType::CombinedTextureSampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
 
         slang::BindingType::ParameterBlock => todo!(),
         slang::BindingType::VaryingInput => todo!(),
@@ -331,7 +334,6 @@ fn slang_to_vk_descriptor_type(binding_type: slang::BindingType) -> vk::Descript
         slang::BindingType::PushConstant => todo!(),
         slang::BindingType::TypedBuffer => todo!(),
         slang::BindingType::RawBuffer => todo!(),
-        slang::BindingType::CombinedTextureSampler => todo!(),
         slang::BindingType::InputRenderTarget => todo!(),
         slang::BindingType::InlineUniformData => todo!(),
         slang::BindingType::RayTracingAccelerationStructure => todo!(),

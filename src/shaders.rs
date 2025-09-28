@@ -5,7 +5,7 @@ use shader_slang::Downcast;
 
 use crate::util::*;
 
-pub mod descriptor_set_reflection;
+mod descriptor_set_reflection;
 
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
@@ -22,7 +22,7 @@ pub fn precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
     todo!()
 }
 
-pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
+pub fn compile_slang_shaders(device: ash::Device) -> Result<CompiledShaderModule, BoxError> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source")?;
 
@@ -56,6 +56,7 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     // the examples have 1 vert and 1 frag shader
     debug_assert!(module.entry_points().len() == 2);
 
+    let mut components = vec![module.downcast().clone()];
     let mut vert: Option<CompiledShader> = None;
     let mut frag: Option<CompiledShader> = None;
     for entry_point in module.entry_points() {
@@ -66,13 +67,23 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
         } else if compiled_shader.stage == slang::Stage::Fragment {
             frag = Some(compiled_shader)
         }
+
+        components.push(entry_point.downcast().clone());
     }
+
+    let program = session.create_composite_component_type(&components)?;
+    let linked_program = program.link()?;
+    let program_layout = linked_program.layout(0)?;
+    let (vk_pipeline_layout, vk_descriptor_set_layouts) =
+        descriptor_set_reflection::create_pipeline_layout(device, program_layout)?;
 
     match (vert, frag) {
         (Some(vertex_shader), Some(fragment_shader)) => Ok(CompiledShaderModule {
             source_file_name: source_file_name.into(),
             vertex_shader,
             fragment_shader,
+            vk_pipeline_layout,
+            vk_descriptor_set_layouts,
         }),
 
         _ => Err(format!(
@@ -82,11 +93,26 @@ pub fn compile_slang_shaders() -> Result<CompiledShaderModule, BoxError> {
     }
 }
 
-#[derive(Debug)]
 pub struct CompiledShaderModule {
     pub source_file_name: String,
     pub vertex_shader: CompiledShader,
     pub fragment_shader: CompiledShader,
+
+    // NOTE the renderer is expected to free these fields correctly
+    pub vk_pipeline_layout: ash::vk::PipelineLayout,
+    pub vk_descriptor_set_layouts: Vec<ash::vk::DescriptorSetLayout>,
+}
+
+impl std::fmt::Debug for CompiledShaderModule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CompiledShaderModule")
+            .field("source_file_name", &self.source_file_name)
+            .field("vertex_shader", &self.vertex_shader)
+            .field("fragment_shader", &self.fragment_shader)
+            .field("vk_pipeline_layout", &self.vk_pipeline_layout)
+            .field("vk_descriptor_set_layouts", &self.vk_descriptor_set_layouts)
+            .finish()
+    }
 }
 
 // TODO add reflection metadata needed by vulkan
