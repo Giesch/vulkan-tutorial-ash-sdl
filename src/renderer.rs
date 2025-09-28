@@ -74,8 +74,6 @@ pub struct Renderer {
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
-    descriptor_set_layout: vk::DescriptorSetLayout,
-    pipeline_layout: vk::PipelineLayout,
     pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     color_image: vk::Image,
@@ -210,15 +208,8 @@ impl Renderer {
             msaa_samples,
         )?;
 
-        let descriptor_set_layout = create_descriptor_set_layout(&device)?;
-
-        let (pipeline_layout, pipeline) = create_graphics_pipeline(
-            &device,
-            render_pass,
-            descriptor_set_layout,
-            msaa_samples,
-            &compiled_shaders,
-        )?;
+        let pipeline =
+            create_graphics_pipeline(&device, render_pass, msaa_samples, &compiled_shaders)?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
@@ -297,7 +288,7 @@ impl Renderer {
         let descriptor_sets = create_descriptor_sets(
             &device,
             descriptor_pool,
-            descriptor_set_layout,
+            &compiled_shaders.vk_descriptor_set_layouts,
             &uniform_buffers,
             texture_image_view,
             texture_sampler,
@@ -336,8 +327,6 @@ impl Renderer {
             swapchain_images,
             swapchain_image_views,
             render_pass,
-            descriptor_set_layout,
-            pipeline_layout,
             pipeline,
             swapchain_framebuffers,
             color_image,
@@ -449,11 +438,12 @@ impl Renderer {
                 vk::IndexType::UINT32,
             );
 
+            // FIXME
             let descriptor_sets = [self.descriptor_sets[self.current_frame]];
             self.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline_layout,
+                self.compiled_shaders.vk_pipeline_layout,
                 0,
                 &descriptor_sets,
                 &[],
@@ -704,21 +694,20 @@ impl Renderer {
             }
         };
 
-        self.old_pipelines
-            .push((self.total_frames, self.pipeline, self.pipeline_layout));
+        self.old_pipelines.push((
+            self.total_frames,
+            self.pipeline,
+            self.compiled_shaders.vk_pipeline_layout,
+        ));
 
         self.compiled_shaders = compiled_shaders;
 
-        let (pipeline_layout, pipeline) = create_graphics_pipeline(
+        self.pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
-            self.descriptor_set_layout,
             self.msaa_samples,
             &self.compiled_shaders,
         )?;
-
-        self.pipeline_layout = pipeline_layout;
-        self.pipeline = pipeline;
 
         info!("finished recompiling shaders");
 
@@ -742,8 +731,6 @@ impl Drop for Renderer {
             // this also destroys the sets from the pool
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
-            self.device
-                .destroy_descriptor_set_layout(self.descriptor_set_layout, None);
             for &desc_set_layout in &self.compiled_shaders.vk_descriptor_set_layouts {
                 self.device
                     .destroy_descriptor_set_layout(desc_set_layout, None);
@@ -772,8 +759,6 @@ impl Drop for Renderer {
             self.device.free_memory(self.color_image_memory, None);
 
             self.device.destroy_pipeline(self.pipeline, None);
-            self.device
-                .destroy_pipeline_layout(self.pipeline_layout, None);
             self.device
                 .destroy_pipeline_layout(self.compiled_shaders.vk_pipeline_layout, None);
 
@@ -1362,10 +1347,9 @@ fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
 fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
-    descriptor_set_layout: vk::DescriptorSetLayout,
     msaa_samples: vk::SampleCountFlags,
     compiled_shaders: &shaders::CompiledShaderModule,
-) -> Result<(vk::PipelineLayout, vk::Pipeline), BoxError> {
+) -> Result<vk::Pipeline, BoxError> {
     // let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
     // let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
 
@@ -1431,12 +1415,6 @@ fn create_graphics_pipeline(
         .logic_op_enable(false)
         .attachments(&color_attachments);
 
-    let set_layouts = [descriptor_set_layout];
-    let pipeline_layout_create_info =
-        vk::PipelineLayoutCreateInfo::default().set_layouts(&set_layouts);
-    let pipeline_layout =
-        unsafe { device.create_pipeline_layout(&pipeline_layout_create_info, None)? };
-
     let depth_stencil_state = vk::PipelineDepthStencilStateCreateInfo::default()
         .depth_test_enable(true)
         .depth_write_enable(true)
@@ -1453,7 +1431,7 @@ fn create_graphics_pipeline(
         .multisample_state(&multisample_state)
         .color_blend_state(&color_blend_state)
         .dynamic_state(&dynamic_state)
-        .layout(pipeline_layout)
+        .layout(compiled_shaders.vk_pipeline_layout)
         .render_pass(render_pass)
         .subpass(0)
         .depth_stencil_state(&depth_stencil_state);
@@ -1468,7 +1446,7 @@ fn create_graphics_pipeline(
     unsafe { device.destroy_shader_module(frag_shader, None) };
     unsafe { device.destroy_shader_module(vert_shader, None) };
 
-    Ok((pipeline_layout, graphics_pipeline))
+    Ok(graphics_pipeline)
 }
 
 fn create_framebuffers(
@@ -1836,27 +1814,6 @@ struct MVPMatrices {
     projection: glam::Mat4,
 }
 
-fn create_descriptor_set_layout(device: &ash::Device) -> Result<vk::DescriptorSetLayout, BoxError> {
-    let uniform_buffer_layout_binding = vk::DescriptorSetLayoutBinding::default()
-        .binding(0)
-        .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-        .descriptor_count(1)
-        .stage_flags(vk::ShaderStageFlags::VERTEX);
-
-    let sampler_layout_binding = vk::DescriptorSetLayoutBinding::default()
-        .binding(1)
-        .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-        .descriptor_count(1)
-        .stage_flags(vk::ShaderStageFlags::FRAGMENT);
-
-    let bindings = [uniform_buffer_layout_binding, sampler_layout_binding];
-    let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&bindings);
-
-    let descriptor_set_layout = unsafe { device.create_descriptor_set_layout(&create_info, None)? };
-
-    Ok(descriptor_set_layout)
-}
-
 fn create_uniform_buffers(
     instance: &ash::Instance,
     device: &ash::Device,
@@ -1970,12 +1927,14 @@ fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, Bo
 fn create_descriptor_sets(
     device: &ash::Device,
     descriptor_pool: vk::DescriptorPool,
-    descriptor_set_layout: vk::DescriptorSetLayout,
+    descriptor_set_layout: &[vk::DescriptorSetLayout],
     uniform_buffers: &[vk::Buffer],
     texture_image_view: vk::ImageView,
     texture_sampler: vk::Sampler,
 ) -> Result<Vec<vk::DescriptorSet>, BoxError> {
-    let set_layouts = [descriptor_set_layout; MAX_FRAMES_IN_FLIGHT];
+    // TODO how to handle multiple reflected descriptor sets?
+    // this assumes exactly one from the shader
+    let set_layouts = [descriptor_set_layout[0]; MAX_FRAMES_IN_FLIGHT];
     let alloc_info = vk::DescriptorSetAllocateInfo::default()
         .descriptor_pool(descriptor_pool)
         .set_layouts(&set_layouts);

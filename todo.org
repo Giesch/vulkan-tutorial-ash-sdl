@@ -1,12 +1,15 @@
 #+title: Todo
 
 * Current
-- [ ] try to use the reflection-based vk pipeline layout in the renderer
+- [-] try to use the reflection-based vk pipeline layout in the renderer
   shaders::create_pipeline_layout
   [[[[https://docs.shader-slang.org/en/latest/parameter-blocks.html]]]]
-  - [ ] first compare the outputs w/debug
-    need to create either the vulkan resources or a recipe for them ahead of time
-    can't hold onto the slang handles after session is dropped
+  - [X] first compare the outputs w/debug
+    only stage flags ALL is different
+  - [X] use the reflected descriptor sets
+  - [ ] figure out how to handle multiple descriptor set layouts
+    how does this work with the per-frame copies?
+  - [ ] does create_descriptor_sets overwrite what we want to reflect?
 
 * Next
 - [ ] slang reflection codegen

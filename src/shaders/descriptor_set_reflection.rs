@@ -270,7 +270,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) -> Result<(), BoxError> {
         // NOTE we could also track usage using the reflection API
-        // but it's simpler to just only use entry points and shared globals
+        //   but it's simpler to just only use entry point args and shared globals
+        // could also use a slang user attribute for this?
         self.current_stage_flags = vk::ShaderStageFlags::ALL;
         self.add_descriptor_ranges_for_parameter_block_element(
             program_layout.global_params_type_layout(),
