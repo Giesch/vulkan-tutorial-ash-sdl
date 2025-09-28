@@ -7,7 +7,7 @@ use crate::util::*;
 
 pub struct ShaderChanges {
     #[expect(unused)]
-    watcher: notify::INotifyWatcher,
+    watcher: notify::RecommendedWatcher,
     receiver: mpsc::Receiver<notify::Result<Event>>,
 }
 

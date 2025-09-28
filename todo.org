@@ -1,10 +1,15 @@
 #+title: Todo
 
 * Current
-- [ ] signed distance fields / animated rick
-  [[https://danielchasehooper.com/posts/code-animated-rick]]
+- [X] windows build
+
 
 * Next
+- [ ] signed distance fields / animated rick
+  [[https://danielchasehooper.com/posts/code-animated-rick]]
+- [ ] fix bug where descriptor set layout is not freed on teardown after a hot reload?
+- [ ] viking room colors are darker on windows?
+
 - [ ] slang reflection codegen
   - [ ] does create_descriptor_sets overwrite what we want to reflect?
     ie, with update_descriptor_sets in the loop

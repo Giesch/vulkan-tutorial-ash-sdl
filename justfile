@@ -1,9 +1,18 @@
+set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
+
+# NOTE this does nothing on windows
 set dotenv-load := true
 
 check:
     bacon check-all
 
+[linux]
 run:
+    cargo run
+
+[windows]
+run:
+    $Env:SLANG_DIR = "$PWD\vendor\slang"
     cargo run
 
 # run with shader printf and vk validation layers at 'info'
@@ -14,7 +23,7 @@ shader-debug:
 run-release: prepare-shaders
     cargo run --release
 
-slang_version := "2025.14.3"
+slang_version := "2025.17.2"
 
 # download Slang shader compiler
 [linux]
@@ -25,6 +34,16 @@ setup:
     tar xzf vendor/slang.tar.gz --directory=vendor/slang
     rm vendor/slang.tar.gz
 
+# download Slang shader compiler
+[windows]
+setup:
+    if (Test-Path -Path vendor\slang) { Remove-Item vendor\slang -Recurse }
+    mkdir vendor\slang > $null
+    Invoke-WebRequest -OutFile vendor\slang.zip -Uri "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-windows-x86_64.zip"
+    Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
+    Remove-Item vendor\slang.zip
+
+# TODO replace this with compilation API
 # pre-compile shaders for reflection info
 [linux]
 prepare-shaders:

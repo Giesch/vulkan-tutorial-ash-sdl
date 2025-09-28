@@ -1354,9 +1354,6 @@ fn create_graphics_pipeline(
     msaa_samples: vk::SampleCountFlags,
     compiled_shaders: &shaders::CompiledShaderModule,
 ) -> Result<vk::Pipeline, BoxError> {
-    // let vert_shader_spv = read_shader_spv("triangle.vert.spv")?;
-    // let frag_shader_spv = read_shader_spv("triangle.frag.spv")?;
-
     let vert_shader_spv = &compiled_shaders.vertex_shader.spv_bytes;
     let frag_shader_spv = &compiled_shaders.fragment_shader.spv_bytes;
 
