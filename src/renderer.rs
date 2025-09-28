@@ -438,8 +438,12 @@ impl Renderer {
                 vk::IndexType::UINT32,
             );
 
-            // FIXME
-            let descriptor_sets = [self.descriptor_sets[self.current_frame]];
+            let chunk_size = self.compiled_shaders.vk_descriptor_set_layouts.len();
+            let descriptor_sets = self
+                .descriptor_sets
+                .chunks(chunk_size)
+                .nth(self.current_frame)
+                .unwrap();
             self.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -1927,53 +1931,61 @@ fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, Bo
 fn create_descriptor_sets(
     device: &ash::Device,
     descriptor_pool: vk::DescriptorPool,
-    descriptor_set_layout: &[vk::DescriptorSetLayout],
+    descriptor_set_layouts: &[vk::DescriptorSetLayout],
     uniform_buffers: &[vk::Buffer],
     texture_image_view: vk::ImageView,
     texture_sampler: vk::Sampler,
 ) -> Result<Vec<vk::DescriptorSet>, BoxError> {
-    // TODO how to handle multiple reflected descriptor sets?
-    // this assumes exactly one from the shader
-    let set_layouts = [descriptor_set_layout[0]; MAX_FRAMES_IN_FLIGHT];
+    let mut set_layouts = vec![];
+    for _frame in 0..MAX_FRAMES_IN_FLIGHT {
+        for descriptor_set_layout in descriptor_set_layouts {
+            // i = current frame * descriptor_set_layouts.len() + layout offset
+            set_layouts.push(descriptor_set_layout.clone());
+        }
+    }
+
     let alloc_info = vk::DescriptorSetAllocateInfo::default()
         .descriptor_pool(descriptor_pool)
         .set_layouts(&set_layouts);
 
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
-    for i in 0..MAX_FRAMES_IN_FLIGHT {
-        let buffer = uniform_buffers[i];
-        let dst_set = descriptor_sets[i];
+    for f in 0..MAX_FRAMES_IN_FLIGHT {
+        for dsl in 0..descriptor_set_layouts.len() {
+            let buffer = uniform_buffers[f];
+            let ds = f * descriptor_set_layouts.len() + dsl;
+            let dst_set = descriptor_sets[ds];
 
-        let buffer_info = vk::DescriptorBufferInfo::default()
-            .buffer(buffer)
-            .offset(0)
-            .range(std::mem::size_of::<MVPMatrices>() as u64);
-        let buffer_info = [buffer_info];
-        let uniform_buffer_write = vk::WriteDescriptorSet::default()
-            .dst_set(dst_set)
-            .dst_binding(0)
-            .dst_array_element(0)
-            .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-            .descriptor_count(1)
-            .buffer_info(&buffer_info);
+            let buffer_info = vk::DescriptorBufferInfo::default()
+                .buffer(buffer)
+                .offset(0)
+                .range(std::mem::size_of::<MVPMatrices>() as u64);
+            let buffer_info = [buffer_info];
+            let uniform_buffer_write = vk::WriteDescriptorSet::default()
+                .dst_set(dst_set)
+                .dst_binding(0)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .buffer_info(&buffer_info);
 
-        let image_info = vk::DescriptorImageInfo::default()
-            .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-            .image_view(texture_image_view)
-            .sampler(texture_sampler);
-        let image_info = [image_info];
-        let image_write = vk::WriteDescriptorSet::default()
-            .dst_set(dst_set)
-            .dst_binding(1)
-            .dst_array_element(0)
-            .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-            .descriptor_count(1)
-            .image_info(&image_info);
+            let image_info = vk::DescriptorImageInfo::default()
+                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                .image_view(texture_image_view)
+                .sampler(texture_sampler);
+            let image_info = [image_info];
+            let image_write = vk::WriteDescriptorSet::default()
+                .dst_set(dst_set)
+                .dst_binding(1)
+                .dst_array_element(0)
+                .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .image_info(&image_info);
 
-        let writes = [uniform_buffer_write, image_write];
+            let writes = [uniform_buffer_write, image_write];
 
-        unsafe { device.update_descriptor_sets(&writes, &[]) };
+            unsafe { device.update_descriptor_sets(&writes, &[]) };
+        }
     }
 
     Ok(descriptor_sets)
