@@ -5,8 +5,10 @@
   - [X] make json-serializable version of builders output
   - [X] use serializable version in the builders
   - [X] write reflection metadata with precompiled spv
-  - [ ] add entry point names to reflection json
-  - [ ] load reflection metadata with precompiled spv
+  - [X] add entry point names to reflection json
+  - [X] load reflection metadata with precompiled spv
+  - [ ] use the precompiled shaders in renderer.rs
+    based on feature flag or cfg(debug_assertions)
   - [ ] make this work with multiple shaders (instead of hardcoding one)
 
 * Next
