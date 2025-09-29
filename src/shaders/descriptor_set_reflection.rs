@@ -2,21 +2,8 @@ use ash::vk;
 use serde::{Deserialize, Serialize};
 use shader_slang as slang;
 
-use crate::util::*;
-
 // slang-reflection-based vulkan builders
 // https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
-
-pub unsafe fn create_pipeline_layout(
-    device: ash::Device,
-    program_layout: &slang::reflection::Shader,
-) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), BoxError> {
-    let reflected_pipeline_layout = reflect_pipeline_layout(program_layout);
-
-    let layouts = unsafe { reflected_pipeline_layout.vk_create(&device)? };
-
-    Ok(layouts)
-}
 
 pub fn reflect_pipeline_layout(
     program_layout: &slang::reflection::Shader,

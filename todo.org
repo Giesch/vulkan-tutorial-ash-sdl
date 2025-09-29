@@ -4,7 +4,7 @@
 - [-] finish precompiled shaders flow
   - [X] make json-serializable version of builders output
   - [X] use serializable version in the builders
-  - [ ] write reflection metadata with precompiled spv
+  - [X] write reflection metadata with precompiled spv
   - [ ] load reflection metadata with precompiled spv
   - [ ] make this work with multiple shaders (instead of hardcoding one)
 

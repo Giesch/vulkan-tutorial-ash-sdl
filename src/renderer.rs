@@ -173,7 +173,7 @@ impl Renderer {
         let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
-        let compiled_shaders = shaders::compile_slang_shaders(device.clone())?;
+        let compiled_shaders = shaders::dev_compile_slang_shaders(device.clone())?;
 
         let msaa_samples = get_max_usable_sample_count(physical_device_properties);
 
@@ -692,7 +692,7 @@ impl Renderer {
     // shader hot reload
     #[cfg(debug_assertions)]
     fn try_shader_recompile(&mut self, _edit_events: &[notify::Event]) -> Result<(), BoxError> {
-        let compiled_shaders = match shaders::compile_slang_shaders(self.device.clone()) {
+        let compiled_shaders = match shaders::dev_compile_slang_shaders(self.device.clone()) {
             Ok(cs) => cs,
             Err(e) => {
                 error!("failed to compile shaders: {e}");
@@ -1356,8 +1356,8 @@ fn create_graphics_pipeline(
     msaa_samples: vk::SampleCountFlags,
     compiled_shaders: &shaders::CompiledShaderModule,
 ) -> Result<vk::Pipeline, BoxError> {
-    let vert_shader_spv = &compiled_shaders.vertex_shader.spv_bytes;
-    let frag_shader_spv = &compiled_shaders.fragment_shader.spv_bytes;
+    let vert_shader_spv = &compiled_shaders.vertex_shader.spv_bytes()?;
+    let frag_shader_spv = &compiled_shaders.fragment_shader.spv_bytes()?;
 
     let vert_create_info = vk::ShaderModuleCreateInfo::default().code(vert_shader_spv);
     let frag_create_info = vk::ShaderModuleCreateInfo::default().code(frag_shader_spv);

@@ -42,8 +42,5 @@ setup:
     Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
     Remove-Item vendor\slang.zip
 
-# TODO replace this with compilation API
-# pre-compile shaders for reflection info
-[linux]
 prepare-shaders:
     cargo run --bin prepare_shaders
