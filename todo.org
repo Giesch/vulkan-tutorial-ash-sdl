@@ -19,14 +19,15 @@
   - [ ] generate Rust structs from field info?
     just use align 16 for now
     later, use const assertions like thread in slang discord
+  - [ ] generate shader cursor interface?
+    https://docs.shader-slang.org/en/latest/shader-cursors.html
+    this is a lot
   - [ ] handle regenerated binding code in dev mode somehow
     - just panic for now
     - later, move compilation to a background thread
       send a message to rebuild the pipeline
       need some way to ensure hot reload of the rust happens first
       use hash of input shader source in output dir for dependency tracking?
-  - [ ] generate shader cursor interface
-    this is a lot
 
 - [ ] viking room colors are darker on windows?
   it looks like a gamma correction problem,
@@ -108,3 +109,11 @@
 - [ ] pre-compute the reflection-based vk pipeline layout
   ie, avoid doing shader reflection at startup in a release build
   does the shader-slang crate's serde support solve this?
+
+- [ ] try to avoid the vk::ShaderStageFlags::ALL in add_global_scope_parameters
+  - is there a way to use reflection to get at the true usage?
+    #+begin_quote
+    Applications that want to set more precise stage flags, taking into account which data is accessed by which stages in the compiled program binary, are encouraged to look at the more comprehensive documentation on the reflection API.
+    #+end_quote
+    https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope
+  - would it be easy to use a slang user attribute?

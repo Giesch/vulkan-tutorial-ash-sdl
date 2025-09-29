@@ -15,8 +15,6 @@ pub fn create_pipeline_layout(
     let mut default_descriptor_set_layout_builder =
         DescriptorSetLayoutBuilder::reserve_slot(&mut pipeline_layout_builder);
 
-    // TODO should pipeline_layout_builder just be a desc builder field?
-    // do we ever need multiple of these going at once, or is that an error?
     default_descriptor_set_layout_builder
         .add_global_scope_parameters(program_layout, &mut pipeline_layout_builder)?;
     default_descriptor_set_layout_builder
@@ -33,6 +31,7 @@ pub struct PipelineLayoutBuilder {
     device: ash::Device,
     descriptor_set_layouts: Vec<vk::DescriptorSetLayout>,
     push_constant_ranges: Vec<vk::PushConstantRange>,
+    current_stage_flags: vk::ShaderStageFlags,
 }
 
 impl PipelineLayoutBuilder {
@@ -41,6 +40,7 @@ impl PipelineLayoutBuilder {
             device,
             descriptor_set_layouts: vec![],
             push_constant_ranges: vec![],
+            current_stage_flags: vk::ShaderStageFlags::ALL,
         }
     }
 
@@ -60,13 +60,7 @@ impl PipelineLayoutBuilder {
         let offset = 0;
 
         let vk_push_constant_range = vk::PushConstantRange::default()
-            // TODO use correct stage flags
-            //   I guess '_currentStageFlags' is a cpp global and not a builder field
-            // TODO move it to a field on this builder,
-            //   and make this builder a field in the desc set one?
-            // that breaks lifetimes; need the top level and the nested ref
-            //   can we move it up and just pass it every time? doesn't look like it
-            .stage_flags(vk::ShaderStageFlags::ALL)
+            .stage_flags(self.current_stage_flags)
             .offset(offset)
             .size(element_size as u32);
 
@@ -169,7 +163,6 @@ impl PipelineLayoutBuilder {
 pub struct DescriptorSetLayoutBuilder<'a> {
     set_index: usize,
     binding_ranges: Vec<vk::DescriptorSetLayoutBinding<'a>>,
-    current_stage_flags: vk::ShaderStageFlags,
 }
 
 impl<'a> DescriptorSetLayoutBuilder<'a> {
@@ -185,7 +178,6 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         Self {
             set_index,
             binding_ranges: vec![],
-            current_stage_flags: vk::ShaderStageFlags::ALL,
         }
     }
 
@@ -196,21 +188,24 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
     ) -> Result<(), BoxError> {
         // in the cpp header there's a default argument overload for Uniform
         if element_layout.size(slang::ParameterCategory::Uniform) > 0 {
-            self.add_automatically_introduced_uniform_buffer();
+            self.add_automatically_introduced_uniform_buffer(pipeline_layout_builder);
         }
 
-        self.add_descriptor_ranges(element_layout);
+        self.add_descriptor_ranges(pipeline_layout_builder, element_layout);
         pipeline_layout_builder.add_sub_object_ranges(element_layout)?;
 
         Ok(())
     }
 
-    fn add_automatically_introduced_uniform_buffer(&mut self) {
+    fn add_automatically_introduced_uniform_buffer(
+        &mut self,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+    ) {
         // this relies on using no manual binding annotations
         let vk_binding_index = self.binding_ranges.len();
 
         let binding = vk::DescriptorSetLayoutBinding::default()
-            .stage_flags(self.current_stage_flags)
+            .stage_flags(pipeline_layout_builder.current_stage_flags)
             .binding(vk_binding_index as u32)
             .descriptor_count(1)
             .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER);
@@ -218,7 +213,11 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         self.binding_ranges.push(binding)
     }
 
-    fn add_descriptor_ranges(&mut self, type_layout: &slang::reflection::TypeLayout) {
+    fn add_descriptor_ranges(
+        &mut self,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
+        type_layout: &slang::reflection::TypeLayout,
+    ) {
         // NOTE this means we are only querying the first descriptor set
         // doing this is vulkan-specific
         let relative_set_index = 0;
@@ -226,12 +225,18 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         let range_count = type_layout.descriptor_set_descriptor_range_count(relative_set_index);
 
         for range_index in 0..range_count {
-            self.add_descriptor_range(type_layout, relative_set_index, range_index);
+            self.add_descriptor_range(
+                pipeline_layout_builder,
+                type_layout,
+                relative_set_index,
+                range_index,
+            );
         }
     }
 
     fn add_descriptor_range(
         &mut self,
+        pipeline_layout_builder: &mut PipelineLayoutBuilder,
         type_layout: &slang::reflection::TypeLayout,
         relative_set_index: i64,
         range_index: i64,
@@ -242,6 +247,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
             // this is accounted for in add_sub_object_range
             // TODO should this also skip a nested ParameterBlock?
             //   and the other sub object types
+            //   or do we just not support nested ParameterBlocks in practice?
             return;
         }
 
@@ -258,7 +264,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         let descriptor_set_layout_binding = vk::DescriptorSetLayoutBinding::default()
             .binding(vk_binding_index as u32)
             .descriptor_count(descriptor_count as u32)
-            .stage_flags(self.current_stage_flags)
+            .stage_flags(pipeline_layout_builder.current_stage_flags)
             .descriptor_type(descriptor_type);
 
         self.binding_ranges.push(descriptor_set_layout_binding);
@@ -269,10 +275,7 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         program_layout: &slang::reflection::Shader,
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) -> Result<(), BoxError> {
-        // NOTE we could also track usage using the reflection API
-        //   but it's simpler to just only use entry point args and shared globals
-        // could also use a slang user attribute for this?
-        self.current_stage_flags = vk::ShaderStageFlags::ALL;
+        pipeline_layout_builder.current_stage_flags = vk::ShaderStageFlags::ALL;
         self.add_descriptor_ranges_for_parameter_block_element(
             program_layout.global_params_type_layout(),
             pipeline_layout_builder,
@@ -287,7 +290,8 @@ impl<'a> DescriptorSetLayoutBuilder<'a> {
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) -> Result<(), BoxError> {
         for entry_point in program_layout.entry_points() {
-            self.current_stage_flags = slang_to_vk_stage_flags(entry_point.stage());
+            pipeline_layout_builder.current_stage_flags =
+                slang_to_vk_stage_flags(entry_point.stage());
             self.add_descriptor_ranges_for_parameter_block_element(
                 entry_point.type_layout(),
                 pipeline_layout_builder,
