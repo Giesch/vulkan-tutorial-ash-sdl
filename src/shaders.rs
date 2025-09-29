@@ -20,6 +20,8 @@ pub fn precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
     let byte_reader = &mut std::io::Cursor::new(shader_bytecode.as_slice());
     let _spv_bytes = ash::util::read_spv(byte_reader)?;
 
+    // let reflected_pipeline_layout = descriptor_set_reflection::reflect_pipeline_layout(program_layout);
+
     todo!()
 }
 
@@ -76,7 +78,7 @@ pub fn compile_slang_shaders(device: ash::Device) -> Result<CompiledShaderModule
     let linked_program = program.link()?;
     let program_layout = linked_program.layout(0)?;
     let (vk_pipeline_layout, vk_descriptor_set_layouts) =
-        descriptor_set_reflection::create_pipeline_layout(device, program_layout)?;
+        unsafe { descriptor_set_reflection::create_pipeline_layout(device, program_layout)? };
 
     match (vert, frag) {
         (Some(vertex_shader), Some(fragment_shader)) => Ok(CompiledShaderModule {
