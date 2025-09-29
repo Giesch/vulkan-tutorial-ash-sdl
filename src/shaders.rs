@@ -12,6 +12,7 @@ pub const COLUMN_MAJOR: bool = true;
 
 pub fn precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
     // TODO glob for all .slang/.spv files
+    // and load pre-reflected metadata from a file
     let spv_file_name = "depth_texture.spv";
     let path = manifest_path(["shaders", "compiled", spv_file_name]);
 

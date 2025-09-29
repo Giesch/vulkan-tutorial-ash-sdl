@@ -1,4 +1,5 @@
 use ash::vk::{self, Handle};
+use serde::{Deserialize, Serialize};
 use shader_slang as slang;
 
 use crate::util::*;
@@ -364,5 +365,126 @@ fn slang_to_vk_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
 
         // raytracing, mesh, tesselation, dispatch, & count
         _ => unimplemented!(),
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ReflectedStageFlags {
+    Vertex,
+    Fragment,
+    Compute,
+    All,
+}
+
+impl ReflectedStageFlags {
+    fn to_vk(&self) -> vk::ShaderStageFlags {
+        match self {
+            Self::Vertex => vk::ShaderStageFlags::VERTEX,
+            Self::Fragment => vk::ShaderStageFlags::FRAGMENT,
+            Self::Compute => vk::ShaderStageFlags::COMPUTE,
+            Self::All => vk::ShaderStageFlags::ALL,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ReflectedBindingType {
+    Sampler,
+    Texture,
+    ConstantBuffer,
+    CombinedTextureSampler,
+}
+
+impl ReflectedBindingType {
+    fn to_vk(&self) -> vk::DescriptorType {
+        match self {
+            Self::Sampler => vk::DescriptorType::SAMPLER,
+            Self::Texture => vk::DescriptorType::SAMPLED_IMAGE,
+            Self::ConstantBuffer => vk::DescriptorType::UNIFORM_BUFFER,
+            Self::CombinedTextureSampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        }
+    }
+}
+
+/// reflected data for creating a DescriptorSetLayoutBinding
+/// samplers are deliberately excluded
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReflectedDescriptorSetLayoutBinding {
+    binding: u32,
+    descriptor_type: ReflectedBindingType,
+    descriptor_count: u32,
+    stage_flags: ReflectedStageFlags,
+}
+
+impl ReflectedDescriptorSetLayoutBinding {
+    fn to_vk(&self) -> vk::DescriptorSetLayoutBinding<'static> {
+        vk::DescriptorSetLayoutBinding::default()
+            .stage_flags(self.stage_flags.to_vk())
+            .binding(self.binding)
+            .descriptor_count(self.descriptor_count)
+            .descriptor_type(self.descriptor_type.to_vk())
+    }
+}
+
+/// reflected data for creating a DescriptorSetLayout
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReflectedDescriptorSetLayout {
+    binding_ranges: Vec<ReflectedDescriptorSetLayoutBinding>,
+}
+
+impl ReflectedDescriptorSetLayout {
+    unsafe fn vk_create(
+        &self,
+        device: &ash::Device,
+    ) -> Result<vk::DescriptorSetLayout, vk::Result> {
+        let binding_ranges: Vec<_> = self.binding_ranges.iter().map(|b| b.to_vk()).collect();
+        let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&binding_ranges);
+
+        unsafe { device.create_descriptor_set_layout(&create_info, None) }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReflectedPushConstantRange {
+    stage_flags: ReflectedStageFlags,
+    offset: u32,
+    size: u32,
+}
+
+impl ReflectedPushConstantRange {
+    fn to_vk(&self) -> vk::PushConstantRange {
+        vk::PushConstantRange::default()
+            .stage_flags(self.stage_flags.to_vk())
+            .offset(self.size)
+            .size(self.size)
+    }
+}
+
+/// reflected data for creating a PipelineLayoutBuilder
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ReflectedPipelineLayout {
+    descriptor_set_layouts: Vec<ReflectedDescriptorSetLayout>,
+    push_constant_ranges: Vec<ReflectedPushConstantRange>,
+}
+
+impl ReflectedPipelineLayout {
+    pub unsafe fn vk_create(&self, device: &ash::Device) -> Result<vk::PipelineLayout, vk::Result> {
+        let mut descriptor_set_layouts = vec![];
+        for reflected_set_layout in &self.descriptor_set_layouts {
+            let created_set_layout = unsafe { reflected_set_layout.vk_create(device) }?;
+            descriptor_set_layouts.push(created_set_layout);
+        }
+
+        let push_constant_ranges: Vec<_> = self
+            .push_constant_ranges
+            .iter()
+            .map(|r| r.to_vk())
+            .collect();
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&descriptor_set_layouts)
+            .push_constant_ranges(&push_constant_ranges);
+
+        unsafe { device.create_pipeline_layout(&pipeline_layout_info, None) }
     }
 }
