@@ -22,6 +22,7 @@ shader-debug:
 run-release: prepare-shaders
     cargo run --release
 
+
 slang_version := "2025.17.2"
 
 # download Slang shader compiler
@@ -42,5 +43,7 @@ setup:
     Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
     Remove-Item vendor\slang.zip
 
+
+# write precompiled shaders & metadata to disk
 prepare-shaders:
     cargo run --bin prepare_shaders

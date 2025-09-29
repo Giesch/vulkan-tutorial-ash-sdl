@@ -12,12 +12,23 @@ mod descriptor_set_reflection;
 pub const COLUMN_MAJOR: bool = true;
 
 pub fn load_precompiled_shaders() -> Result<CompiledShaderModule, BoxError> {
-    // TODO glob for all .slang/.spv files
-    // and load pre-reflected metadata from a file
-    let spv_file_name = "depth_texture.spv";
-    let path = manifest_path(["shaders", "compiled", spv_file_name]);
+    // TODO glob for all .slang files
+    let source_file_name = "depth_texture.slang";
 
-    let _shader_bytecode = std::fs::read(&path).unwrap();
+    let reflection_json_file_name = source_file_name.replace(".slang", ".json");
+    let json_path = manifest_path(["shaders", "compiled", &reflection_json_file_name]);
+    let json = std::fs::read_to_string(&json_path).unwrap();
+    let _reflected_pipeline_layout: ReflectedPipelineLayout = serde_json::from_str(&json)?;
+
+    let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
+    let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
+    let _frag_shader_bytecode = std::fs::read(&frag_path).unwrap();
+
+    let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
+    let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
+    let _vert_shader_bytecode = std::fs::read(&vert_path).unwrap();
+
+    // TODO entry point names
 
     todo!()
 }
@@ -174,7 +185,7 @@ impl std::fmt::Debug for CompiledShaderModule {
 pub struct CompiledShader {
     pub entry_point_name: CString,
     pub stage: slang::Stage,
-    pub shader_bytecode: slang::Blob,
+    pub shader_bytecode: Vec<u8>,
 }
 
 impl CompiledShader {
@@ -214,6 +225,7 @@ fn compile_shader(
     let stage = reflection_entry_point.stage();
 
     let shader_bytecode: slang::Blob = linked_program.entry_point_code(0, 0)?;
+    let shader_bytecode = shader_bytecode.as_slice().to_vec();
 
     let entry_point_name = CString::new(reflection_entry_point.name())?;
 
