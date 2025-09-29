@@ -16,7 +16,7 @@ use sdl3::video::Window;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
-use crate::shaders;
+use crate::shaders::{self, CompiledShaderModule};
 use crate::util::*;
 
 pub mod debug;
@@ -284,7 +284,7 @@ impl Renderer {
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
             create_uniform_buffers(&instance, &device, physical_device)?;
 
-        let descriptor_pool = create_descriptor_pool(&device)?;
+        let descriptor_pool = create_descriptor_pool(&device, &compiled_shaders)?;
         let descriptor_sets = create_descriptor_sets(
             &device,
             descriptor_pool,
@@ -438,10 +438,11 @@ impl Renderer {
                 vk::IndexType::UINT32,
             );
 
-            let chunk_size = self.compiled_shaders.vk_descriptor_set_layouts.len();
+            // see create_descriptor_sets
+            let descriptor_sets_per_frame = self.compiled_shaders.vk_descriptor_set_layouts.len();
             let descriptor_sets = self
                 .descriptor_sets
-                .chunks(chunk_size)
+                .chunks(descriptor_sets_per_frame)
                 .nth(self.current_frame)
                 .unwrap();
             self.device.cmd_bind_descriptor_sets(
@@ -1908,18 +1909,23 @@ fn update_uniform_buffer(
     Ok(())
 }
 
-fn create_descriptor_pool(device: &ash::Device) -> Result<vk::DescriptorPool, BoxError> {
+fn create_descriptor_pool(
+    device: &ash::Device,
+    compiled_shaders: &CompiledShaderModule,
+) -> Result<vk::DescriptorPool, BoxError> {
+    let descriptor_sets_per_frame = compiled_shaders.vk_descriptor_set_layouts.len() as u32;
+    let descriptor_set_count = descriptor_sets_per_frame * MAX_FRAMES_IN_FLIGHT as u32;
     let uniform_buffer_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::UNIFORM_BUFFER)
-        .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
+        .descriptor_count(descriptor_set_count);
     let sampler_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-        .descriptor_count(MAX_FRAMES_IN_FLIGHT as u32);
+        .descriptor_count(descriptor_set_count);
 
     let pool_sizes = [uniform_buffer_pool_size, sampler_pool_size];
     let pool_create_info = vk::DescriptorPoolCreateInfo::default()
         .pool_sizes(&pool_sizes)
-        .max_sets(MAX_FRAMES_IN_FLIGHT as u32);
+        .max_sets(descriptor_set_count);
 
     let pool = unsafe { device.create_descriptor_pool(&pool_create_info, None)? };
 
@@ -1941,11 +1947,9 @@ fn create_descriptor_sets(
             set_layouts.push(descriptor_set_layout);
         }
     }
-
     let alloc_info = vk::DescriptorSetAllocateInfo::default()
         .descriptor_pool(descriptor_pool)
         .set_layouts(&set_layouts);
-
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
     for frame in 0..MAX_FRAMES_IN_FLIGHT {
