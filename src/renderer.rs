@@ -223,7 +223,7 @@ impl Renderer {
             msaa_samples,
         )?;
 
-        let (depth_image, depth_image_memory, depth_image_view) = create_depth_image(
+        let (depth_image, depth_image_memory, depth_image_view) = create_depth_buffer_image(
             &instance,
             &device,
             physical_device,
@@ -600,7 +600,7 @@ impl Renderer {
         self.swapchain_image_views =
             create_swapchain_image_views(&self.device, self.image_format, &self.swapchain_images)?;
 
-        let (depth_image, depth_image_memory, depth_image_view) = create_depth_image(
+        let (depth_image, depth_image_memory, depth_image_view) = create_depth_buffer_image(
             &self.instance,
             &self.device,
             self.physical_device,
@@ -656,29 +656,30 @@ impl Renderer {
 
     #[cfg(debug_assertions)]
     fn check_for_shader_recompile(&mut self) -> Result<(), BoxError> {
-        unsafe {
-            let mut to_remove = vec![];
-            for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
-                self.old_pipelines.iter().enumerate()
-            {
-                let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
-                if !unused {
-                    continue;
-                }
+        // drop old graphics reloaded pipelines for frames that are no longer needed
+        let mut to_remove = vec![];
+        for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
+            self.old_pipelines.iter().enumerate()
+        {
+            let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
+            if !unused {
+                continue;
+            }
 
+            unsafe {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
                     .destroy_pipeline_layout(*old_pipeline_layout, None);
-                to_remove.push(i);
             }
 
-            for i in to_remove {
-                self.old_pipelines.swap_remove(i);
-            }
+            to_remove.push(i);
+        }
+        for i in to_remove {
+            self.old_pipelines.swap_remove(i);
         }
 
+        // recompile shaders if necessary
         let edit_events = self.shader_changes.events()?;
-
         if !edit_events.is_empty() {
             info!("recompiling shaders...");
             self.try_shader_recompile(&edit_events)?;
@@ -1935,9 +1936,9 @@ fn create_descriptor_sets(
 ) -> Result<Vec<vk::DescriptorSet>, BoxError> {
     let mut set_layouts = vec![];
     for _frame in 0..MAX_FRAMES_IN_FLIGHT {
-        for descriptor_set_layout in descriptor_set_layouts {
-            // i = current frame * descriptor_set_layouts.len() + layout offset
-            set_layouts.push(descriptor_set_layout.clone());
+        for &descriptor_set_layout in descriptor_set_layouts {
+            // i = frame * descriptor_set_layouts.len() + layout_offset;
+            set_layouts.push(descriptor_set_layout);
         }
     }
 
@@ -1947,10 +1948,10 @@ fn create_descriptor_sets(
 
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
-    for f in 0..MAX_FRAMES_IN_FLIGHT {
-        for dsl in 0..descriptor_set_layouts.len() {
-            let buffer = uniform_buffers[f];
-            let ds = f * descriptor_set_layouts.len() + dsl;
+    for frame in 0..MAX_FRAMES_IN_FLIGHT {
+        for layout_offset in 0..descriptor_set_layouts.len() {
+            let buffer = uniform_buffers[frame];
+            let ds = frame * descriptor_set_layouts.len() + layout_offset;
             let dst_set = descriptor_sets[ds];
 
             let buffer_info = vk::DescriptorBufferInfo::default()
@@ -2358,7 +2359,7 @@ fn create_texture_sampler(
     Ok(sampler)
 }
 
-fn create_depth_image(
+fn create_depth_buffer_image(
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,

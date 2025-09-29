@@ -329,10 +329,11 @@ fn slang_to_vk_descriptor_type(binding_type: slang::BindingType) -> vk::Descript
         slang::BindingType::ConstantBuffer => vk::DescriptorType::UNIFORM_BUFFER,
         slang::BindingType::CombinedTextureSampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
 
+        slang::BindingType::PushConstant => todo!(),
         slang::BindingType::ParameterBlock => todo!(),
+
         slang::BindingType::VaryingInput => todo!(),
         slang::BindingType::VaryingOutput => todo!(),
-        slang::BindingType::PushConstant => todo!(),
         slang::BindingType::TypedBuffer => todo!(),
         slang::BindingType::RawBuffer => todo!(),
         slang::BindingType::InputRenderTarget => todo!(),
@@ -352,25 +353,12 @@ fn slang_to_vk_descriptor_type(binding_type: slang::BindingType) -> vk::Descript
 // cpp getShaderStageFlags
 fn slang_to_vk_stage_flags(stage: slang::Stage) -> vk::ShaderStageFlags {
     match stage {
-        // general
         shader_slang::Stage::Vertex => vk::ShaderStageFlags::VERTEX,
         shader_slang::Stage::Fragment => vk::ShaderStageFlags::FRAGMENT,
         shader_slang::Stage::Compute => vk::ShaderStageFlags::COMPUTE,
         shader_slang::Stage::None => vk::ShaderStageFlags::empty(),
 
-        // raytracing
-        shader_slang::Stage::RayGeneration => vk::ShaderStageFlags::RAYGEN_KHR,
-        shader_slang::Stage::Intersection => vk::ShaderStageFlags::INTERSECTION_KHR,
-        shader_slang::Stage::AnyHit => vk::ShaderStageFlags::ANY_HIT_KHR,
-        shader_slang::Stage::ClosestHit => vk::ShaderStageFlags::CLOSEST_HIT_KHR,
-        shader_slang::Stage::Miss => vk::ShaderStageFlags::MISS_KHR,
-        shader_slang::Stage::Callable => vk::ShaderStageFlags::CALLABLE_KHR,
-
-        // mesh
-        shader_slang::Stage::Mesh => vk::ShaderStageFlags::MESH_EXT,
-        shader_slang::Stage::Amplification => vk::ShaderStageFlags::TASK_EXT,
-
-        // tesselation, dispatch, & count
+        // raytracing, mesh, tesselation, dispatch, & count
         _ => unimplemented!(),
     }
 }

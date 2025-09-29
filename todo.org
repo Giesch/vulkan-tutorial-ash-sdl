@@ -1,14 +1,12 @@
 #+title: Todo
 
 * Current
-- [X] windows build
-
 
 * Next
 - [ ] signed distance fields / animated rick
   [[https://danielchasehooper.com/posts/code-animated-rick]]
+
 - [ ] fix bug where descriptor set layout is not freed on teardown after a hot reload?
-- [ ] viking room colors are darker on windows?
 
 - [ ] slang reflection codegen
   - [ ] does create_descriptor_sets overwrite what we want to reflect?
@@ -17,7 +15,7 @@
       could get these fields from slang user attributes?
     - need to hold on to reflected data in shader module, merge with updates?
     - other resource-related things (ie, the image)
-      will have to be handled by generated rust
+      will have to be handled by generated rust methods
   - [ ] generate Rust structs from field info?
     just use align 16 for now
     later, use const assertions like thread in slang discord
@@ -30,6 +28,14 @@
   - [ ] generate shader cursor interface
     this is a lot
 
+- [ ] viking room colors are darker on windows?
+  it looks like a gamma correction problem,
+    but it is correctly using SRGB, as far as I can tell
+    and I don't know why that would be platform-specific
+    but it does get 'fixed' by doing a sqrt() on the sampled color
+
+
+* Future
 - [ ] read about dynamic rendering
   - [ ] sascha's 1.3 triangle
   - [ ] vkguide?
@@ -52,7 +58,6 @@
     can image-rs do this? need to pack them as well
     see if theres an stb tool or something
 
-* Future
 - [ ] make a spinning cube from scratch in slang
 
 - [ ] set up switching between intel & nvidia graphics w/POP_OS?
