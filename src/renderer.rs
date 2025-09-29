@@ -173,7 +173,11 @@ impl Renderer {
         let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
-        let compiled_shaders = shaders::dev_compile_slang_shaders(device.clone())?;
+        let compiled_shaders = if cfg!(debug_assertions) {
+            shaders::dev_compile_slang_shaders(device.clone())?
+        } else {
+            shaders::load_precompiled_shaders(&device)?
+        };
 
         let msaa_samples = get_max_usable_sample_count(physical_device_properties);
 
@@ -1153,11 +1157,17 @@ fn create_logical_device(
         .map(|cstr| cstr.as_ptr())
         .collect();
 
-    let mut create_info = vk::DeviceCreateInfo::default()
+    #[cfg(not(debug_assertions))]
+    let create_info = vk::DeviceCreateInfo::default()
         .queue_create_infos(&queue_create_infos)
         .enabled_features(&features)
         .enabled_extension_names(&enabled_extension_names);
 
+    #[cfg(debug_assertions)]
+    let mut create_info = vk::DeviceCreateInfo::default()
+        .queue_create_infos(&queue_create_infos)
+        .enabled_features(&features)
+        .enabled_extension_names(&enabled_extension_names);
     // features used by shader println
     #[cfg(debug_assertions)]
     let mut timeline_semaphore_features =

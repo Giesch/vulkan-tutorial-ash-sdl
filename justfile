@@ -18,7 +18,6 @@ run:
 shader-debug:
     RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
 
-[linux]
 run-release: prepare-shaders
     cargo run --release
 
