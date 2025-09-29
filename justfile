@@ -12,8 +12,7 @@ run:
 
 [windows]
 run:
-    $Env:SLANG_DIR = "$PWD\vendor\slang"
-    cargo run
+    $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run
 
 # run with shader printf and vk validation layers at 'info'
 shader-debug:
