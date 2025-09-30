@@ -3,23 +3,37 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # NOTE this does nothing on windows
 set dotenv-load := true
 
+
+# compiler watch
 check:
     bacon check-all
 
-[linux]
+
+# run dev build with shader hot reload
+[unix]
 run:
     cargo run
 
+# run with shader printf and vk validation layers at 'info'
+[unix]
+shader-debug:
+    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
+
+# run dev build with shader hot reload
 [windows]
 run:
     $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run
 
-# run with shader printf and vk validation layers at 'info'
-shader-debug:
-    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
 
+# run a release build
+[unix]
 run-release: prepare-shaders
     cargo run --release
+
+# run a release build
+[windows]
+run-release:
+    $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run --release
 
 
 slang_version := "2025.17.2"
