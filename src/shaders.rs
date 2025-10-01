@@ -1,70 +1,29 @@
 use std::ffi::CString;
 
-use descriptor_set_reflection::ReflectedPipelineLayout;
-use serde::{Deserialize, Serialize};
+use atlas::DepthTextureShader;
 use shader_slang as slang;
 use shader_slang::Downcast;
 
 use crate::util::*;
 
+pub mod atlas;
 mod descriptor_set_reflection;
+pub mod json;
+
+use json::*;
 
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
 
-#[derive(Debug, Serialize, Deserialize)]
-struct ReflectionJson {
-    source_file_name: String,
-    vertex_entry_point: String,
-    fragment_entry_point: String,
-    pipeline_layout: ReflectedPipelineLayout,
-}
-
-pub fn load_precompiled_shaders(device: &ash::Device) -> Result<CompiledShaderModule, BoxError> {
-    // TODO glob for all json files
-    let reflection_json_file_name = "depth_texture.json";
-    let json_path = manifest_path(["shaders", "compiled", &reflection_json_file_name]);
-    let json = std::fs::read_to_string(&json_path).unwrap();
-    let reflection_json: ReflectionJson = serde_json::from_str(&json)?;
-
-    let spv_frag_file_name = reflection_json_file_name.replace(".json", ".frag.spv");
-    let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
-    let frag_shader_bytecode = std::fs::read(&frag_path).unwrap();
-    let frag_entry_point = CString::new(reflection_json.fragment_entry_point)?;
-    let fragment_shader = CompiledShader {
-        entry_point_name: frag_entry_point,
-        stage: slang::Stage::Fragment,
-        shader_bytecode: frag_shader_bytecode,
-    };
-
-    let spv_vert_file_name = reflection_json_file_name.replace(".json", ".vert.spv");
-    let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
-    let vert_shader_bytecode = std::fs::read(&vert_path).unwrap();
-    let vert_entry_point = CString::new(reflection_json.vertex_entry_point)?;
-    let vertex_shader = CompiledShader {
-        entry_point_name: vert_entry_point,
-        stage: slang::Stage::Vertex,
-        shader_bytecode: vert_shader_bytecode,
-    };
-
-    let (vk_pipeline_layout, vk_descriptor_set_layouts) =
-        unsafe { reflection_json.pipeline_layout.vk_create(&device)? };
-
-    Ok(CompiledShaderModule {
-        source_file_name: reflection_json.source_file_name,
-        vertex_shader,
-        fragment_shader,
-        vk_pipeline_layout,
-        vk_descriptor_set_layouts,
-    })
-}
-
 pub fn write_precompiled_shaders() -> Result<(), BoxError> {
-    let PreparedShader {
+    // TODO move this to a script binary that doesn't depend on the project
+    // TODO grep for all .slang files
+
+    let ReflectedShader {
         vertex_shader,
         fragment_shader,
         reflection_json,
-    } = prepare_compiled_shaders()?;
+    } = prepare_reflected_shader("depth_texture.slang")?;
 
     let source_file_name = &reflection_json.source_file_name;
 
@@ -78,22 +37,22 @@ pub fn write_precompiled_shaders() -> Result<(), BoxError> {
 
     let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
     let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
-    std::fs::write(vert_path, &vertex_shader.shader_bytecode.as_slice())?;
+    std::fs::write(vert_path, vertex_shader.shader_bytecode.as_slice())?;
 
     let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
     let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
-    std::fs::write(frag_path, &fragment_shader.shader_bytecode.as_slice())?;
+    std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
 
     Ok(())
 }
 
-struct PreparedShader {
-    vertex_shader: CompiledShader,
-    fragment_shader: CompiledShader,
-    reflection_json: ReflectionJson,
+pub struct ReflectedShader {
+    pub vertex_shader: CompiledShader,
+    pub fragment_shader: CompiledShader,
+    pub reflection_json: ReflectionJson,
 }
 
-fn prepare_compiled_shaders() -> Result<PreparedShader, BoxError> {
+fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, BoxError> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source")?;
 
@@ -120,8 +79,7 @@ fn prepare_compiled_shaders() -> Result<PreparedShader, BoxError> {
         .options(&session_options);
 
     let session = global_session.create_session(&session_desc).unwrap();
-    // TODO glob for all .slang files
-    let source_file_name = "depth_texture.slang";
+
     let module = session.load_module(source_file_name)?;
 
     // the examples have 1 vert and 1 frag shader
@@ -142,12 +100,10 @@ fn prepare_compiled_shaders() -> Result<PreparedShader, BoxError> {
 
         components.push(entry_point.downcast().clone());
     }
-    let (vertex_entry_point, vertex_shader) = vertex_shader.expect(&format!(
-        "failed to load vertex entry point for: {source_file_name}"
-    ));
-    let (fragment_entry_point, fragment_shader) = fragment_shader.expect(&format!(
-        "failed to load fragment entry point for: {source_file_name}"
-    ));
+    let (vertex_entry_point, vertex_shader) = vertex_shader
+        .unwrap_or_else(|| panic!("failed to load vertex entry point for: {source_file_name}"));
+    let (fragment_entry_point, fragment_shader) = fragment_shader
+        .unwrap_or_else(|| panic!("failed to load fragment entry point for: {source_file_name}"));
 
     let program = session.create_composite_component_type(&components)?;
     let linked_program = program.link()?;
@@ -162,58 +118,19 @@ fn prepare_compiled_shaders() -> Result<PreparedShader, BoxError> {
         pipeline_layout: reflected_pipeline_layout,
     };
 
-    let prepared_shaders = PreparedShader {
+    let reflected_shader = ReflectedShader {
         vertex_shader,
         fragment_shader,
         reflection_json,
     };
 
-    Ok(prepared_shaders)
+    Ok(reflected_shader)
 }
 
-pub fn dev_compile_slang_shaders(device: ash::Device) -> Result<CompiledShaderModule, BoxError> {
-    let PreparedShader {
-        vertex_shader,
-        fragment_shader,
-        reflection_json,
-    } = prepare_compiled_shaders()?;
-
-    let (vk_pipeline_layout, vk_descriptor_set_layouts) =
-        unsafe { reflection_json.pipeline_layout.vk_create(&device)? };
-
-    Ok(CompiledShaderModule {
-        source_file_name: reflection_json.source_file_name,
-        vertex_shader,
-        fragment_shader,
-        vk_pipeline_layout,
-        vk_descriptor_set_layouts,
-    })
+pub fn dev_compile_slang_shaders(shader: &DepthTextureShader) -> Result<ReflectedShader, BoxError> {
+    prepare_reflected_shader(&shader.reflection_json.source_file_name)
 }
 
-pub struct CompiledShaderModule {
-    pub source_file_name: String,
-    pub vertex_shader: CompiledShader,
-    pub fragment_shader: CompiledShader,
-
-    // NOTE the renderer is expected to free these fields correctly
-    pub vk_pipeline_layout: ash::vk::PipelineLayout,
-    pub vk_descriptor_set_layouts: Vec<ash::vk::DescriptorSetLayout>,
-}
-
-impl std::fmt::Debug for CompiledShaderModule {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("CompiledShaderModule")
-            .field("source_file_name", &self.source_file_name)
-            .field("vertex_shader", &self.vertex_shader)
-            .field("fragment_shader", &self.fragment_shader)
-            .field("vk_pipeline_layout", &self.vk_pipeline_layout)
-            .field("vk_descriptor_set_layouts", &self.vk_descriptor_set_layouts)
-            .finish()
-    }
-}
-
-// TODO add reflection metadata needed by vulkan
-// need to generate the Vertex struct and its methods or const values
 pub struct CompiledShader {
     pub entry_point_name: CString,
     pub stage: slang::Stage,

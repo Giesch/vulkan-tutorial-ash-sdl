@@ -12,17 +12,18 @@ pub struct ShaderChanges {
 }
 
 impl ShaderChanges {
+    /// gathers all shader source edit events since the last frame
+    /// (or since this function was last called)
     pub fn events(&mut self) -> std::result::Result<Vec<notify::Event>, BoxError> {
-        let edit_events: notify::Result<Vec<notify::Event>> = self.receiver.try_iter().collect();
-        let mut edit_events = edit_events?;
+        let events: notify::Result<Vec<notify::Event>> = self.receiver.try_iter().collect();
+        let mut events = events?;
 
-        edit_events.retain(|event| match event.kind {
+        events.retain(|event| match event.kind {
             notify::EventKind::Create(_) => true,
             notify::EventKind::Modify(_) => true,
             notify::EventKind::Remove(_) => true,
 
             notify::EventKind::Access(_) => false,
-
             notify::EventKind::Any => {
                 error!("unexpected notify event: {event:?}");
                 false
@@ -33,31 +34,17 @@ impl ShaderChanges {
             }
         });
 
-        Ok(edit_events)
+        Ok(events)
     }
 }
 
 pub fn watch() -> notify::Result<ShaderChanges> {
-    let (tx, rx) = mpsc::channel::<notify::Result<Event>>();
+    let (sender, receiver) = mpsc::channel::<notify::Result<Event>>();
 
-    let mut watcher = notify::recommended_watcher(tx)?;
+    let mut watcher = notify::recommended_watcher(sender)?;
 
-    let path = manifest_path(["shaders", "source"]);
+    let shaders_source_path = manifest_path(["shaders", "source"]);
+    watcher.watch(&shaders_source_path, RecursiveMode::Recursive)?;
 
-    watcher.watch(&path, RecursiveMode::Recursive)?;
-
-    // // Block forever, printing out events as they come in
-    // for res in rx {
-    //     match res {
-    //         Ok(event) => println!("event: {:?}", event),
-    //         Err(e) => println!("watch error: {:?}", e),
-    //     }
-    // }
-
-    let shader_changes = ShaderChanges {
-        watcher,
-        receiver: rx,
-    };
-
-    Ok(shader_changes)
+    Ok(ShaderChanges { watcher, receiver })
 }

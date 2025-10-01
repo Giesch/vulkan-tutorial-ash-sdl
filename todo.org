@@ -1,21 +1,36 @@
 #+title: Todo
 
 * Current
-- [-] finish precompiled shaders flow
-  - [X] make json-serializable version of builders output
-  - [X] use serializable version in the builders
-  - [X] write reflection metadata with precompiled spv
-  - [X] add entry point names to reflection json
-  - [X] load reflection metadata with precompiled spv
-  - [X] use the precompiled shaders in renderer.rs
-    based on feature flag or cfg(debug_assertions)
-  - [ ] make this work with multiple shaders (instead of hardcoding one)
+- [X] add a hand-written shader atlas
+  - [X] struct with a field for each shader
+  - [X] shaders module takes atlas field as an argument
+    - [X] for precompiled
+      - [X] use include_bytes for spv
+      - [X] use include_str for json (cached lazy parse?)
+    - [X] for dev / hot-reload
+      is this just the slang file name?
+
+- [ ] resolve todos in descriptor_set_reflection
+- [ ] open PR to update slang docs
+
+- [ ] move example-specific code out of the renderer
+  ie, make the renderer more generic across examples
+  - [ ] asset (really verticies/indicies) loading
+  - [ ] rotation in update_uniform_buffer
+
+- [ ] add input/gobal type info to reflection data & shader atlas
+
+- [ ] handle shaders with different entry points
+  ie, only compute, only fragment, etc
+
+- [ ] generate the shader atlas?
+  it's worth delaying this until the handwritten one is more complete
+    ie, until it's pluggable into the renderer,
+    and the renderer has no hardcoded pieces left
 
 * Next
 - [ ] signed distance fields / animated rick
   [[https://danielchasehooper.com/posts/code-animated-rick]]
-
-- [ ] fix bug where descriptor set layout is not freed on teardown after a hot reload?
 
 - [ ] slang reflection codegen
   - [ ] does create_descriptor_sets overwrite what we want to reflect?
@@ -25,7 +40,7 @@
     - need to hold on to reflected data in shader module, merge with updates?
     - other resource-related things (ie, the image)
       will have to be handled by generated rust methods
-  - [ ] generate Rust structs from field info?
+  - [ ] generate Rust structs for shader globals/entrypoint args from field info?
     just use align 16 for now
     later, use const assertions like thread in slang discord
   - [ ] generate shader cursor interface?
@@ -126,3 +141,8 @@
     #+end_quote
     https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope
   - would it be easy to use a slang user attribute?
+
+- [ ] fix bug where descriptor set layout is not freed on teardown after a hot reload?
+  not sure how to repro this;
+  saw it happen once on windows during hot reload on a second monitor
+  is it related to having a shader miscompile?

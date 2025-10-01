@@ -16,7 +16,8 @@ use sdl3::video::Window;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
-use crate::shaders::{self, CompiledShaderModule};
+use crate::shaders;
+use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
 use crate::util::*;
 
 pub mod debug;
@@ -43,7 +44,9 @@ pub struct Renderer {
     total_frames: usize,
     start_time: Instant,
     #[allow(unused)]
-    compiled_shaders: shaders::CompiledShaderModule,
+    shader_atlas: ShaderAtlas,
+    #[allow(unused)]
+    compiled_shaders: ShaderPipelineLayout,
     #[cfg(debug_assertions)]
     shader_changes: shader_watcher::ShaderChanges,
     #[cfg(debug_assertions)]
@@ -173,11 +176,10 @@ impl Renderer {
         let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
-        let compiled_shaders = if cfg!(debug_assertions) {
-            shaders::dev_compile_slang_shaders(device.clone())?
-        } else {
-            shaders::load_precompiled_shaders(&device)?
-        };
+
+        let shader_atlas = ShaderAtlas::init();
+        let compiled_shaders =
+            ShaderPipelineLayout::create_from_atlas(&device, &shader_atlas.depth_texture)?;
 
         let msaa_samples = get_max_usable_sample_count(physical_device_properties);
 
@@ -292,7 +294,7 @@ impl Renderer {
         let descriptor_sets = create_descriptor_sets(
             &device,
             descriptor_pool,
-            &compiled_shaders.vk_descriptor_set_layouts,
+            &compiled_shaders.descriptor_set_layouts,
             &uniform_buffers,
             texture_image_view,
             texture_sampler,
@@ -304,6 +306,7 @@ impl Renderer {
         Ok(Self {
             total_frames: 0,
             start_time,
+            shader_atlas,
             compiled_shaders,
             #[cfg(debug_assertions)]
             shader_changes,
@@ -443,7 +446,7 @@ impl Renderer {
             );
 
             // see create_descriptor_sets
-            let descriptor_sets_per_frame = self.compiled_shaders.vk_descriptor_set_layouts.len();
+            let descriptor_sets_per_frame = self.compiled_shaders.descriptor_set_layouts.len();
             let descriptor_sets = self
                 .descriptor_sets
                 .chunks(descriptor_sets_per_frame)
@@ -452,9 +455,9 @@ impl Renderer {
             self.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.compiled_shaders.vk_pipeline_layout,
+                self.compiled_shaders.pipeline_layout,
                 0,
-                &descriptor_sets,
+                descriptor_sets,
                 &[],
             );
 
@@ -696,8 +699,11 @@ impl Renderer {
     // shader hot reload
     #[cfg(debug_assertions)]
     fn try_shader_recompile(&mut self, _edit_events: &[notify::Event]) -> Result<(), BoxError> {
-        let compiled_shaders = match shaders::dev_compile_slang_shaders(self.device.clone()) {
-            Ok(cs) => cs,
+        let compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
+            &self.device,
+            &self.shader_atlas.depth_texture,
+        ) {
+            Ok(shaders) => shaders,
             Err(e) => {
                 error!("failed to compile shaders: {e}");
                 return Ok(());
@@ -707,7 +713,7 @@ impl Renderer {
         self.old_pipelines.push((
             self.total_frames,
             self.pipeline,
-            self.compiled_shaders.vk_pipeline_layout,
+            self.compiled_shaders.pipeline_layout,
         ));
 
         self.compiled_shaders = compiled_shaders;
@@ -741,7 +747,7 @@ impl Drop for Renderer {
             // this also destroys the sets from the pool
             self.device
                 .destroy_descriptor_pool(self.descriptor_pool, None);
-            for &desc_set_layout in &self.compiled_shaders.vk_descriptor_set_layouts {
+            for &desc_set_layout in &self.compiled_shaders.descriptor_set_layouts {
                 self.device
                     .destroy_descriptor_set_layout(desc_set_layout, None);
             }
@@ -770,7 +776,7 @@ impl Drop for Renderer {
 
             self.device.destroy_pipeline(self.pipeline, None);
             self.device
-                .destroy_pipeline_layout(self.compiled_shaders.vk_pipeline_layout, None);
+                .destroy_pipeline_layout(self.compiled_shaders.pipeline_layout, None);
 
             self.device.destroy_render_pass(self.render_pass, None);
 
@@ -1364,10 +1370,10 @@ fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
     msaa_samples: vk::SampleCountFlags,
-    compiled_shaders: &shaders::CompiledShaderModule,
+    compiled_shaders: &ShaderPipelineLayout,
 ) -> Result<vk::Pipeline, BoxError> {
-    let vert_shader_spv = &compiled_shaders.vertex_shader.spv_bytes()?;
-    let frag_shader_spv = &compiled_shaders.fragment_shader.spv_bytes()?;
+    let vert_shader_spv = &compiled_shaders.vertex_shader.shader_bytecode;
+    let frag_shader_spv = &compiled_shaders.fragment_shader.shader_bytecode;
 
     let vert_create_info = vk::ShaderModuleCreateInfo::default().code(vert_shader_spv);
     let frag_create_info = vk::ShaderModuleCreateInfo::default().code(frag_shader_spv);
@@ -1444,7 +1450,7 @@ fn create_graphics_pipeline(
         .multisample_state(&multisample_state)
         .color_blend_state(&color_blend_state)
         .dynamic_state(&dynamic_state)
-        .layout(compiled_shaders.vk_pipeline_layout)
+        .layout(compiled_shaders.pipeline_layout)
         .render_pass(render_pass)
         .subpass(0)
         .depth_stencil_state(&depth_stencil_state);
@@ -1921,9 +1927,9 @@ fn update_uniform_buffer(
 
 fn create_descriptor_pool(
     device: &ash::Device,
-    compiled_shaders: &CompiledShaderModule,
+    compiled_shaders: &ShaderPipelineLayout,
 ) -> Result<vk::DescriptorPool, BoxError> {
-    let descriptor_sets_per_frame = compiled_shaders.vk_descriptor_set_layouts.len() as u32;
+    let descriptor_sets_per_frame = compiled_shaders.descriptor_set_layouts.len() as u32;
     let descriptor_set_count = descriptor_sets_per_frame * MAX_FRAMES_IN_FLIGHT as u32;
     let uniform_buffer_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::UNIFORM_BUFFER)
@@ -1962,6 +1968,7 @@ fn create_descriptor_sets(
         .set_layouts(&set_layouts);
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
+    #[expect(clippy::needless_range_loop)]
     for frame in 0..MAX_FRAMES_IN_FLIGHT {
         for layout_offset in 0..descriptor_set_layouts.len() {
             let buffer = uniform_buffers[frame];
@@ -2723,4 +2730,115 @@ fn create_color_image(
     )?;
 
     Ok((color_image, color_image_memory, color_image_view))
+}
+
+struct ShaderPipelineLayout {
+    vertex_shader: CompiledShaderEntryPoint,
+    fragment_shader: CompiledShaderEntryPoint,
+
+    // NOTE the renderer is expected to clean up these fields correctly
+    // they need special handling during hot reload
+    pipeline_layout: ash::vk::PipelineLayout,
+    descriptor_set_layouts: Vec<ash::vk::DescriptorSetLayout>,
+}
+
+struct CompiledShaderEntryPoint {
+    entry_point_name: CString,
+    shader_bytecode: Vec<u32>,
+}
+
+impl ShaderPipelineLayout {
+    #[cfg(debug_assertions)]
+    fn create_from_atlas(
+        device: &ash::Device,
+        shader: &DepthTextureShader,
+    ) -> Result<Self, BoxError> {
+        let prepared_shader = shaders::dev_compile_slang_shaders(shader)?;
+
+        let vertex_shader = CompiledShaderEntryPoint {
+            shader_bytecode: prepared_shader.vertex_shader.spv_bytes()?,
+            entry_point_name: prepared_shader.vertex_shader.entry_point_name,
+        };
+
+        let fragment_shader = CompiledShaderEntryPoint {
+            shader_bytecode: prepared_shader.fragment_shader.spv_bytes()?,
+            entry_point_name: prepared_shader.fragment_shader.entry_point_name,
+        };
+
+        let (pipeline_layout, descriptor_set_layouts) =
+            unsafe { shader.reflection_json.pipeline_layout.vk_create(device)? };
+
+        Ok(ShaderPipelineLayout {
+            vertex_shader,
+            fragment_shader,
+            pipeline_layout,
+            descriptor_set_layouts,
+        })
+    }
+
+    #[cfg(not(debug_assertions))]
+    fn create_from_atlas(
+        device: &ash::Device,
+        shader: &DepthTextureShader,
+    ) -> Result<Self, BoxError> {
+        let vertex_shader = CompiledShaderEntryPoint {
+            entry_point_name: shader.vert_entry_point_name(),
+            shader_bytecode: shader.vert_spv(),
+        };
+
+        let fragment_shader = CompiledShaderEntryPoint {
+            entry_point_name: shader.frag_entry_point_name(),
+            shader_bytecode: shader.frag_spv(),
+        };
+
+        let (pipeline_layout, descriptor_set_layouts) =
+            unsafe { shader.reflection_json.pipeline_layout.vk_create(device)? };
+
+        Ok(ShaderPipelineLayout {
+            vertex_shader,
+            fragment_shader,
+            pipeline_layout,
+            descriptor_set_layouts,
+        })
+    }
+}
+
+impl shaders::json::ReflectedDescriptorSetLayout {
+    unsafe fn vk_create(
+        &self,
+        device: &ash::Device,
+    ) -> Result<vk::DescriptorSetLayout, vk::Result> {
+        let binding_ranges: Vec<_> = self.binding_ranges.iter().map(|b| b.to_vk()).collect();
+        let create_info = vk::DescriptorSetLayoutCreateInfo::default().bindings(&binding_ranges);
+
+        unsafe { device.create_descriptor_set_layout(&create_info, None) }
+    }
+}
+
+impl shaders::json::ReflectedPipelineLayout {
+    unsafe fn vk_create(
+        &self,
+        device: &ash::Device,
+    ) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), vk::Result> {
+        let mut descriptor_set_layouts = vec![];
+        for reflected_set_layout in &self.descriptor_set_layouts {
+            let created_set_layout = unsafe { reflected_set_layout.vk_create(device)? };
+            descriptor_set_layouts.push(created_set_layout);
+        }
+
+        let push_constant_ranges: Vec<_> = self
+            .push_constant_ranges
+            .iter()
+            .map(|r| r.to_vk())
+            .collect();
+
+        let pipeline_layout_info = vk::PipelineLayoutCreateInfo::default()
+            .set_layouts(&descriptor_set_layouts)
+            .push_constant_ranges(&push_constant_ranges);
+
+        let pipeline_layout =
+            unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
+
+        Ok((pipeline_layout, descriptor_set_layouts))
+    }
 }
