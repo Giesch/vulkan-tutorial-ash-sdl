@@ -184,3 +184,14 @@ fn compile_shader(
         shader_bytecode,
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn depth_texture_reflection() {
+        let shader = prepare_reflected_shader("depth_texture.slang").unwrap();
+        insta::assert_json_snapshot!(shader.reflection_json);
+    }
+}

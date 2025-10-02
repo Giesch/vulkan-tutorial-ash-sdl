@@ -1,26 +1,20 @@
 #+title: Todo
 
 * Current
-- [X] add a hand-written shader atlas
-  - [X] struct with a field for each shader
-  - [X] shaders module takes atlas field as an argument
-    - [X] for precompiled
-      - [X] use include_bytes for spv
-      - [X] use include_str for json (cached lazy parse?)
-    - [X] for dev / hot-reload
-      is this just the slang file name?
-
-- [ ] resolve todos in descriptor_set_reflection
-- [ ] open PR to update slang docs
-
 - [ ] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
   - [ ] asset (really verticies/indicies) loading
   - [ ] rotation in update_uniform_buffer
 
+- [-] add snapshot tests for reflection json from shaders
+  - [X] set up snapshot testing
+  - [X] depth texture example
+  - [ ] a more complex example; sprite batch?
+
+* Next
 - [ ] add input/gobal type info to reflection data & shader atlas
 
-- [ ] handle shaders with different entry points
+- [ ] handle shaders with different entry points in reflection
   ie, only compute, only fragment, etc
 
 - [ ] generate the shader atlas?
@@ -28,9 +22,23 @@
     ie, until it's pluggable into the renderer,
     and the renderer has no hardcoded pieces left
 
-* Next
 - [ ] signed distance fields / animated rick
   [[https://danielchasehooper.com/posts/code-animated-rick]]
+
+- [ ] add feature flags
+  - [ ] build-from-source-static for sdl3 on windows
+  - [ ] shader hot reload for notify & shader_slang
+    - [ ] figure out if slang precompile needs to be a workspace crate or something
+
+- [ ] handle nested ParameterBlocks
+  - [ ] should add_descriptor_range also skip ParameterBlock like PushConstant?
+    if we don't, it changes the binding numbers assigned to the double-wrapped items,
+    which seems wrong
+    but that actually happens if we early return there as well? is something else wrong?
+    also, does slang even support nested ParameterBlocks right now
+- [ ] open PR to update slang docs
+  - [ ] basic typo fixes
+  - [ ] ask in discord about skipping nested ParameterBlocks
 
 - [ ] slang reflection codegen
   - [ ] does create_descriptor_sets overwrite what we want to reflect?

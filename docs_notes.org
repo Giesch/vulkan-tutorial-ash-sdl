@@ -29,3 +29,8 @@
           _slangProgramLayout->getGlobalParamsTypeLayout());
   }
   #+end_src
+
+- does addDescriptorRange also need to skip nested ParameterBlocks in the same way as PushConstant?
+  and why not?
+  ask in discord
+  https://docs.shader-slang.org/en/latest/parameter-blocks.html#some-ranges-need-to-be-skipped

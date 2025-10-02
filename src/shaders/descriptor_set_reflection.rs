@@ -225,17 +225,11 @@ impl DescriptorSetLayoutBuilder {
             type_layout.descriptor_set_descriptor_range_type(relative_set_index, range_index);
         if binding_type == slang::BindingType::PushConstant {
             // this is accounted for in add_sub_object_range
-            // TODO should this also skip a nested ParameterBlock?
-            //   and the other sub object types
-            //   or do we just not support nested ParameterBlocks in practice?
             return;
         }
 
         let descriptor_count = type_layout
             .descriptor_set_descriptor_range_descriptor_count(relative_set_index, range_index);
-
-        // TODO what goes in the '...' here?
-        // https://docs.shader-slang.org/en/latest/parameter-blocks.html#descriptor-ranges
 
         // this relies on using no manual binding annotations
         let vk_binding_index = self.binding_ranges.len() as u32;

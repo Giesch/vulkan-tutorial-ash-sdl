@@ -18,10 +18,11 @@ tobj = "4.0.3"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.141"
 
-# TODO make these dev dependencies
 notify = "8.1.0"
 shader-slang = "0.1.0"
 
+[dev-dependencies]
+insta = { version = "1.43.2", features = ["json"] }
 
 [profile.dev.package."*"]
 opt-level = 3
