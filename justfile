@@ -52,7 +52,7 @@ setup:
 setup:
     if (Test-Path -Path vendor\slang) { Remove-Item vendor\slang -Recurse }
     New-Item -Path vendor\slang -ItemType Directory | Out-Null
-    Invoke-WebRequest -OutFile vendor\slang.zip -Uri "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-windows-x86_64.zip"
+    $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -OutFile vendor\slang.zip -Uri "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-windows-x86_64.zip"
     Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
     Remove-Item vendor\slang.zip
 
