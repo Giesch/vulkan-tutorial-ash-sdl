@@ -1,15 +1,29 @@
 #+title: Todo
 
 * Current
-- [ ] move example-specific code out of the renderer
+- [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
+  - [X] uniform buffer handling
+  - [ ] vertex/index buffer handling
+    ie loading assets
+    also type definition? or standardized? https://github.com/leetvr/lazy_vulkan
   - [ ] asset (really verticies/indicies) loading
-  - [ ] rotation in update_uniform_buffer
+  - [ ] dynamic resources (ie, unknown number of uniform buffers)
+    renderer provides functions for creating graphics resources
+    game fills itself in during init
+    - [ ] first use void pointers to mapped memory
+    - [ ] then switch to handles or wrapped typed pointers
+      - [ ] for vertex buffers
+      - [ ] also for uniform buffer contents
 
 - [-] add snapshot tests for reflection json from shaders
   - [X] set up snapshot testing
   - [X] depth texture example
   - [ ] a more complex example; sprite batch?
+
+- [-] migrate to using anyhow instead of BoxError
+  - [X] make the swap everywhere
+  - [ ] add context messages
 
 * Next
 - [ ] add input/gobal type info to reflection data & shader atlas
@@ -76,6 +90,7 @@
 - [ ] go through 'learn opengl' with this renderer
 
 - [ ] rewrite renderer in a new repo
+  how much of this could be done gradually in this one?
   - use a cargo workspace
     make it easy to keep multiple working examples
   - group one-time initialized fields into a sub-struct w/methods

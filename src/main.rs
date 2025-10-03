@@ -9,12 +9,11 @@ const WINDOW_WIDTH: u32 = 800;
 const WINDOW_HEIGHT: u32 = 600;
 const FRAME_DELAY: Duration = Duration::from_millis(15);
 
-fn main() -> Result<(), BoxError> {
+fn main() -> Result<(), anyhow::Error> {
     pretty_env_logger::init();
 
     let sdl = sdl3::init()?;
     let video_subsystem = sdl.video()?;
-
     let window = video_subsystem
         .window(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT)
         .position_centered()
@@ -22,13 +21,10 @@ fn main() -> Result<(), BoxError> {
         .vulkan()
         .build()?;
 
-    let renderer = Renderer::init(window)?;
+    let game = VikingRoom::init();
 
-    let mut app = App {
-        quit: false,
-        minimized: false,
-        renderer,
-    };
+    let renderer = Renderer::init(window, &game)?;
+    let mut app = App::new(renderer, Box::new(game));
 
     let mut event_pump = sdl.event_pump()?;
     loop {
@@ -40,7 +36,7 @@ fn main() -> Result<(), BoxError> {
         }
 
         if !app.minimized {
-            app.renderer.draw_frame()?;
+            app.renderer.draw_frame(&app.game)?;
         }
 
         unsafe { SDL_DelayPrecise(FRAME_DELAY.as_nanos() as u64) };

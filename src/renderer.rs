@@ -1,11 +1,10 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use std::collections::BTreeSet;
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{c_char, c_void, CStr, CString};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
-use std::time::Instant;
 
 use ash::vk;
 use image::ImageReader;
@@ -14,11 +13,11 @@ use log::*;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
+use crate::app::Game;
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
 use crate::shaders;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
-use crate::util::*;
 
 pub mod debug;
 mod platform;
@@ -42,7 +41,6 @@ const CURRENT_EXAMPLE: Example = Example::VikingRoom;
 pub struct Renderer {
     // fields that are created once
     total_frames: usize,
-    start_time: Instant,
     #[allow(unused)]
     shader_atlas: ShaderAtlas,
     #[allow(unused)]
@@ -97,7 +95,7 @@ pub struct Renderer {
     index_buffer_memory: vk::DeviceMemory,
     uniform_buffers: Vec<vk::Buffer>,
     uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    uniform_buffers_mapped: Vec<*mut MVPMatrices>,
+    uniform_buffers_mapped: Vec<*mut c_void>,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
     descriptor_pool: vk::DescriptorPool,
@@ -113,9 +111,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: Window) -> Result<Self, BoxError> {
-        let start_time = Instant::now();
-
+    pub fn init(window: Window, game: &dyn Game) -> Result<Self, anyhow::Error> {
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
 
@@ -288,7 +284,12 @@ impl Renderer {
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            create_uniform_buffers(&instance, &device, physical_device)?;
+            create_uniform_buffers(
+                &instance,
+                &device,
+                physical_device,
+                game.uniform_buffer_size() as vk::DeviceSize,
+            )?;
 
         let descriptor_pool = create_descriptor_pool(&device, &compiled_shaders)?;
         let descriptor_sets = create_descriptor_sets(
@@ -298,6 +299,7 @@ impl Renderer {
             &uniform_buffers,
             texture_image_view,
             texture_sampler,
+            game.uniform_buffer_size() as vk::DeviceSize,
         )?;
 
         let (image_available, render_finished, frames_in_flight) =
@@ -305,7 +307,6 @@ impl Renderer {
 
         Ok(Self {
             total_frames: 0,
-            start_time,
             shader_atlas,
             compiled_shaders,
             #[cfg(debug_assertions)]
@@ -365,7 +366,7 @@ impl Renderer {
         })
     }
 
-    fn record_command_buffer(&mut self, image_index: u32) -> Result<(), BoxError> {
+    fn record_command_buffer(&mut self, image_index: u32) -> Result<(), anyhow::Error> {
         let command_buffer = self.command_buffers[self.current_frame];
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -473,7 +474,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self) -> Result<(), BoxError> {
+    pub fn draw_frame(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
         self.check_for_shader_recompile()?;
@@ -483,7 +484,7 @@ impl Renderer {
         let fences = [self.frames_in_flight[self.current_frame]];
         unsafe { self.device.wait_for_fences(&fences, true, u64::MAX)? };
 
-        let (image_index, swapchain_suboptimal) = unsafe {
+        let (image_index, swapchain_was_submoptimal_on_image_acquire) = unsafe {
             match self.swapchain_device_ext.acquire_next_image(
                 self.swapchain,
                 u64::MAX,
@@ -500,13 +501,16 @@ impl Renderer {
             }
         };
 
-        update_uniform_buffer(
-            self.start_time,
-            self.image_extent,
-            self.uniform_buffers_mapped[self.current_frame],
-        )?;
+        // TODO make this a field on game struct; update it with a callback on resize
+        //   could that cause a 1-frame-delay?
+        //   not if we do it directly alongside recreating the swapchain
+        //   give the game on_init and on_resize callbacks that get info from the renderer
+        let aspect_ratio = self.image_extent.width as f32 / self.image_extent.height as f32;
+        let mapped_uniform_buffer = self.uniform_buffers_mapped[self.current_frame];
+        game.update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)?;
 
         // NOTE only reset fences if we're submitting work
+        //   ie, after early returns
         unsafe { self.device.reset_fences(&fences)? };
 
         unsafe {
@@ -547,7 +551,7 @@ impl Renderer {
                     // not suboptimal, aka fine, or optimal i guess
                 }
                 Ok(true) | Err(vk::Result::ERROR_OUT_OF_DATE_KHR) => {
-                    // suboptimal or out of date
+                    // suboptimal (vk::Result::SUBOPTIMAL_KHR) or out of date
                     return self.recreate_swapchain();
                 }
                 Err(other_error) => {
@@ -558,20 +562,20 @@ impl Renderer {
 
         self.current_frame = (self.current_frame + 1) % MAX_FRAMES_IN_FLIGHT;
 
-        if swapchain_suboptimal {
+        if swapchain_was_submoptimal_on_image_acquire {
             return self.recreate_swapchain();
         }
 
         Ok(())
     }
 
-    pub fn drain_gpu(self) -> Result<(), BoxError> {
+    pub fn drain_gpu(self) -> Result<(), anyhow::Error> {
         unsafe { self.device.device_wait_idle()? };
         Ok(())
     }
 
     // to be called on window resize
-    pub fn recreate_swapchain(&mut self) -> Result<(), BoxError> {
+    pub fn recreate_swapchain(&mut self) -> Result<(), anyhow::Error> {
         unsafe { self.device.device_wait_idle()? }
 
         self.cleanup_swapchain();
@@ -663,7 +667,7 @@ impl Renderer {
     }
 
     #[cfg(debug_assertions)]
-    fn check_for_shader_recompile(&mut self) -> Result<(), BoxError> {
+    fn check_for_shader_recompile(&mut self) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
         for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
@@ -698,7 +702,10 @@ impl Renderer {
 
     // shader hot reload
     #[cfg(debug_assertions)]
-    fn try_shader_recompile(&mut self, _edit_events: &[notify::Event]) -> Result<(), BoxError> {
+    fn try_shader_recompile(
+        &mut self,
+        _edit_events: &[notify::Event],
+    ) -> Result<(), anyhow::Error> {
         let compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
             &self.shader_atlas.depth_texture,
@@ -814,7 +821,7 @@ fn get_required_layers() -> Vec<&'static std::ffi::CStr> {
     }
 }
 
-fn check_required_layers(entry: &ash::Entry) -> Result<(), BoxError> {
+fn check_required_layers(entry: &ash::Entry) -> Result<(), anyhow::Error> {
     let required_layers = get_required_layers();
     let available_layers = unsafe { entry.enumerate_instance_layer_properties()? };
 
@@ -830,14 +837,14 @@ fn check_required_layers(entry: &ash::Entry) -> Result<(), BoxError> {
 
         if !found {
             let required_layer = required_layer.to_string_lossy();
-            return Err(format!("missing required layer: {required_layer}").into());
+            anyhow::bail!("missing required layer: {required_layer}");
         }
     }
 
     Ok(())
 }
 
-fn check_required_extensions(entry: &ash::Entry) -> Result<(), BoxError> {
+fn check_required_extensions(entry: &ash::Entry) -> Result<(), anyhow::Error> {
     let mut required_extensions = vec![ash::khr::surface::NAME, platform::OS_SURFACE_EXT];
 
     if ENABLE_VALIDATION {
@@ -858,7 +865,7 @@ fn check_required_extensions(entry: &ash::Entry) -> Result<(), BoxError> {
 
         if !found {
             let required_layer = required_ext.to_string_lossy();
-            return Err(format!("missing required extension: {required_layer}").into());
+            anyhow::bail!("missing required extension: {required_layer}");
         }
     }
 
@@ -886,7 +893,7 @@ impl QueueFamilyIndices {
         surface_ext: &ash::khr::surface::Instance,
         surface: vk::SurfaceKHR,
         physical_device: vk::PhysicalDevice,
-    ) -> Result<Option<Self>, BoxError> {
+    ) -> Result<Option<Self>, anyhow::Error> {
         let queue_families =
             unsafe { instance.get_physical_device_queue_family_properties(physical_device) };
 
@@ -935,7 +942,7 @@ fn choose_physical_device(
         QueueFamilyIndices,
         vk::PhysicalDeviceProperties,
     ),
-    BoxError,
+    anyhow::Error,
 > {
     let physical_devices: Vec<vk::PhysicalDevice> =
         unsafe { instance.enumerate_physical_devices()? };
@@ -984,7 +991,7 @@ fn choose_physical_device(
     });
 
     let Some(chosen_device) = devices_with_indices_and_props.into_iter().next() else {
-        return Err("no graphics device availble".into());
+        anyhow::bail!("no graphics device availble");
     };
 
     Ok(chosen_device)
@@ -1017,7 +1024,7 @@ fn check_device_extension_support(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
     required_extensions: &[&'static CStr],
-) -> Result<bool, BoxError> {
+) -> Result<bool, anyhow::Error> {
     let mut required_extensions: BTreeSet<Vec<u8>> = required_extensions
         .iter()
         .map(|&cstr| cstr.to_bytes().to_owned())
@@ -1067,7 +1074,7 @@ fn create_swapchain(
     surface: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
     queue_family_indices: &QueueFamilyIndices,
-) -> Result<CreatedSwapchain, BoxError> {
+) -> Result<CreatedSwapchain, anyhow::Error> {
     let swapchain_support = SwapChainSupportDetails::query(surface_ext, surface, physical_device)?;
 
     let surface_format = choose_swap_surface_format(&swapchain_support);
@@ -1134,7 +1141,7 @@ fn create_logical_device(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
     indices: &QueueFamilyIndices,
-) -> Result<ash::Device, BoxError> {
+) -> Result<ash::Device, anyhow::Error> {
     let unique_queue_families = BTreeSet::from([indices.graphics, indices.presentation]);
 
     let mut queue_create_infos = vec![];
@@ -1214,7 +1221,7 @@ impl SwapChainSupportDetails {
         surface_ext: &ash::khr::surface::Instance,
         surface: vk::SurfaceKHR,
         physical_device: vk::PhysicalDevice,
-    ) -> Result<Self, BoxError> {
+    ) -> Result<Self, anyhow::Error> {
         let capabilities = unsafe {
             surface_ext.get_physical_device_surface_capabilities(physical_device, surface)?
         };
@@ -1243,7 +1250,7 @@ fn create_swapchain_image_views(
     device: &ash::Device,
     image_format: vk::Format,
     swapchain_images: &[vk::Image],
-) -> Result<Vec<vk::ImageView>, BoxError> {
+) -> Result<Vec<vk::ImageView>, anyhow::Error> {
     let mut swapchain_image_views = Vec::with_capacity(swapchain_images.len());
     for &image in swapchain_images {
         let image_view =
@@ -1260,7 +1267,7 @@ fn create_render_pass(
     device: &ash::Device,
     swapchain_format: vk::Format,
     msaa_samples: vk::SampleCountFlags,
-) -> Result<vk::RenderPass, BoxError> {
+) -> Result<vk::RenderPass, anyhow::Error> {
     let color_attachment = vk::AttachmentDescription::default()
         .format(swapchain_format)
         .samples(msaa_samples)
@@ -1350,7 +1357,7 @@ fn create_render_pass(
 
 /// usage: read_shader_spv("triangle.vert.spv");
 #[expect(unused)]
-fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, BoxError> {
+fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, anyhow::Error> {
     let shader_path: PathBuf = [
         env!("CARGO_MANIFEST_DIR"),
         "shaders",
@@ -1371,7 +1378,7 @@ fn create_graphics_pipeline(
     render_pass: vk::RenderPass,
     msaa_samples: vk::SampleCountFlags,
     compiled_shaders: &ShaderPipelineLayout,
-) -> Result<vk::Pipeline, BoxError> {
+) -> Result<vk::Pipeline, anyhow::Error> {
     let vert_shader_spv = &compiled_shaders.vertex_shader.shader_bytecode;
     let frag_shader_spv = &compiled_shaders.fragment_shader.shader_bytecode;
 
@@ -1458,7 +1465,7 @@ fn create_graphics_pipeline(
     let graphics_pipelines = unsafe {
         device
             .create_graphics_pipelines(vk::PipelineCache::null(), &[pipeline_info], None)
-            .map_err(|e| format!("failed to create graphics pipelines: {e:?}"))?
+            .map_err(|e| anyhow::anyhow!("failed to create graphics pipelines: {e:?}"))?
     };
     let graphics_pipeline = graphics_pipelines[0];
 
@@ -1475,7 +1482,7 @@ fn create_framebuffers(
     image_extent: vk::Extent2D,
     depth_image_view: vk::ImageView,
     color_image_view: vk::ImageView,
-) -> Result<Vec<vk::Framebuffer>, BoxError> {
+) -> Result<Vec<vk::Framebuffer>, anyhow::Error> {
     let mut framebuffers = Vec::with_capacity(swapchain_image_views.len());
 
     for &swapchain_image_view in swapchain_image_views {
@@ -1499,7 +1506,7 @@ fn create_framebuffers(
 fn create_command_pool(
     device: &ash::Device,
     queue_family_indicies: &QueueFamilyIndices,
-) -> Result<vk::CommandPool, BoxError> {
+) -> Result<vk::CommandPool, anyhow::Error> {
     let pool_info = vk::CommandPoolCreateInfo::default()
         .flags(vk::CommandPoolCreateFlags::RESET_COMMAND_BUFFER)
         .queue_family_index(queue_family_indicies.graphics);
@@ -1512,7 +1519,7 @@ fn create_command_pool(
 fn create_command_buffers(
     device: &ash::Device,
     command_pool: vk::CommandPool,
-) -> Result<Vec<vk::CommandBuffer>, BoxError> {
+) -> Result<Vec<vk::CommandBuffer>, anyhow::Error> {
     let alloc_info = vk::CommandBufferAllocateInfo::default()
         .command_pool(command_pool)
         .level(vk::CommandBufferLevel::PRIMARY)
@@ -1526,7 +1533,7 @@ fn create_command_buffers(
 fn create_sync_objects(
     device: &ash::Device,
     swapchain_images: &[vk::Image],
-) -> Result<(Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>), BoxError> {
+) -> Result<(Vec<vk::Semaphore>, Vec<vk::Semaphore>, Vec<vk::Fence>), anyhow::Error> {
     let mut image_available = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
     for _frame in 0..MAX_FRAMES_IN_FLIGHT {
         let semaphore = unsafe { device.create_semaphore(&Default::default(), None)? };
@@ -1653,7 +1660,7 @@ fn create_vertex_buffer(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
     vertices: &[Vertex],
-) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
+) -> Result<(vk::Buffer, vk::DeviceMemory), anyhow::Error> {
     let buffer_size = std::mem::size_of_val(vertices) as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
@@ -1705,7 +1712,7 @@ fn create_index_buffer(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
     indices: &[u32],
-) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
+) -> Result<(vk::Buffer, vk::DeviceMemory), anyhow::Error> {
     let buffer_size = std::mem::size_of_val(indices) as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
@@ -1757,7 +1764,7 @@ fn copy_memory_buffer(
     dst_buffer: vk::Buffer,
     size: vk::DeviceSize,
     graphics_queue: vk::Queue,
-) -> Result<(), BoxError> {
+) -> Result<(), anyhow::Error> {
     // NOTE it would be better to have a second command pool for transfers,
     // that also uses 'create transient'
     let command_buffer = begin_single_time_commands(device, command_pool)?;
@@ -1777,7 +1784,7 @@ fn create_memory_buffer(
     buffer_size: vk::DeviceSize,
     buffer_usage: vk::BufferUsageFlags,
     memory_property_flags: vk::MemoryPropertyFlags,
-) -> Result<(vk::Buffer, vk::DeviceMemory), BoxError> {
+) -> Result<(vk::Buffer, vk::DeviceMemory), anyhow::Error> {
     let buffer_create_info = vk::BufferCreateInfo::default()
         .size(buffer_size)
         .usage(buffer_usage)
@@ -1809,7 +1816,7 @@ fn find_memory_type_index(
     physical_device: vk::PhysicalDevice,
     memory_type_bits: u32,
     required_properties: vk::MemoryPropertyFlags,
-) -> Result<usize, BoxError> {
+) -> Result<usize, anyhow::Error> {
     let memory_properties =
         unsafe { instance.get_physical_device_memory_properties(physical_device) };
 
@@ -1823,30 +1830,16 @@ fn find_memory_type_index(
         }
     }
 
-    Err("failed to find suitable memory type".into())
+    Err(anyhow::anyhow!("failed to find suitable memory type"))
 }
 
-#[repr(C, align(16))]
-struct MVPMatrices {
-    model: glam::Mat4,
-    view: glam::Mat4,
-    projection: glam::Mat4,
-}
-
+// TODO could these be static arrays of 2 instead of vecs?
 fn create_uniform_buffers(
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
-) -> Result<
-    (
-        Vec<vk::Buffer>,
-        Vec<vk::DeviceMemory>,
-        Vec<*mut MVPMatrices>,
-    ),
-    BoxError,
-> {
-    let buffer_size = std::mem::size_of::<MVPMatrices>() as vk::DeviceSize;
-
+    buffer_size: vk::DeviceSize,
+) -> Result<(Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>), anyhow::Error> {
     let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
     let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
     let mut uniform_buffers_mapped = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
@@ -1864,9 +1857,7 @@ fn create_uniform_buffers(
         uniform_buffers.push(buffer);
         uniform_buffers_memory.push(memory);
 
-        let mapped = unsafe {
-            device.map_memory(memory, 0, buffer_size, Default::default())? as *mut MVPMatrices
-        };
+        let mapped = unsafe { device.map_memory(memory, 0, buffer_size, Default::default())? };
 
         uniform_buffers_mapped.push(mapped);
     }
@@ -1878,57 +1869,10 @@ fn create_uniform_buffers(
     ))
 }
 
-fn update_uniform_buffer(
-    start_time: Instant,
-    image_extent: vk::Extent2D,
-    mapped_uniform_buffer: *mut MVPMatrices,
-) -> Result<(), BoxError> {
-    const DEGREES_PER_SECOND: f32 = 5.0;
-    let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
-    let turn_radians = elapsed_seconds * DEGREES_PER_SECOND.to_radians();
-
-    let model = glam::Mat4::from_rotation_z(turn_radians);
-    let view = glam::Mat4::look_at_rh(
-        glam::Vec3::splat(2.0),
-        glam::Vec3::splat(0.0),
-        glam::Vec3::new(0.0, 0.0, 1.0),
-    );
-    let aspect_ratio = image_extent.width as f32 / image_extent.height as f32;
-    let projection = glam::Mat4::perspective_rh(45.0_f32.to_radians(), aspect_ratio, 0.1, 10.0);
-
-    let mut mvp = MVPMatrices {
-        model,
-        view,
-        projection,
-    };
-
-    // "GLM was originally designed for OpenGL,
-    // where the Y coordinate of the clip coordinates is inverted.
-    // The easiest way to compensate for that is to flip the sign
-    // on the scaling factor of the Y axis in the projection matrix.
-    // If you don’t do this, then the image will be rendered upside down."
-    // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
-    mvp.projection.y_axis.y *= -1.0;
-
-    if !shaders::COLUMN_MAJOR {
-        // it's also possible to avoid this by reversing the mul() calls in shaders
-        // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
-        mvp.model = mvp.model.transpose();
-        mvp.view = mvp.view.transpose();
-        mvp.projection = mvp.projection.transpose();
-    }
-
-    unsafe {
-        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
-    }
-
-    Ok(())
-}
-
 fn create_descriptor_pool(
     device: &ash::Device,
     compiled_shaders: &ShaderPipelineLayout,
-) -> Result<vk::DescriptorPool, BoxError> {
+) -> Result<vk::DescriptorPool, anyhow::Error> {
     let descriptor_sets_per_frame = compiled_shaders.descriptor_set_layouts.len() as u32;
     let descriptor_set_count = descriptor_sets_per_frame * MAX_FRAMES_IN_FLIGHT as u32;
     let uniform_buffer_pool_size = vk::DescriptorPoolSize::default()
@@ -1955,7 +1899,8 @@ fn create_descriptor_sets(
     uniform_buffers: &[vk::Buffer],
     texture_image_view: vk::ImageView,
     texture_sampler: vk::Sampler,
-) -> Result<Vec<vk::DescriptorSet>, BoxError> {
+    buffer_size: vk::DeviceSize,
+) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
     let mut set_layouts = vec![];
     for _frame in 0..MAX_FRAMES_IN_FLIGHT {
         for &descriptor_set_layout in descriptor_set_layouts {
@@ -1978,7 +1923,7 @@ fn create_descriptor_sets(
             let buffer_info = vk::DescriptorBufferInfo::default()
                 .buffer(buffer)
                 .offset(0)
-                .range(std::mem::size_of::<MVPMatrices>() as u64);
+                .range(buffer_size);
             let buffer_info = [buffer_info];
             let uniform_buffer_write = vk::WriteDescriptorSet::default()
                 .dst_set(dst_set)
@@ -2016,7 +1961,7 @@ fn create_texture_image(
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
-) -> Result<(vk::Image, vk::DeviceMemory, u32), BoxError> {
+) -> Result<(vk::Image, vk::DeviceMemory, u32), anyhow::Error> {
     let file_path = match CURRENT_EXAMPLE {
         Example::DepthTexture => [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"],
         Example::VikingRoom => [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"],
@@ -2124,7 +2069,7 @@ fn create_vk_image(
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
     options: ImageOptions,
-) -> Result<(vk::Image, vk::DeviceMemory), BoxError> {
+) -> Result<(vk::Image, vk::DeviceMemory), anyhow::Error> {
     let image_create_info = vk::ImageCreateInfo::default()
         .image_type(vk::ImageType::TYPE_2D)
         .extent(options.extent.into())
@@ -2158,7 +2103,7 @@ fn create_vk_image(
 fn begin_single_time_commands(
     device: &ash::Device,
     command_pool: vk::CommandPool,
-) -> Result<vk::CommandBuffer, BoxError> {
+) -> Result<vk::CommandBuffer, anyhow::Error> {
     let command_buffer_allocate_info = vk::CommandBufferAllocateInfo::default()
         .level(vk::CommandBufferLevel::PRIMARY)
         .command_pool(command_pool)
@@ -2179,7 +2124,7 @@ fn end_single_time_commands(
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
     command_buffer: vk::CommandBuffer,
-) -> Result<(), BoxError> {
+) -> Result<(), anyhow::Error> {
     let command_buffers = [command_buffer];
 
     unsafe { device.end_command_buffer(command_buffer)? };
@@ -2204,7 +2149,7 @@ fn transition_image_layout(
     old_layout: vk::ImageLayout,
     new_layout: vk::ImageLayout,
     mip_levels: u32,
-) -> Result<(), BoxError> {
+) -> Result<(), anyhow::Error> {
     let command_buffer = begin_single_time_commands(device, command_pool)?;
 
     let subresource_range = vk::ImageSubresourceRange::default()
@@ -2257,7 +2202,7 @@ fn transition_image_layout(
         }
 
         transition => {
-            return Err(format!("layout transition: {transition:?} not supported").into());
+            anyhow::bail!("layout transition: {transition:?} not supported");
         }
     }
 
@@ -2287,7 +2232,7 @@ fn copy_buffer_to_image(
     buffer: vk::Buffer,
     image: vk::Image,
     extent: vk::Extent2D,
-) -> Result<(), BoxError> {
+) -> Result<(), anyhow::Error> {
     let command_buffer = begin_single_time_commands(device, command_pool)?;
 
     let image_subresource = vk::ImageSubresourceLayers::default()
@@ -2326,7 +2271,7 @@ fn create_image_view(
     format: vk::Format,
     aspect_mask: vk::ImageAspectFlags,
     mip_levels: u32,
-) -> Result<vk::ImageView, BoxError> {
+) -> Result<vk::ImageView, anyhow::Error> {
     let components = vk::ComponentMapping::default()
         // NOTE these are the default
         .r(vk::ComponentSwizzle::IDENTITY)
@@ -2356,7 +2301,7 @@ fn create_image_view(
 fn create_texture_sampler(
     device: &ash::Device,
     physical_device_properties: vk::PhysicalDeviceProperties,
-) -> Result<vk::Sampler, BoxError> {
+) -> Result<vk::Sampler, anyhow::Error> {
     let max_anisotropy = physical_device_properties.limits.max_sampler_anisotropy;
     let create_info = vk::SamplerCreateInfo::default()
         .mag_filter(vk::Filter::LINEAR)
@@ -2388,7 +2333,7 @@ fn create_depth_buffer_image(
     graphics_queue: vk::Queue,
     swapchain_extent: vk::Extent2D,
     msaa_samples: vk::SampleCountFlags,
-) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), BoxError> {
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), anyhow::Error> {
     let depth_format = find_depth_format(instance, physical_device);
 
     let mip_levels = 1;
@@ -2478,7 +2423,7 @@ fn has_stencil_component(format: vk::Format) -> bool {
 
 // From unknownue's rust version
 // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
-fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), BoxError> {
+fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
     let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
         .iter()
         .collect();
@@ -2532,14 +2477,14 @@ fn generate_mipmaps(
     instance: &ash::Instance,
     physical_device: vk::PhysicalDevice,
     format: vk::Format,
-) -> Result<(), BoxError> {
+) -> Result<(), anyhow::Error> {
     let format_properties =
         unsafe { instance.get_physical_device_format_properties(physical_device, format) };
     let linear_blit_support = format_properties
         .optimal_tiling_features
         .contains(vk::FormatFeatureFlags::SAMPLED_IMAGE_FILTER_LINEAR);
     if !linear_blit_support {
-        return Err("no linear blitting support".into());
+        anyhow::bail!("no linear blitting support");
     }
 
     let command_buffer = begin_single_time_commands(device, command_pool)?;
@@ -2706,7 +2651,7 @@ fn create_color_image(
     swapchain_extent: vk::Extent2D,
     color_format: vk::Format,
     msaa_samples: vk::SampleCountFlags,
-) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), BoxError> {
+) -> Result<(vk::Image, vk::DeviceMemory, vk::ImageView), anyhow::Error> {
     let mip_levels = 1;
     let image_options = ImageOptions {
         extent: swapchain_extent,
@@ -2752,7 +2697,7 @@ impl ShaderPipelineLayout {
     fn create_from_atlas(
         device: &ash::Device,
         shader: &DepthTextureShader,
-    ) -> Result<Self, BoxError> {
+    ) -> Result<Self, anyhow::Error> {
         let prepared_shader = shaders::dev_compile_slang_shaders(shader)?;
 
         let vertex_shader = CompiledShaderEntryPoint {
@@ -2780,7 +2725,7 @@ impl ShaderPipelineLayout {
     fn create_from_atlas(
         device: &ash::Device,
         shader: &DepthTextureShader,
-    ) -> Result<Self, BoxError> {
+    ) -> Result<Self, anyhow::Error> {
         let vertex_shader = CompiledShaderEntryPoint {
             entry_point_name: shader.vert_entry_point_name(),
             shader_bytecode: shader.vert_spv(),

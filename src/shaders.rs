@@ -12,10 +12,11 @@ pub mod json;
 
 use json::*;
 
+// TODO move this to a config module or something
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
 
-pub fn write_precompiled_shaders() -> Result<(), BoxError> {
+pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     // TODO move this to a script binary that doesn't depend on the project
     // TODO grep for all .slang files
 
@@ -52,7 +53,7 @@ pub struct ReflectedShader {
     pub reflection_json: ReflectionJson,
 }
 
-fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, BoxError> {
+fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source")?;
 
@@ -127,7 +128,9 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, B
     Ok(reflected_shader)
 }
 
-pub fn dev_compile_slang_shaders(shader: &DepthTextureShader) -> Result<ReflectedShader, BoxError> {
+pub fn dev_compile_slang_shaders(
+    shader: &DepthTextureShader,
+) -> Result<ReflectedShader, anyhow::Error> {
     prepare_reflected_shader(&shader.reflection_json.source_file_name)
 }
 
@@ -158,7 +161,7 @@ fn compile_shader(
     entry_point: &slang::EntryPoint,
     session: &slang::Session,
     module: &slang::Module,
-) -> Result<CompiledShader, BoxError> {
+) -> Result<CompiledShader, anyhow::Error> {
     let program = session.create_composite_component_type(&[
         module.downcast().clone(),
         entry_point.downcast().clone(),

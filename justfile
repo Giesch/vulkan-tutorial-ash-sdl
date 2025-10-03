@@ -60,3 +60,6 @@ setup:
 # write precompiled shaders & metadata to disk
 prepare-shaders:
     cargo run --bin prepare_shaders
+
+test:
+    INSTA_UPDATE=no cargo test
