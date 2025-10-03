@@ -9,5 +9,5 @@ mod util;
 mod shader_watcher;
 
 pub use app::App;
-pub use game::VikingRoom;
+pub use game::*;
 pub use renderer::Renderer;

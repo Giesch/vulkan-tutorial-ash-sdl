@@ -1,9 +1,8 @@
-use std::ffi::c_void;
-
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::EventPump;
 
+use crate::game::Game;
 use crate::renderer::Renderer;
 
 pub struct App {
@@ -89,26 +88,4 @@ impl App {
 
         Ok(())
     }
-}
-
-// TODO where should this go? top app level?
-pub trait Game {
-    // TODO
-    // we want a more zoomed-out struct than this
-    // like, Game should say,
-    // 'I want these GPU resources: a uniform buffer of size x, ...', etc
-    // should the game keep the gpu resources in its own struct,
-    //   instead of in the renderer?
-    // then it passes them to the renderer or something?
-    //   or renderer resources go in an ECS table and the game gets handles?
-    //   rather than an ecs table, it could be a wrapped vec index kept here
-    //
-    // could do whatever the crappy version is first, just to get the module out
-    fn uniform_buffer_size(&self) -> usize;
-
-    fn update_uniform_buffer(
-        &self,
-        aspect_ratio: f32,
-        mapped_uniform_buffer: *mut c_void,
-    ) -> anyhow::Result<()>;
 }

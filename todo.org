@@ -4,10 +4,9 @@
 - [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
   - [X] uniform buffer handling
-  - [ ] vertex/index buffer handling
+  - [X] vertex/index buffer handling
     ie loading assets
-    also type definition? or standardized? https://github.com/leetvr/lazy_vulkan
-  - [ ] asset (really verticies/indicies) loading
+  - [X] asset (really verticies/indicies) loading
   - [ ] dynamic resources (ie, unknown number of uniform buffers)
     renderer provides functions for creating graphics resources
     game fills itself in during init
@@ -15,6 +14,11 @@
     - [ ] then switch to handles or wrapped typed pointers
       - [ ] for vertex buffers
       - [ ] also for uniform buffer contents
+
+- [ ] generate vertex attributes?
+  or make th vetex type part of the api, like lazyvulkan
+  https://github.com/leetvr/lazy_vulkan
+  this would also need a matching slang module
 
 - [-] add snapshot tests for reflection json from shaders
   - [X] set up snapshot testing

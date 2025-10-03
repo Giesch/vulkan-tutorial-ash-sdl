@@ -7,11 +7,10 @@ use std::io::BufReader;
 use std::path::PathBuf;
 
 use ash::vk;
-use image::ImageReader;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
-use crate::app::Game;
+use crate::game::{Game, Vertex};
 use crate::shaders;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
 
@@ -29,15 +28,6 @@ const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 const ENABLE_SAMPLE_SHADING: bool = false;
 
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
-
-enum Example {
-    #[allow(unused)]
-    DepthTexture,
-    #[allow(unused)]
-    VikingRoom,
-}
-
-const CURRENT_EXAMPLE: Example = Example::VikingRoom;
 
 pub struct Renderer {
     // fields that are created once
@@ -246,6 +236,7 @@ impl Renderer {
         )?;
 
         let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
+            game,
             &instance,
             &device,
             physical_device,
@@ -261,10 +252,7 @@ impl Renderer {
         )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
-        let (vertices, indices) = match CURRENT_EXAMPLE {
-            Example::DepthTexture => (VERTICES.to_vec(), INDICES.to_vec()),
-            Example::VikingRoom => load_model()?,
-        };
+        let (vertices, indices) = game.load_vertices()?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
@@ -1558,102 +1546,6 @@ fn create_sync_objects(
     Ok((image_available, render_finished, frames_in_flight))
 }
 
-const VERTICES: [Vertex; 8] = [
-    Vertex {
-        position: glam::Vec3::new(-0.5, -0.5, 0.0),
-        color: glam::Vec3::new(1.0, 0.0, 0.0),
-        tex_coord: glam::Vec2::new(1.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, -0.5, 0.0),
-        color: glam::Vec3::new(0.0, 1.0, 0.0),
-        tex_coord: glam::Vec2::new(0.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, 0.5, 0.0),
-        color: glam::Vec3::new(0.0, 0.0, 1.0),
-        tex_coord: glam::Vec2::new(0.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, 0.5, 0.0),
-        color: glam::Vec3::new(1.0, 1.0, 1.0),
-        tex_coord: glam::Vec2::new(1.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, -0.5, -0.5),
-        color: glam::Vec3::new(1.0, 0.0, 0.0),
-        tex_coord: glam::Vec2::new(1.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, -0.5, -0.5),
-        color: glam::Vec3::new(0.0, 1.0, 0.0),
-        tex_coord: glam::Vec2::new(0.0, 0.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(0.5, 0.5, -0.5),
-        color: glam::Vec3::new(0.0, 0.0, 1.0),
-        tex_coord: glam::Vec2::new(0.0, 1.0),
-    },
-    Vertex {
-        position: glam::Vec3::new(-0.5, 0.5, -0.5),
-        color: glam::Vec3::new(1.0, 1.0, 1.0),
-        tex_coord: glam::Vec2::new(1.0, 1.0),
-    },
-];
-
-#[rustfmt::skip]
-const INDICES: [u32; 12] = [
-    0, 1, 2, 2, 3, 0,
-    4, 5, 6, 6, 7, 4,
-];
-
-#[derive(Debug, Clone)]
-#[repr(C, align(16))]
-struct Vertex {
-    position: glam::Vec3,
-    color: glam::Vec3,
-    tex_coord: glam::Vec2,
-}
-
-impl Vertex {
-    fn binding_description() -> vk::VertexInputBindingDescription {
-        vk::VertexInputBindingDescription::default()
-            .binding(0)
-            .stride(std::mem::size_of::<Self>() as u32)
-            .input_rate(vk::VertexInputRate::VERTEX)
-    }
-
-    fn attribute_descriptions() -> [vk::VertexInputAttributeDescription; 3] {
-        [
-            // position
-            vk::VertexInputAttributeDescription::default()
-                // the binding in glsl; matched with other vulkan structs as well
-                .binding(0)
-                // this is the location in glsl
-                .location(0)
-                // color formats are also used to define non-color vec sizes 1-4
-                // (the official tutorial is mildly apologetic)
-                // BUT this does matter for defaults -
-                // if there aren't enough components here to fill the components shader-side,
-                // the 'color' components default to 0 and 'alpha' component defaults to 1
-                .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, position) as u32),
-            // color
-            vk::VertexInputAttributeDescription::default()
-                .binding(0)
-                .location(1)
-                .format(vk::Format::R32G32B32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, color) as u32),
-            // texture coordinate
-            vk::VertexInputAttributeDescription::default()
-                .binding(0)
-                .location(2)
-                .format(vk::Format::R32G32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
-        ]
-    }
-}
-
 fn create_vertex_buffer(
     instance: &ash::Instance,
     device: &ash::Device,
@@ -1957,19 +1849,15 @@ fn create_descriptor_sets(
 }
 
 fn create_texture_image(
+    game: &dyn Game,
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), anyhow::Error> {
-    let file_path = match CURRENT_EXAMPLE {
-        Example::DepthTexture => [env!("CARGO_MANIFEST_DIR"), "textures", "texture.jpg"],
-        Example::VikingRoom => [env!("CARGO_MANIFEST_DIR"), "textures", "viking_room.png"],
-    };
-    let file_path: PathBuf = file_path.iter().collect();
+    let image = game.load_texture()?;
 
-    let image = ImageReader::open(file_path)?.decode()?;
     let expected_size = image.width() * image.height() * 4;
     let bytes = image.to_rgba8().into_raw();
 
@@ -2420,52 +2308,6 @@ fn has_stencil_component(format: vk::Format) -> bool {
         vk::Format::D24_UNORM_S8_UINT,
     ]
     .contains(&format)
-}
-
-// From unknownue's rust version
-// https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
-fn load_model() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
-    let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
-        .iter()
-        .collect();
-
-    let (mut models, _materials) = tobj::load_obj(file_path, &tobj::GPU_LOAD_OPTIONS)?;
-
-    debug_assert!(models.len() == 1);
-    let model = models.remove(0);
-
-    let mut vertices = vec![];
-    let mesh = model.mesh;
-    let vertices_count = mesh.positions.len() / 3;
-    for i in 0..vertices_count {
-        let position = {
-            let offset = i * 3;
-            glam::Vec3::new(
-                mesh.positions[offset],
-                mesh.positions[offset + 1],
-                mesh.positions[offset + 2],
-            )
-        };
-
-        let tex_coord = {
-            let offset = i * 2;
-            let u = mesh.texcoords[offset];
-            // in obj, 0 is the bottom, in vulkan, 0 is the top
-            // (for texture coordinates)
-            let v = 1.0 - mesh.texcoords[offset + 1];
-            glam::Vec2::new(u, v)
-        };
-
-        let vertex = Vertex {
-            position,
-            color: glam::Vec3::splat(1.0),
-            tex_coord,
-        };
-
-        vertices.push(vertex);
-    }
-
-    Ok((vertices, mesh.indices))
 }
 
 fn generate_mipmaps(

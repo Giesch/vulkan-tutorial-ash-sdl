@@ -22,6 +22,7 @@ fn main() -> Result<(), anyhow::Error> {
         .build()?;
 
     let game = VikingRoom::init();
+    // let game = DepthTexture::init();
 
     let renderer = Renderer::init(window, &game)?;
     let mut app = App::new(renderer, Box::new(game));
