@@ -8,16 +8,17 @@ use std::path::PathBuf;
 
 use ash::vk;
 use image::ImageReader;
-#[allow(unused)]
-use log::*;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
 use crate::app::Game;
-#[cfg(debug_assertions)]
-use crate::shader_watcher;
 use crate::shaders;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
+
+#[cfg(debug_assertions)]
+use crate::shader_watcher;
+#[cfg(debug_assertions)]
+use log::*;
 
 pub mod debug;
 mod platform;
