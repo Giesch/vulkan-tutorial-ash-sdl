@@ -39,7 +39,7 @@ pub struct Renderer {
     #[cfg(debug_assertions)]
     shader_changes: shader_watcher::ShaderChanges,
     #[cfg(debug_assertions)]
-    old_pipelines: Vec<(usize, vk::Pipeline, vk::PipelineLayout)>,
+    old_pipelines: Vec<(usize, vk::Pipeline, ShaderPipelineLayout)>,
     #[expect(unused)]
     entry: ash::Entry,
     window: Window,
@@ -656,7 +656,7 @@ impl Renderer {
     fn check_for_shader_recompile(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
-        for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
+        for (i, (old_frame, old_pipeline, old_compiled_shaders)) in
             self.old_pipelines.iter().enumerate()
         {
             let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
@@ -667,7 +667,14 @@ impl Renderer {
             unsafe {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
-                    .destroy_pipeline_layout(*old_pipeline_layout, None);
+                    .destroy_pipeline_layout(old_compiled_shaders.pipeline_layout, None);
+            }
+
+            for &desc_set_layout in &old_compiled_shaders.descriptor_set_layouts {
+                unsafe {
+                    self.device
+                        .destroy_descriptor_set_layout(desc_set_layout, None);
+                }
             }
 
             to_remove.push(i);
@@ -693,7 +700,7 @@ impl Renderer {
         _edit_events: &[notify::Event],
         game: &Box<dyn Game>,
     ) -> Result<(), anyhow::Error> {
-        let compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
+        let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
             &self.shader_atlas.depth_texture,
         ) {
@@ -704,13 +711,10 @@ impl Renderer {
             }
         };
 
-        self.old_pipelines.push((
-            self.total_frames,
-            self.pipeline,
-            self.compiled_shaders.pipeline_layout,
-        ));
+        std::mem::swap(&mut tmp_compiled_shaders, &mut self.compiled_shaders);
 
-        self.compiled_shaders = compiled_shaders;
+        self.old_pipelines
+            .push((self.total_frames, self.pipeline, tmp_compiled_shaders));
 
         self.pipeline = create_graphics_pipeline(
             &**game,

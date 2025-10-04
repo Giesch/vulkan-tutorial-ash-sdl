@@ -94,9 +94,7 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
 
     let session = global_session.create_session(&session_desc).unwrap();
 
-    let module = session
-        .load_module(source_file_name)
-        .with_context(|| format!("failed to load module: {source_file_name}"))?;
+    let module = session.load_module(source_file_name)?;
 
     // the examples have 1 vert and 1 frag shader
     debug_assert!(module.entry_points().len() == 2);

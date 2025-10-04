@@ -29,6 +29,13 @@
   - [X] make the swap everywhere
   - [ ] add context messages
 
+- [X] fix bug where descriptor set layout is not freed on teardown after a hot reload?
+  not sure how to repro this;
+  saw it happen once on windows during hot reload on a second monitor
+  is it related to having a shader miscompile?
+  - [X] need old_compiled_shaders just like old_pipelines
+    specifically to get the descriptor set layouts
+
 * Next
 - [ ] add input/gobal type info to reflection data & shader atlas
 
@@ -100,7 +107,6 @@
   - group one-time initialized fields into a sub-struct w/methods
   - group sync primitive arrays with their resources in some way
     ie make it clear what's per-swapchain-image vs per-in-flight-frame
-  - use anyhow for errors
   - use an env var for vulkan validation layer
     https://github.com/ash-rs/ash/issues/190#issuecomment-758269723
     maybe for logging too? ie always compile w/verbose
@@ -169,7 +175,3 @@
     https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope
   - would it be easy to use a slang user attribute?
 
-- [ ] fix bug where descriptor set layout is not freed on teardown after a hot reload?
-  not sure how to repro this;
-  saw it happen once on windows during hot reload on a second monitor
-  is it related to having a shader miscompile?

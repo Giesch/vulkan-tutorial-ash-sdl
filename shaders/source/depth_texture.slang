@@ -1,3 +1,5 @@
+module depth_texture;
+
 // modified from the official tutorial example here:
 // https://docs.vulkan.org/tutorial/latest/_attachments/27_shader_depth.slang
 
@@ -56,7 +58,7 @@ float4 fragMain(FragVertex fragVertex) : SV_TARGET {
     let textureColor = texture.Sample(fragVertex.texCoord);
 
     let debugColor = 1.0;
-    // let debugColor = float3(1.0, 0.0, 0.0);
+    // let debugColor = float3(1.0, 0.0, 1.0);
 
     let tweakedColor: float3 = debugColor * textureColor.rgb;
 
