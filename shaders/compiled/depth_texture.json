@@ -12,7 +12,8 @@
       },
       {
         "kind": "struct",
-        "name": "vertex",
+        "parameter_name": "vertex",
+        "type_name": "Vertex",
         "fields": [
           {
             "kind": "vector",
@@ -51,7 +52,8 @@
     "parameters": [
       {
         "kind": "struct",
-        "name": "fragVertex",
+        "parameter_name": "fragVertex",
+        "type_name": "FragVertex",
         "fields": [
           {
             "kind": "vector",

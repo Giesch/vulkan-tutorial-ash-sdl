@@ -16,7 +16,8 @@ expression: shader.reflection_json
       },
       {
         "kind": "struct",
-        "name": "vertex",
+        "parameter_name": "vertex",
+        "type_name": "Vertex",
         "fields": [
           {
             "kind": "vector",
@@ -55,7 +56,8 @@ expression: shader.reflection_json
     "parameters": [
       {
         "kind": "struct",
-        "name": "fragVertex",
+        "parameter_name": "fragVertex",
+        "type_name": "FragVertex",
         "fields": [
           {
             "kind": "vector",

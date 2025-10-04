@@ -25,6 +25,8 @@ pub fn reflect_entry_points(
             let entry_point_param_json = match type_layout.kind() {
                 slang::TypeKind::Struct => {
                     let mut fields = vec![];
+                    let struct_type_name = type_layout.name().unwrap().to_string();
+
                     for field in type_layout.fields() {
                         let field_name = field.name().unwrap().to_string();
 
@@ -59,7 +61,8 @@ pub fn reflect_entry_points(
                     }
 
                     EntryPointParameter::Struct(StructEntryPointParameter {
-                        name: param_name,
+                        parameter_name: param_name,
+                        type_name: struct_type_name,
                         fields,
                     })
                 }

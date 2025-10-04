@@ -24,7 +24,8 @@ pub enum EntryPointParameter {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct StructEntryPointParameter {
-    pub name: String,
+    pub parameter_name: String,
+    pub type_name: String,
     pub fields: Vec<StructField>,
 }
 
