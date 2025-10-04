@@ -2541,7 +2541,7 @@ impl ShaderPipelineLayout {
         device: &ash::Device,
         shader: &DepthTextureShader,
     ) -> Result<Self, anyhow::Error> {
-        let prepared_shader = shaders::dev_compile_slang_shaders(shader)?;
+        let prepared_shader = shaders::dev_compile_slang_shaders(shader.source_file_name())?;
 
         let vertex_shader = CompiledShaderEntryPoint {
             shader_bytecode: prepared_shader.vertex_shader.spv_bytes()?,
@@ -2553,8 +2553,12 @@ impl ShaderPipelineLayout {
             entry_point_name: prepared_shader.fragment_shader.entry_point_name,
         };
 
-        let (pipeline_layout, descriptor_set_layouts) =
-            unsafe { shader.reflection_json.pipeline_layout.vk_create(device)? };
+        let (pipeline_layout, descriptor_set_layouts) = unsafe {
+            prepared_shader
+                .reflection_json
+                .pipeline_layout
+                .vk_create(device)?
+        };
 
         Ok(ShaderPipelineLayout {
             vertex_shader,

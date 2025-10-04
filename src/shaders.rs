@@ -1,6 +1,5 @@
 use std::ffi::CString;
 
-use atlas::DepthTextureShader;
 use shader_slang as slang;
 use shader_slang::Downcast;
 
@@ -97,36 +96,29 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
     debug_assert!(module.entry_points().len() == 2);
 
     let mut components = vec![module.downcast().clone()];
-    let mut vertex_shader: Option<(String, CompiledShader)> = None;
-    let mut fragment_shader: Option<(String, CompiledShader)> = None;
+    let mut vertex_shader: Option<CompiledShader> = None;
+    let mut fragment_shader: Option<CompiledShader> = None;
     for entry_point in module.entry_points() {
-        let entry_point_name = entry_point.function_reflection().name().to_owned();
         let compiled_shader = compile_shader(&entry_point, &session, &module)?;
 
         if compiled_shader.stage == slang::Stage::Vertex {
-            vertex_shader = Some((entry_point_name, compiled_shader))
+            vertex_shader = Some(compiled_shader)
         } else if compiled_shader.stage == slang::Stage::Fragment {
-            fragment_shader = Some((entry_point_name, compiled_shader))
+            fragment_shader = Some(compiled_shader)
         }
 
         components.push(entry_point.downcast().clone());
     }
-    let (vertex_entry_point, vertex_shader) = vertex_shader
+    let vertex_shader = vertex_shader
         .unwrap_or_else(|| panic!("failed to load vertex entry point for: {source_file_name}"));
-    let (fragment_entry_point, fragment_shader) = fragment_shader
+    let fragment_shader = fragment_shader
         .unwrap_or_else(|| panic!("failed to load fragment entry point for: {source_file_name}"));
 
     let program = session.create_composite_component_type(&components)?;
     let linked_program = program.link()?;
     let program_layout = linked_program.layout(0)?;
 
-    let reflected_pipeline_layout = reflection::reflect_pipeline_layout(program_layout);
-    let reflection_json = ReflectionJson {
-        source_file_name: source_file_name.to_string(),
-        vertex_entry_point,
-        fragment_entry_point,
-        pipeline_layout: reflected_pipeline_layout,
-    };
+    let reflection_json = reflection::reflection_json(source_file_name, program_layout)?;
 
     let reflected_shader = ReflectedShader {
         vertex_shader,
@@ -137,10 +129,8 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
     Ok(reflected_shader)
 }
 
-pub fn dev_compile_slang_shaders(
-    shader: &DepthTextureShader,
-) -> Result<ReflectedShader, anyhow::Error> {
-    prepare_reflected_shader(&shader.reflection_json.source_file_name)
+pub fn dev_compile_slang_shaders(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
+    prepare_reflected_shader(source_file_name)
 }
 
 pub struct CompiledShader {

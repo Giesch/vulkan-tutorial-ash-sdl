@@ -1,15 +1,58 @@
 use super::json::*;
 use shader_slang as slang;
 
+pub fn reflection_json(
+    source_file_name: &str,
+    program_layout: &slang::reflection::Shader,
+) -> anyhow::Result<ReflectionJson> {
+    let mut vertex_entry_point: Option<EntryPoint> = None;
+    let mut fragment_entry_point: Option<EntryPoint> = None;
+
+    for entry_point in program_layout.entry_points() {
+        let entry_point_name = entry_point.name().to_string();
+
+        match entry_point.stage() {
+            slang::Stage::Vertex => {
+                vertex_entry_point = Some(EntryPoint {
+                    name: entry_point_name,
+                    stage: EntryPointStage::Vertex,
+                });
+            }
+            slang::Stage::Fragment => {
+                fragment_entry_point = Some(EntryPoint {
+                    name: entry_point_name,
+                    stage: EntryPointStage::Fragment,
+                });
+            }
+            _ => todo!(),
+        }
+    }
+
+    let (vertex_entry_point, fragment_entry_point) =
+        match (vertex_entry_point, fragment_entry_point) {
+            (Some(v), Some(f)) => (v, f),
+            _ => anyhow::bail!("failed to load vertex and fragment entry point names"),
+        };
+
+    let pipeline_layout = reflect_pipeline_layout(program_layout);
+
+    let reflection_json = ReflectionJson {
+        source_file_name: source_file_name.to_string(),
+        vertex_entry_point,
+        fragment_entry_point,
+        pipeline_layout,
+    };
+
+    Ok(reflection_json)
+}
+
 // slang-reflection-based vulkan builders
 // using automatically generated bindings from slang ParameterBlocks
 //
 // based on the example in the docs here:
 // https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
 
-pub fn reflect_pipeline_layout(
-    program_layout: &slang::reflection::Shader,
-) -> ReflectedPipelineLayout {
+fn reflect_pipeline_layout(program_layout: &slang::reflection::Shader) -> ReflectedPipelineLayout {
     let mut pipeline_layout_builder = PipelineLayoutBuilder::new();
 
     let mut default_descriptor_set_layout_builder =

@@ -8,6 +8,8 @@
     ie loading assets
   - [X] asset (really verticies/indicies) loading
   - [ ] dynamic resources (ie, unknown number of uniform buffers)
+    avoid needing unsafe write to uniform buffer outside renderer
+
     renderer provides functions for creating graphics resources
     game fills itself in during init
     - [ ] first use void pointers to mapped memory
@@ -32,7 +34,7 @@
 
   - [ ] look at slangc reflection json implementation
     https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp
-    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp#L1050
+    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp#L1100
     - bindings
       this isn't defined by the shader,
         but by the index in the buffer passed in the vk bind command

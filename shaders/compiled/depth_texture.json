@@ -1,7 +1,13 @@
 {
   "source_file_name": "depth_texture.slang",
-  "vertex_entry_point": "vertMain",
-  "fragment_entry_point": "fragMain",
+  "vertex_entry_point": {
+    "name": "vertMain",
+    "stage": "Vertex"
+  },
+  "fragment_entry_point": {
+    "name": "fragMain",
+    "stage": "Fragment"
+  },
   "pipeline_layout": {
     "descriptor_set_layouts": [
       {
