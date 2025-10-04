@@ -62,7 +62,8 @@
             "element_type": {
               "kind": "scalar",
               "scalar_type": "float32"
-            }
+            },
+            "semantic_name": "SV_POSITION"
           },
           {
             "kind": "vector",

@@ -32,6 +32,8 @@ pub fn reflect_entry_points(
 
                         let field_type_layout = field.type_layout();
 
+                        let field_semantic_name = field.semantic_name().map(str::to_string);
+
                         let field_json = match field_type_layout.kind() {
                             slang::TypeKind::Vector => {
                                 let vec_elem_count = field_type_layout.element_count().unwrap();
@@ -51,6 +53,7 @@ pub fn reflect_entry_points(
                                     name: field_name,
                                     element_count: vec_elem_count,
                                     element_type: vec_elem_type,
+                                    semantic_name: field_semantic_name,
                                 })
                             }
 

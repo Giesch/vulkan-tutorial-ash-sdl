@@ -47,6 +47,9 @@ pub struct VectorStructField {
     pub name: String,
     pub element_count: usize,
     pub element_type: VectorElementType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub semantic_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
