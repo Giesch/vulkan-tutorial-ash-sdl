@@ -1,6 +1,5 @@
 use std::ffi::CString;
 
-use anyhow::Context;
 use atlas::DepthTextureShader;
 use shader_slang as slang;
 use shader_slang::Downcast;
@@ -13,15 +12,13 @@ pub mod json;
 
 use json::*;
 
-// TODO move this to a config module or something
 /// whether to use column-major or row-major matricies with slang
 pub const COLUMN_MAJOR: bool = true;
 
 pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
-    // TODO move this to a script binary that doesn't depend on the project
     let shaders_source_dir = manifest_path(["shaders", "source"]);
     let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
-        .filter_map(|res| res.ok())
+        .filter_map(|entry_res| entry_res.ok())
         .map(|dir_entry| dir_entry.path())
         .filter(|path| path.extension().map_or(false, |ext| ext == "slang"))
         .filter_map(|path| {
@@ -31,12 +28,12 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
         })
         .collect();
 
-    for slang_file in &slang_file_names {
+    for slang_file_name in &slang_file_names {
         let ReflectedShader {
             vertex_shader,
             fragment_shader,
             reflection_json,
-        } = prepare_reflected_shader(slang_file)?;
+        } = prepare_reflected_shader(slang_file_name)?;
 
         let source_file_name = &reflection_json.source_file_name;
 

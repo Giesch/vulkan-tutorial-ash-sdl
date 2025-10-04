@@ -19,6 +19,26 @@
   or make th vetex type part of the api, like lazyvulkan
   https://github.com/leetvr/lazy_vulkan
   this would also need a matching slang module
+  - discord links
+    https://discord.com/channels/1303735196696445038/1387610899787022438/1387610899787022438
+    https://discord.com/channels/1303735196696445038/1419640000609386496/1420377508683186258
+    https://discord.com/channels/1303735196696445038/1305995870046650368/1410741801467510867
+  - playground user attributes example
+    - https://github.com/shader-slang/slang-playground/blob/1b97fa8bdf2a6cb2b18ca2d8e8d5e4b54b6eba51/public/demos/image-from-url.slang
+    - https://github.com/shader-slang/slang-playground/blob/main/engine/slang-compilation-engine/src/slang/playground.slang
+    - this has examples of Var and Function attribute targets; what about fields?
+      https://github.com/shader-slang/slang/blob/2491ac5f42d78d082d4afa6416906fad9b32ea80/source/slang/slang-syntax.h#L379
+      there's also struct and param, but not field
+  - [ ] look at slangc reflection json implementation
+    - bindings
+    - offsets/locations
+    - formats from slang user attributes
+    - [ ] can these be more directly generated from the type?
+      field order in slang could be an issue
+      generator could just validate the order?
+  - [ ] get rid of load_vertices
+    keep Vertex type out of Game callback signatures
+  - is bindless the better / more real way to do all this?
 
 - [-] add snapshot tests for reflection json from shaders
   - [X] set up snapshot testing
@@ -54,6 +74,7 @@
   - [ ] build-from-source-static for sdl3 on windows
   - [ ] shader hot reload for notify & shader_slang
     - [ ] figure out if slang precompile needs to be a workspace crate or something
+- [ ] use a config module or cli params for stuff like COLUMN_MAJOR
 
 - [ ] handle nested ParameterBlocks
   - [ ] should add_descriptor_range also skip ParameterBlock like PushConstant?
