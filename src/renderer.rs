@@ -792,7 +792,7 @@ impl Drop for Renderer {
             // NOTE This must be called before dropping the sdl window,
             // which means that the Renderer must be dropped before the window.
             // That should happen by default, since Renderer::init requires a window,
-            // and rust drops things in reverse order.
+            // and rust drops variables in reverse initialization order.
             SDL_Vulkan_DestroySurface(self.instance.handle(), self.surface, std::ptr::null());
 
             if ENABLE_VALIDATION {

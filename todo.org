@@ -29,16 +29,30 @@
     - this has examples of Var and Function attribute targets; what about fields?
       https://github.com/shader-slang/slang/blob/2491ac5f42d78d082d4afa6416906fad9b32ea80/source/slang/slang-syntax.h#L379
       there's also struct and param, but not field
+
   - [ ] look at slangc reflection json implementation
+    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp
+    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp#L1050
     - bindings
+      this isn't defined by the shader,
+        but by the index in the buffer passed in the vk bind command
+      it should be part of the graphics pipeline/resource creation,
+        when game calls into renderer to set up a scene/pipeline
+        then how do we handle the method on the Vertex type?
+          for now it can always use 0
+          but later, it'll have to be a separate 'BoundVertex' wrapper or something
     - offsets/locations
+      entryPoints[arg_i]['type']['fields'][field_i]['binding']['index']
     - formats from slang user attributes
+      unnecessary for now; hardcode glam vecs/matrices and primitives
     - [ ] can these be more directly generated from the type?
       field order in slang could be an issue
       generator could just validate the order?
+      formats can be though; have standard map of formats for glam
+        and then use struct user annotations for special/odd encoding
+
   - [ ] get rid of load_vertices
     keep Vertex type out of Game callback signatures
-  - is bindless the better / more real way to do all this?
 
 - [-] add snapshot tests for reflection json from shaders
   - [X] set up snapshot testing

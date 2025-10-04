@@ -24,27 +24,32 @@ impl Vertex {
         // BUT this does matter for defaults -
         //   if there aren't enough components here to fill the components shader-side,
         //   the 'color' components default to 0 and 'alpha' component defaults to 1
-        let vec_3_format = ash::vk::Format::R32G32B32_SFLOAT;
-        let vec_2_format = ash::vk::Format::R32G32_SFLOAT;
+        let glam_vec_3_format = ash::vk::Format::R32G32B32_SFLOAT;
+        let glam_vec_2_format = ash::vk::Format::R32G32_SFLOAT;
 
+        // the bindings and locations here are about how this data is read
+        // out of the vertex buffer, not the binding to the shader
+        // bindings - the index in the array passed to cmd_bind_vertex_buffers
+        //   in our case, always 0 because there is only one
+        // locations - a unique identifier for the attribute
         [
             // position
             ash::vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(0)
-                .format(vec_3_format)
+                .format(glam_vec_3_format)
                 .offset(std::mem::offset_of!(Vertex, position) as u32),
             // color
             ash::vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(1)
-                .format(vec_3_format)
+                .format(glam_vec_3_format)
                 .offset(std::mem::offset_of!(Vertex, color) as u32),
             // texture coordinate
             ash::vk::VertexInputAttributeDescription::default()
                 .binding(0)
                 .location(2)
-                .format(vec_2_format)
+                .format(glam_vec_2_format)
                 .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
         ]
     }

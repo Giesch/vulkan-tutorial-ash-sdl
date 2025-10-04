@@ -10,14 +10,14 @@ struct DepthTexture {
     Sampler2D texture;
 }
 
-// see renderer::MVPMatrices
+// see game::MVPMatrices
 struct MVPMatrices {
     float4x4 model;
     float4x4 view;
     float4x4 proj;
 };
 
-// see renderer::Vertex
+// see game::vertex::Vertex
 struct Vertex {
     float3 position;
     float3 color;

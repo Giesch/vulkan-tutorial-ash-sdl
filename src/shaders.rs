@@ -7,8 +7,8 @@ use shader_slang::Downcast;
 use crate::util::*;
 
 pub mod atlas;
-mod descriptor_set_reflection;
 pub mod json;
+mod reflection;
 
 use json::*;
 
@@ -120,8 +120,7 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
     let linked_program = program.link()?;
     let program_layout = linked_program.layout(0)?;
 
-    let reflected_pipeline_layout =
-        descriptor_set_reflection::reflect_pipeline_layout(program_layout);
+    let reflected_pipeline_layout = reflection::reflect_pipeline_layout(program_layout);
     let reflection_json = ReflectionJson {
         source_file_name: source_file_name.to_string(),
         vertex_entry_point,
