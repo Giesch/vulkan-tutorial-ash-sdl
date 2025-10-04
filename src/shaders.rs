@@ -19,7 +19,7 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
         .filter_map(|entry_res| entry_res.ok())
         .map(|dir_entry| dir_entry.path())
-        .filter(|path| path.extension().map_or(false, |ext| ext == "slang"))
+        .filter(|path| path.extension().is_some_and(|ext| ext == "slang"))
         .filter_map(|path| {
             path.file_name()
                 .and_then(|os_str| os_str.to_str())

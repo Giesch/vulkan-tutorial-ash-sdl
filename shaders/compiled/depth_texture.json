@@ -2,11 +2,87 @@
   "source_file_name": "depth_texture.slang",
   "vertex_entry_point": {
     "name": "vertMain",
-    "stage": "Vertex"
+    "stage": "Vertex",
+    "parameters": [
+      {
+        "kind": "scalar",
+        "name": "vertexIndex",
+        "scalar_type": "uint32",
+        "semantic_name": "SV_VERTEXID"
+      },
+      {
+        "kind": "struct",
+        "name": "vertex",
+        "fields": [
+          {
+            "kind": "vector",
+            "name": "position",
+            "element_count": 3,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          },
+          {
+            "kind": "vector",
+            "name": "color",
+            "element_count": 3,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          },
+          {
+            "kind": "vector",
+            "name": "texCoord",
+            "element_count": 2,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          }
+        ]
+      }
+    ]
   },
   "fragment_entry_point": {
     "name": "fragMain",
-    "stage": "Fragment"
+    "stage": "Fragment",
+    "parameters": [
+      {
+        "kind": "struct",
+        "name": "fragVertex",
+        "fields": [
+          {
+            "kind": "vector",
+            "name": "position",
+            "element_count": 4,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          },
+          {
+            "kind": "vector",
+            "name": "color",
+            "element_count": 3,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          },
+          {
+            "kind": "vector",
+            "name": "texCoord",
+            "element_count": 2,
+            "element_type": {
+              "kind": "scalar",
+              "scalar_type": "float32"
+            }
+          }
+        ]
+      }
+    ]
   },
   "pipeline_layout": {
     "descriptor_set_layouts": [

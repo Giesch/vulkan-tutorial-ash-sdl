@@ -185,7 +185,7 @@ fn update_mvp_uniform_buffer(
     }
 
     unsafe {
-        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer as *mut MVPMatrices, 1);
+        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
     }
 
     Ok(())

@@ -463,7 +463,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
+    pub fn draw_frame(&mut self, game: &dyn Game) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
         self.check_for_shader_recompile(game)?;
@@ -656,7 +656,7 @@ impl Renderer {
     }
 
     #[cfg(debug_assertions)]
-    fn check_for_shader_recompile(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
+    fn check_for_shader_recompile(&mut self, game: &dyn Game) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
         for (i, (old_frame, old_pipeline, old_compiled_shaders)) in
@@ -701,7 +701,7 @@ impl Renderer {
     fn try_shader_recompile(
         &mut self,
         _edit_events: &[notify::Event],
-        game: &Box<dyn Game>,
+        game: &dyn Game,
     ) -> Result<(), anyhow::Error> {
         let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
@@ -720,7 +720,7 @@ impl Renderer {
             .push((self.total_frames, self.pipeline, tmp_compiled_shaders));
 
         self.pipeline = create_graphics_pipeline(
-            &**game,
+            game,
             &self.device,
             self.render_pass,
             self.msaa_samples,
@@ -1584,7 +1584,7 @@ fn create_vertex_buffer<V: GPUWrite>(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe { write_to_gpu_buffer(device, staging_buffer_memory, &vertices)? };
+    unsafe { write_to_gpu_buffer(device, staging_buffer_memory, vertices)? };
 
     let (vertex_buffer, vertex_buffer_memory) = create_memory_buffer(
         instance,
@@ -1630,7 +1630,7 @@ fn create_index_buffer(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe { write_to_gpu_buffer(&device, staging_buffer_memory, &indices)? };
+    unsafe { write_to_gpu_buffer(device, staging_buffer_memory, indices)? };
 
     let (index_buffer, index_buffer_memory) = create_memory_buffer(
         instance,
@@ -1884,7 +1884,7 @@ fn create_texture_image(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe { write_to_gpu_buffer(&device, staging_buffer_memory, &bytes)? };
+    unsafe { write_to_gpu_buffer(device, staging_buffer_memory, &bytes)? };
 
     let extent = vk::Extent2D::default()
         .width(image.width())

@@ -37,7 +37,7 @@ fn main() -> Result<(), anyhow::Error> {
         }
 
         if !app.minimized {
-            app.renderer.draw_frame(&app.game)?;
+            app.renderer.draw_frame(&*app.game)?;
         }
 
         unsafe { SDL_DelayPrecise(FRAME_DELAY.as_nanos() as u64) };
