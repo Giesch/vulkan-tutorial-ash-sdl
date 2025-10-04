@@ -1,4 +1,4 @@
-use super::GPUWrite;
+use crate::renderer::gpu_write::GPUWrite;
 
 #[derive(Debug, Clone)]
 #[repr(C, align(16))]

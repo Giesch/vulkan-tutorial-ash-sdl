@@ -11,8 +11,8 @@ use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
 use crate::game::Game;
+use crate::shaders;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
-use crate::{shaders, GPUWrite};
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -21,6 +21,9 @@ use log::*;
 
 pub mod debug;
 mod platform;
+
+pub mod gpu_write;
+use gpu_write::{write_to_gpu_buffer, GPUWrite};
 
 /// enables both the validation layer and debug utils logging
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
@@ -2614,21 +2617,4 @@ impl shaders::json::ReflectedPipelineLayout {
 
         Ok((pipeline_layout, descriptor_set_layouts))
     }
-}
-
-unsafe fn write_to_gpu_buffer<T: GPUWrite>(
-    device: &ash::Device,
-    buffer_memory: vk::DeviceMemory,
-    elements: &[T],
-) -> anyhow::Result<()> {
-    let buffer_size = std::mem::size_of_val(elements) as vk::DeviceSize;
-
-    unsafe {
-        let mapped_dst =
-            device.map_memory(buffer_memory, 0, buffer_size, Default::default())? as *mut T;
-        std::ptr::copy_nonoverlapping(elements.as_ptr(), mapped_dst, elements.len());
-        device.unmap_memory(buffer_memory);
-    };
-
-    Ok(())
 }

@@ -9,8 +9,11 @@ use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
 
-pub mod vertex;
+mod vertex;
 use vertex::*;
+
+mod mvp;
+use mvp::MVPMatrices;
 
 // TODO
 // we want a more zoomed-out api than this
@@ -49,23 +52,6 @@ pub trait Game {
     fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription>;
     fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription>;
 }
-
-// TODO make a derive macro
-// TODO move this to a submodule of renderer with the functions that use it
-/// A marker for someday-generated types that get written to GPU memory
-/// An implementing struct must be a repr(C, align(16)) with its fields in descending alignment order
-pub trait GPUWrite {}
-impl GPUWrite for u8 {}
-impl GPUWrite for u32 {}
-
-#[derive(Debug, Clone)]
-#[repr(C, align(16))]
-struct MVPMatrices {
-    model: glam::Mat4,
-    view: glam::Mat4,
-    projection: glam::Mat4,
-}
-impl GPUWrite for MVPMatrices {}
 
 #[allow(unused)]
 pub struct VikingRoom {
