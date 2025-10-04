@@ -780,6 +780,18 @@ impl Drop for Renderer {
             self.device
                 .destroy_pipeline_layout(self.compiled_shaders.pipeline_layout, None);
 
+            #[cfg(debug_assertions)]
+            for (_frame, old_pipeline, old_compiled_shaders) in &self.old_pipelines {
+                self.device.destroy_pipeline(*old_pipeline, None);
+                self.device
+                    .destroy_pipeline_layout(old_compiled_shaders.pipeline_layout, None);
+
+                for &desc_set_layout in &old_compiled_shaders.descriptor_set_layouts {
+                    self.device
+                        .destroy_descriptor_set_layout(desc_set_layout, None);
+                }
+            }
+
             self.device.destroy_render_pass(self.render_pass, None);
 
             self.cleanup_swapchain();
