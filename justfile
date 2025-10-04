@@ -27,7 +27,7 @@ run:
 
 # run a release build
 [unix]
-run-release: prepare-shaders
+run-release: shaders
     cargo run --release
 
 # run a release build
@@ -57,8 +57,8 @@ setup:
     Remove-Item vendor\slang.zip
 
 
-# write precompiled shaders & metadata to disk
-prepare-shaders:
+# write precompiled shader bytecode & metadata to disk
+shaders:
     cargo run --bin prepare_shaders
 
 test:

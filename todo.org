@@ -1,6 +1,22 @@
 #+title: Todo
 
 * Current
+- [-] reproduce slangc's json reflection
+  - [X] entry points
+  - [ ] global parameters
+    - [ ] add gobal parmas to json
+    - [ ] support matrix types
+  - [ ] add module docs?
+    - [ ] for builders / auto bindings
+    - [ ] for params json
+
+- [ ] generate rust modules from reflection
+  - [ ] replacement macro for shader atlas
+    - [ ] vertex struct
+      - [ ] vertex attributes
+      - [ ] vertex binding descriptions
+    - [ ] MVP matrix struct
+
 - [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
   - [X] uniform buffer handling
@@ -55,22 +71,6 @@
 
   - [ ] get rid of load_vertices
     keep Vertex type out of Game callback signatures
-
-- [-] add snapshot tests for reflection json from shaders
-  - [X] set up snapshot testing
-  - [X] depth texture example
-  - [ ] a more complex example; sprite batch?
-
-- [-] migrate to using anyhow instead of BoxError
-  - [X] make the swap everywhere
-  - [ ] add context messages
-
-- [X] fix bug where descriptor set layout is not freed on teardown after a hot reload?
-  not sure how to repro this;
-  saw it happen once on windows during hot reload on a second monitor
-  is it related to having a shader miscompile?
-  - [X] need old_compiled_shaders just like old_pipelines
-    specifically to get the descriptor set layouts
 
 * Next
 - [ ] add input/gobal type info to reflection data & shader atlas
@@ -210,5 +210,5 @@
     Applications that want to set more precise stage flags, taking into account which data is accessed by which stages in the compiled program binary, are encouraged to look at the more comprehensive documentation on the reflection API.
     #+end_quote
     https://docs.shader-slang.org/en/latest/parameter-blocks.html#global-scope
-  - would it be easy to use a slang user attribute?
-
+    there is reference to this in the slangc json code;
+      there are steps after/if codegen was done
