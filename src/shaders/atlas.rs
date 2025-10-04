@@ -1,4 +1,4 @@
-#[cfg(not(debug_assertions))]
+#[cfg_attr(debug_assertions, expect(unused))]
 use std::ffi::CString;
 
 use crate::shaders::ReflectionJson;

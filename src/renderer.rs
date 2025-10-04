@@ -10,9 +10,9 @@ use ash::vk;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
-use crate::game::{Game, Vertex};
-use crate::shaders;
+use crate::game::Game;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
+use crate::{shaders, GPUWrite};
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -57,8 +57,6 @@ pub struct Renderer {
     msaa_samples: vk::SampleCountFlags,
 
     // fields that change, at least in theory
-    #[expect(unused)] // currently not used after init
-    vertices: Vec<Vertex>,
     indices: Vec<u32>,
     image_format: vk::Format,
     image_extent: vk::Extent2D,
@@ -202,7 +200,7 @@ impl Renderer {
         )?;
 
         let pipeline =
-            create_graphics_pipeline(&device, render_pass, msaa_samples, &compiled_shaders)?;
+            create_graphics_pipeline(game, &device, render_pass, msaa_samples, &compiled_shaders)?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
@@ -316,7 +314,6 @@ impl Renderer {
             presentation_queue,
             swapchain_device_ext,
             msaa_samples,
-            vertices,
             indices,
             image_format,
             image_extent,
@@ -466,7 +463,7 @@ impl Renderer {
     pub fn draw_frame(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
-        self.check_for_shader_recompile()?;
+        self.check_for_shader_recompile(game)?;
 
         let command_buffer = self.command_buffers[self.current_frame];
 
@@ -656,7 +653,7 @@ impl Renderer {
     }
 
     #[cfg(debug_assertions)]
-    fn check_for_shader_recompile(&mut self) -> Result<(), anyhow::Error> {
+    fn check_for_shader_recompile(&mut self, game: &Box<dyn Game>) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
         for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
@@ -683,7 +680,7 @@ impl Renderer {
         let edit_events = self.shader_changes.events()?;
         if !edit_events.is_empty() {
             info!("recompiling shaders...");
-            self.try_shader_recompile(&edit_events)?;
+            self.try_shader_recompile(&edit_events, game)?;
         }
 
         Ok(())
@@ -694,6 +691,7 @@ impl Renderer {
     fn try_shader_recompile(
         &mut self,
         _edit_events: &[notify::Event],
+        game: &Box<dyn Game>,
     ) -> Result<(), anyhow::Error> {
         let compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
@@ -715,6 +713,7 @@ impl Renderer {
         self.compiled_shaders = compiled_shaders;
 
         self.pipeline = create_graphics_pipeline(
+            &**game,
             &self.device,
             self.render_pass,
             self.msaa_samples,
@@ -1363,6 +1362,7 @@ fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, anyhow::Error> {
 }
 
 fn create_graphics_pipeline(
+    game: &dyn Game,
     device: &ash::Device,
     render_pass: vk::RenderPass,
     msaa_samples: vk::SampleCountFlags,
@@ -1391,8 +1391,8 @@ fn create_graphics_pipeline(
     let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    let binding_descriptions = [Vertex::binding_description()];
-    let attribute_descriptions = Vertex::attribute_descriptions();
+    let binding_descriptions = game.vertex_binding_descriptions();
+    let attribute_descriptions = game.vertex_attribute_descriptions();
     let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()
         .vertex_binding_descriptions(&binding_descriptions)
         .vertex_attribute_descriptions(&attribute_descriptions);
@@ -1546,15 +1546,16 @@ fn create_sync_objects(
     Ok((image_available, render_finished, frames_in_flight))
 }
 
-fn create_vertex_buffer(
+fn create_vertex_buffer<V: GPUWrite>(
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
-    vertices: &[Vertex],
+    vertices: &[V],
 ) -> Result<(vk::Buffer, vk::DeviceMemory), anyhow::Error> {
     let buffer_size = std::mem::size_of_val(vertices) as u64;
+
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
         instance,
         device,
@@ -1564,13 +1565,7 @@ fn create_vertex_buffer(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe {
-        let mapped_dst =
-            device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
-                as *mut Vertex;
-        std::ptr::copy_nonoverlapping(vertices.as_ptr(), mapped_dst, vertices.len());
-        device.unmap_memory(staging_buffer_memory);
-    };
+    unsafe { write_to_gpu_buffer(device, staging_buffer_memory, &vertices)? };
 
     let (vertex_buffer, vertex_buffer_memory) = create_memory_buffer(
         instance,
@@ -1616,13 +1611,7 @@ fn create_index_buffer(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe {
-        let mapped_dst =
-            device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
-                as *mut u32;
-        std::ptr::copy_nonoverlapping(indices.as_ptr(), mapped_dst, indices.len());
-        device.unmap_memory(staging_buffer_memory);
-    };
+    unsafe { write_to_gpu_buffer(&device, staging_buffer_memory, &indices)? };
 
     let (index_buffer, index_buffer_memory) = create_memory_buffer(
         instance,
@@ -1858,15 +1847,13 @@ fn create_texture_image(
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), anyhow::Error> {
     let image = game.load_texture()?;
 
-    let expected_size = image.width() * image.height() * 4;
     let bytes = image.to_rgba8().into_raw();
-
-    let mip_levels = image.width().max(image.height()).ilog2() + 1;
-
     debug_assert!(
-        bytes.len() == expected_size as usize,
+        bytes.len() == (image.width() * image.height() * 4) as usize,
         "expected rgba bytes size"
     );
+
+    let mip_levels = image.width().max(image.height()).ilog2() + 1;
 
     let buffer_size = bytes.len() as u64;
     let (staging_buffer, staging_buffer_memory) = create_memory_buffer(
@@ -1878,13 +1865,7 @@ fn create_texture_image(
         vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
     )?;
 
-    unsafe {
-        let mapped_dst =
-            device.map_memory(staging_buffer_memory, 0, buffer_size, Default::default())?
-                as *mut u8;
-        std::ptr::copy_nonoverlapping(bytes.as_ptr(), mapped_dst, bytes.len());
-        device.unmap_memory(staging_buffer_memory);
-    };
+    unsafe { write_to_gpu_buffer(&device, staging_buffer_memory, &bytes)? };
 
     let extent = vk::Extent2D::default()
         .width(image.width())
@@ -2629,4 +2610,21 @@ impl shaders::json::ReflectedPipelineLayout {
 
         Ok((pipeline_layout, descriptor_set_layouts))
     }
+}
+
+unsafe fn write_to_gpu_buffer<T: GPUWrite>(
+    device: &ash::Device,
+    buffer_memory: vk::DeviceMemory,
+    elements: &[T],
+) -> anyhow::Result<()> {
+    let buffer_size = std::mem::size_of_val(elements) as vk::DeviceSize;
+
+    unsafe {
+        let mapped_dst =
+            device.map_memory(buffer_memory, 0, buffer_size, Default::default())? as *mut T;
+        std::ptr::copy_nonoverlapping(elements.as_ptr(), mapped_dst, elements.len());
+        device.unmap_memory(buffer_memory);
+    };
+
+    Ok(())
 }

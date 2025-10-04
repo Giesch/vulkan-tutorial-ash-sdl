@@ -9,6 +9,9 @@ use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
 
+pub mod vertex;
+use vertex::*;
+
 // TODO
 // we want a more zoomed-out api than this
 //
@@ -22,6 +25,15 @@ use super::shaders::COLUMN_MAJOR;
 // then, in an 'update' callback on game, called by app
 //   game calls renderer with the handles to get access to pointers for the frame
 //   or renderer has higher-level methods that take a handle
+//
+// game makes some kind of create pipeline request to the renderer
+//   gets a pipeline object handle back, or a struct w/a set of handles?
+//   or the renderer has an internal 'pipeline description' type created that it uses
+// can we get that whole request/description from reflection?
+//   not entirely; need to be able to load textures and such
+//   so a combination of the reflected shader-atlas entry and other resources
+// how can we map the create request struct into the created resources struct?
+//   need a macro
 pub trait Game {
     fn uniform_buffer_size(&self) -> usize;
 
@@ -32,9 +44,19 @@ pub trait Game {
     ) -> anyhow::Result<()>;
 
     fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error>;
-
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error>;
+
+    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription>;
+    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription>;
 }
+
+// TODO make a derive macro
+// TODO move this to a submodule of renderer with the functions that use it
+/// A marker for someday-generated types that get written to GPU memory
+/// An implementing struct must be a repr(C, align(16)) with its fields in descending alignment order
+pub trait GPUWrite {}
+impl GPUWrite for u8 {}
+impl GPUWrite for u32 {}
 
 #[derive(Debug, Clone)]
 #[repr(C, align(16))]
@@ -43,54 +65,7 @@ struct MVPMatrices {
     view: glam::Mat4,
     projection: glam::Mat4,
 }
-
-#[derive(Debug, Clone)]
-#[repr(C, align(16))]
-pub struct Vertex {
-    position: glam::Vec3,
-    color: glam::Vec3,
-    tex_coord: glam::Vec2,
-}
-
-// TODO generate these somehow
-impl Vertex {
-    pub fn binding_description() -> ash::vk::VertexInputBindingDescription {
-        ash::vk::VertexInputBindingDescription::default()
-            .binding(0)
-            .stride(std::mem::size_of::<Self>() as u32)
-            .input_rate(ash::vk::VertexInputRate::VERTEX)
-    }
-
-    pub fn attribute_descriptions() -> [ash::vk::VertexInputAttributeDescription; 3] {
-        [
-            // position
-            ash::vk::VertexInputAttributeDescription::default()
-                // the binding in glsl; matched with other vulkan structs as well
-                .binding(0)
-                // this is the location in glsl
-                .location(0)
-                // color formats are also used to define non-color vec sizes 1-4
-                // (the official tutorial is mildly apologetic)
-                // BUT this does matter for defaults -
-                // if there aren't enough components here to fill the components shader-side,
-                // the 'color' components default to 0 and 'alpha' component defaults to 1
-                .format(ash::vk::Format::R32G32B32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, position) as u32),
-            // color
-            ash::vk::VertexInputAttributeDescription::default()
-                .binding(0)
-                .location(1)
-                .format(ash::vk::Format::R32G32B32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, color) as u32),
-            // texture coordinate
-            ash::vk::VertexInputAttributeDescription::default()
-                .binding(0)
-                .location(2)
-                .format(ash::vk::Format::R32G32_SFLOAT)
-                .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
-        ]
-    }
-}
+impl GPUWrite for MVPMatrices {}
 
 #[allow(unused)]
 pub struct VikingRoom {
@@ -124,6 +99,14 @@ impl Game for VikingRoom {
             aspect_ratio,
             mapped_uniform_buffer as *mut MVPMatrices,
         )
+    }
+
+    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
+        vec![Vertex::binding_description()]
+    }
+
+    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
+        Vertex::attribute_descriptions().to_vec()
     }
 
     // From unknownue's rust version
@@ -254,6 +237,14 @@ impl Game for DepthTexture {
             aspect_ratio,
             mapped_uniform_buffer as *mut MVPMatrices,
         )
+    }
+
+    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
+        vec![Vertex::binding_description()]
+    }
+
+    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
+        Vertex::attribute_descriptions().to_vec()
     }
 
     fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
