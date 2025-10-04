@@ -1,5 +1,6 @@
 use std::ffi::CString;
 
+use anyhow::Context;
 use atlas::DepthTextureShader;
 use shader_slang as slang;
 use shader_slang::Downcast;
@@ -18,31 +19,43 @@ pub const COLUMN_MAJOR: bool = true;
 
 pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     // TODO move this to a script binary that doesn't depend on the project
-    // TODO grep for all .slang files
+    let shaders_source_dir = manifest_path(["shaders", "source"]);
+    let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
+        .filter_map(|res| res.ok())
+        .map(|dir_entry| dir_entry.path())
+        .filter(|path| path.extension().map_or(false, |ext| ext == "slang"))
+        .filter_map(|path| {
+            path.file_name()
+                .and_then(|os_str| os_str.to_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
 
-    let ReflectedShader {
-        vertex_shader,
-        fragment_shader,
-        reflection_json,
-    } = prepare_reflected_shader("depth_texture.slang")?;
+    for slang_file in &slang_file_names {
+        let ReflectedShader {
+            vertex_shader,
+            fragment_shader,
+            reflection_json,
+        } = prepare_reflected_shader(slang_file)?;
 
-    let source_file_name = &reflection_json.source_file_name;
+        let source_file_name = &reflection_json.source_file_name;
 
-    let compiled_shaders_dir = manifest_path(["shaders", "compiled"]);
-    std::fs::create_dir_all(&compiled_shaders_dir)?;
+        let compiled_shaders_dir = manifest_path(["shaders", "compiled"]);
+        std::fs::create_dir_all(&compiled_shaders_dir)?;
 
-    let reflection_json = serde_json::to_string_pretty(&reflection_json)?;
-    let reflection_json_file_name = source_file_name.replace(".slang", ".json");
-    let json_path = manifest_path(["shaders", "compiled", &reflection_json_file_name]);
-    std::fs::write(json_path, reflection_json)?;
+        let reflection_json = serde_json::to_string_pretty(&reflection_json)?;
+        let reflection_json_file_name = source_file_name.replace(".slang", ".json");
+        let json_path = manifest_path(["shaders", "compiled", &reflection_json_file_name]);
+        std::fs::write(json_path, reflection_json)?;
 
-    let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
-    let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
-    std::fs::write(vert_path, vertex_shader.shader_bytecode.as_slice())?;
+        let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
+        let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
+        std::fs::write(vert_path, vertex_shader.shader_bytecode.as_slice())?;
 
-    let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
-    let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
-    std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
+        let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
+        let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
+        std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
+    }
 
     Ok(())
 }
@@ -55,7 +68,7 @@ pub struct ReflectedShader {
 
 fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
     let global_session = slang::GlobalSession::new().unwrap();
-    let search_path = CString::new("shaders/source")?;
+    let search_path = CString::new("shaders/source").unwrap();
 
     let session_options = slang::CompilerOptions::default()
         .vulkan_use_entry_point_name(true)
@@ -81,7 +94,9 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
 
     let session = global_session.create_session(&session_desc).unwrap();
 
-    let module = session.load_module(source_file_name)?;
+    let module = session
+        .load_module(source_file_name)
+        .with_context(|| format!("failed to load module: {source_file_name}"))?;
 
     // the examples have 1 vert and 1 frag shader
     debug_assert!(module.entry_points().len() == 2);
