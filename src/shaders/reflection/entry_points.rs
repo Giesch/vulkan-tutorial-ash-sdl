@@ -29,10 +29,8 @@ pub fn reflect_entry_points(
 
                     for field in type_layout.fields() {
                         let field_name = field.name().unwrap().to_string();
-
-                        let field_type_layout = field.type_layout();
-
                         let field_semantic_name = field.semantic_name().map(str::to_string);
+                        let field_type_layout = field.type_layout();
 
                         let field_json = match field_type_layout.kind() {
                             slang::TypeKind::Vector => {

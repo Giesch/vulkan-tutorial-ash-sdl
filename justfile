@@ -11,7 +11,7 @@ check:
 
 # run dev build with shader hot reload
 [unix]
-run:
+dev:
     cargo run
 
 # run with shader printf and vk validation layers at 'info'
@@ -21,18 +21,18 @@ shader-debug:
 
 # run dev build with shader hot reload
 [windows]
-run:
+dev:
     $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run
 
 
 # run a release build
 [unix]
-run-release: shaders
+release: shaders
     cargo run --release
 
 # run a release build
 [windows]
-run-release:
+release:
     $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run --release
 
 
@@ -61,5 +61,8 @@ setup:
 shaders:
     cargo run --bin prepare_shaders
 
-test:
+test: shaders
     INSTA_UPDATE=no cargo test
+
+snap: shaders
+    cargo insta test
