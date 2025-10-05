@@ -7,44 +7,64 @@ expression: shader.reflection_json
   "global_parameters": [
     {
       "kind": "parameterBlock",
-      "parameter_name": "depthTexture",
-      "element_type": {
-        "type_name": "DepthTexture",
+      "parameterName": "depthTexture",
+      "elementType": {
+        "typeName": "DepthTexture",
         "fields": [
           {
             "kind": "struct",
-            "field_name": "mvp",
-            "struct_type": {
-              "type_name": "MVPMatrices",
+            "fieldName": "mvp",
+            "binding": {
+              "kind": "uniform",
+              "offset": 0,
+              "size": 192
+            },
+            "structType": {
+              "typeName": "MVPMatrices",
               "fields": [
                 {
                   "kind": "matrix",
-                  "field_name": "model",
-                  "row_count": 4,
-                  "column_count": 4,
-                  "element_type": {
+                  "fieldName": "model",
+                  "binding": {
+                    "kind": "uniform",
+                    "offset": 0,
+                    "size": 64
+                  },
+                  "rowCount": 4,
+                  "columnCount": 4,
+                  "elementType": {
                     "kind": "scalar",
-                    "scalar_type": "float32"
+                    "scalarType": "float32"
                   }
                 },
                 {
                   "kind": "matrix",
-                  "field_name": "view",
-                  "row_count": 4,
-                  "column_count": 4,
-                  "element_type": {
+                  "fieldName": "view",
+                  "binding": {
+                    "kind": "uniform",
+                    "offset": 64,
+                    "size": 64
+                  },
+                  "rowCount": 4,
+                  "columnCount": 4,
+                  "elementType": {
                     "kind": "scalar",
-                    "scalar_type": "float32"
+                    "scalarType": "float32"
                   }
                 },
                 {
                   "kind": "matrix",
-                  "field_name": "proj",
-                  "row_count": 4,
-                  "column_count": 4,
-                  "element_type": {
+                  "fieldName": "proj",
+                  "binding": {
+                    "kind": "uniform",
+                    "offset": 128,
+                    "size": 64
+                  },
+                  "rowCount": 4,
+                  "columnCount": 4,
+                  "elementType": {
                     "kind": "scalar",
-                    "scalar_type": "float32"
+                    "scalarType": "float32"
                   }
                 }
               ]
@@ -52,14 +72,19 @@ expression: shader.reflection_json
           },
           {
             "kind": "resource",
-            "field_name": "texture",
-            "resource_shape": "texture2D",
-            "result_type": {
+            "fieldName": "texture",
+            "binding": {
+              "kind": "descriptorTableSlot",
+              "offset": 1,
+              "size": 1
+            },
+            "resourceShape": "texture2D",
+            "resultType": {
               "kind": "vector",
-              "element_count": 4,
-              "element_type": {
+              "elementCount": 4,
+              "elementType": {
                 "kind": "scalar",
-                "scalar_type": "float32"
+                "scalarType": "float32"
               }
             }
           }
@@ -68,45 +93,60 @@ expression: shader.reflection_json
     }
   ],
   "vertex_entry_point": {
-    "entry_point_name": "vertMain",
-    "stage": "Vertex",
+    "entryPointName": "vertMain",
+    "stage": "vertex",
     "parameters": [
       {
         "kind": "scalar",
-        "parameter_name": "vertexIndex",
-        "scalar_type": "uint32",
-        "semantic_name": "SV_VERTEXID"
+        "parameterName": "vertexIndex",
+        "scalarType": "uint32",
+        "semanticName": "SV_VERTEXID"
       },
       {
         "kind": "struct",
-        "parameter_name": "vertex",
-        "type_name": "Vertex",
+        "parameterName": "vertex",
+        "typeName": "Vertex",
         "fields": [
           {
             "kind": "vector",
-            "field_name": "position",
-            "element_count": 3,
-            "element_type": {
+            "fieldName": "position",
+            "binding": {
+              "kind": "varyingInput",
+              "offset": 0,
+              "size": 1
+            },
+            "elementCount": 3,
+            "elementType": {
               "kind": "scalar",
-              "scalar_type": "float32"
+              "scalarType": "float32"
             }
           },
           {
             "kind": "vector",
-            "field_name": "color",
-            "element_count": 3,
-            "element_type": {
+            "fieldName": "color",
+            "binding": {
+              "kind": "varyingInput",
+              "offset": 1,
+              "size": 1
+            },
+            "elementCount": 3,
+            "elementType": {
               "kind": "scalar",
-              "scalar_type": "float32"
+              "scalarType": "float32"
             }
           },
           {
             "kind": "vector",
-            "field_name": "texCoord",
-            "element_count": 2,
-            "element_type": {
+            "fieldName": "texCoord",
+            "binding": {
+              "kind": "varyingInput",
+              "offset": 2,
+              "size": 1
+            },
+            "elementCount": 2,
+            "elementType": {
               "kind": "scalar",
-              "scalar_type": "float32"
+              "scalarType": "float32"
             }
           }
         ]
@@ -114,40 +154,50 @@ expression: shader.reflection_json
     ]
   },
   "fragment_entry_point": {
-    "entry_point_name": "fragMain",
-    "stage": "Fragment",
+    "entryPointName": "fragMain",
+    "stage": "fragment",
     "parameters": [
       {
         "kind": "struct",
-        "parameter_name": "fragVertex",
-        "type_name": "FragVertex",
+        "parameterName": "fragVertex",
+        "typeName": "FragVertex",
         "fields": [
           {
             "kind": "vector",
-            "field_name": "position",
-            "element_count": 4,
-            "element_type": {
+            "fieldName": "position",
+            "semanticName": "SV_POSITION",
+            "elementCount": 4,
+            "elementType": {
               "kind": "scalar",
-              "scalar_type": "float32"
-            },
-            "semantic_name": "SV_POSITION"
-          },
-          {
-            "kind": "vector",
-            "field_name": "color",
-            "element_count": 3,
-            "element_type": {
-              "kind": "scalar",
-              "scalar_type": "float32"
+              "scalarType": "float32"
             }
           },
           {
             "kind": "vector",
-            "field_name": "texCoord",
-            "element_count": 2,
-            "element_type": {
+            "fieldName": "color",
+            "binding": {
+              "kind": "varyingInput",
+              "offset": 0,
+              "size": 1
+            },
+            "elementCount": 3,
+            "elementType": {
               "kind": "scalar",
-              "scalar_type": "float32"
+              "scalarType": "float32"
+            }
+          },
+          {
+            "kind": "vector",
+            "fieldName": "texCoord",
+            "binding": {
+              "kind": "varyingInput",
+              "offset": 1,
+              "size": 1
+            },
+            "elementCount": 2,
+            "elementType": {
+              "kind": "scalar",
+              "scalarType": "float32"
             }
           }
         ]
@@ -155,24 +205,24 @@ expression: shader.reflection_json
     ]
   },
   "pipeline_layout": {
-    "descriptor_set_layouts": [
+    "descriptorSetLayouts": [
       {
-        "binding_ranges": [
+        "bindingRanges": [
           {
             "binding": 0,
-            "descriptor_type": "ConstantBuffer",
-            "descriptor_count": 1,
-            "stage_flags": "All"
+            "descriptorType": "constantBuffer",
+            "descriptorCount": 1,
+            "stageFlags": "all"
           },
           {
             "binding": 1,
-            "descriptor_type": "CombinedTextureSampler",
-            "descriptor_count": 1,
-            "stage_flags": "All"
+            "descriptorType": "combinedTextureSampler",
+            "descriptorCount": 1,
+            "stageFlags": "all"
           }
         ]
       }
     ],
-    "push_constant_ranges": []
+    "pushConstantRanges": []
   }
 }

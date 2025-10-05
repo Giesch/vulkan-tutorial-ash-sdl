@@ -22,10 +22,9 @@ pub fn reflect_entry_points(
     for global_param in program_layout.parameters() {
         let parameter_name = global_param.name().unwrap().to_string();
 
-        assert!(
-            global_param.type_layout().kind() == slang::TypeKind::ParameterBlock,
-            "non-ParameterBlock global: {parameter_name}; only ParameterBlock globals are supported",
-        );
+        if global_param.type_layout().kind() != slang::TypeKind::ParameterBlock {
+            anyhow::bail!("non-ParameterBlock global: {parameter_name}; only ParameterBlock globals are supported")
+        }
 
         let element_type_layout = global_param.type_layout().element_type_layout();
 
@@ -139,6 +138,33 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
         let field_semantic_name = field.semantic_name().map(str::to_string);
         let field_type_layout = field.type_layout();
 
+        let field_category = field.category();
+        let field_offset = field.offset(field_category);
+        let field_size = field_type_layout.size(field_category);
+
+        let offset_size = OffsetSizeBinding {
+            offset: field_offset,
+            size: field_size,
+        };
+
+        // TODO handle this being optional in a better way
+        let binding = match field_category {
+            slang::ParameterCategory::Uniform => Some(StructFieldBinding::Uniform(offset_size)),
+            slang::ParameterCategory::DescriptorTableSlot => {
+                Some(StructFieldBinding::DescriptorTableSlot(offset_size))
+            }
+            slang::ParameterCategory::VaryingInput => {
+                Some(StructFieldBinding::VaryingInput(offset_size))
+            }
+            slang::ParameterCategory::ConstantBuffer => {
+                Some(StructFieldBinding::ConstantBuffer(offset_size))
+            }
+
+            slang::ParameterCategory::None => None,
+
+            c => todo!("field category not handled: {c:?}"),
+        };
+
         let field_json = match field_type_layout.kind() {
             slang::TypeKind::Vector => {
                 let vec_elem_count = field_type_layout.element_count().unwrap();
@@ -150,12 +176,27 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
                 let vec_elem_type =
                     VectorElementType::Scalar(ScalarVectorElementType { scalar_type });
 
-                StructField::Vector(VectorStructField {
-                    field_name,
-                    element_count: vec_elem_count,
-                    element_type: vec_elem_type,
-                    semantic_name: field_semantic_name,
-                })
+                let vec_struct_field = match (binding, field_semantic_name) {
+                    (None, Some(s)) => VectorStructField::Semantic(SemanticVectorStructField {
+                        field_name,
+                        semantic_name: s,
+                        element_count: vec_elem_count,
+                        element_type: vec_elem_type,
+                    }),
+
+                    (Some(b), None) => VectorStructField::Bound(BoundVectorStructField {
+                        field_name,
+                        binding: b,
+                        element_count: vec_elem_count,
+                        element_type: vec_elem_type,
+                    }),
+
+                    (b, s) => {
+                        panic!("unexpected combination of vector binding and semantic {b:?}, {s:?}")
+                    }
+                };
+
+                StructField::Vector(vec_struct_field)
             }
 
             slang::TypeKind::Matrix => {
@@ -170,6 +211,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
 
                 StructField::Matrix(MatrixStructField {
                     field_name,
+                    binding: binding.unwrap(),
                     row_count,
                     column_count,
                     element_type,
@@ -182,6 +224,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
 
                 StructField::Struct(StructStructField {
                     field_name,
+                    binding: binding.unwrap(),
                     struct_type: StructFieldType {
                         type_name: field_type_name,
                         fields: field_fields,
@@ -214,6 +257,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
 
                 StructField::Resource(ResourceStructField {
                     field_name,
+                    binding: binding.unwrap(),
                     resource_shape,
                     result_type,
                 })
