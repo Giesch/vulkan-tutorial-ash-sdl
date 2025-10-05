@@ -35,6 +35,7 @@ FragVertex vertMain(uint vertexIndex : SV_VertexID, Vertex vertex) {
     output.position = mul(mvpMatrix, homogenousPosition);
 
     if (vertexIndex == 0) {
+        // this is intended as a demo/test of shader printf; it's pretty noisy
         printf("first vertex position: %u, %u, %u\n", output.position.x, output.position.y, output.position.z);
     }
 
@@ -57,6 +58,7 @@ float4 fragMain(FragVertex fragVertex) : SV_TARGET {
 
     let textureColor = texture.Sample(fragVertex.texCoord);
 
+    // this is intended as a demo/test of hot reload
     let debugColor = 1.0;
     // let debugColor = float3(1.0, 0.0, 1.0);
 
