@@ -3,9 +3,11 @@
 * Current
 - [-] reproduce slangc's json reflection
   - [X] entry points
-  - [ ] global parameters
-    - [ ] add gobal parmas to json
-    - [ ] support matrix types
+  - [-] global parameters
+    - [X] add global parmas to json
+    - [X] support matrix types
+    - [X] support texture sampler
+    - [ ] include bindings
   - [ ] add module docs?
     - [ ] for builders / auto bindings
     - [ ] for params json

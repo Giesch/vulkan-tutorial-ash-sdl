@@ -1,12 +1,75 @@
 {
   "source_file_name": "depth_texture.slang",
+  "global_parameters": [
+    {
+      "kind": "parameterBlock",
+      "parameter_name": "depthTexture",
+      "element_type": {
+        "type_name": "DepthTexture",
+        "fields": [
+          {
+            "kind": "struct",
+            "field_name": "mvp",
+            "struct_type": {
+              "type_name": "MVPMatrices",
+              "fields": [
+                {
+                  "kind": "matrix",
+                  "field_name": "model",
+                  "row_count": 4,
+                  "column_count": 4,
+                  "element_type": {
+                    "kind": "scalar",
+                    "scalar_type": "float32"
+                  }
+                },
+                {
+                  "kind": "matrix",
+                  "field_name": "view",
+                  "row_count": 4,
+                  "column_count": 4,
+                  "element_type": {
+                    "kind": "scalar",
+                    "scalar_type": "float32"
+                  }
+                },
+                {
+                  "kind": "matrix",
+                  "field_name": "proj",
+                  "row_count": 4,
+                  "column_count": 4,
+                  "element_type": {
+                    "kind": "scalar",
+                    "scalar_type": "float32"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "kind": "resource",
+            "field_name": "texture",
+            "resource_shape": "texture2D",
+            "result_type": {
+              "kind": "vector",
+              "element_count": 4,
+              "element_type": {
+                "kind": "scalar",
+                "scalar_type": "float32"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ],
   "vertex_entry_point": {
-    "name": "vertMain",
+    "entry_point_name": "vertMain",
     "stage": "Vertex",
     "parameters": [
       {
         "kind": "scalar",
-        "name": "vertexIndex",
+        "parameter_name": "vertexIndex",
         "scalar_type": "uint32",
         "semantic_name": "SV_VERTEXID"
       },
@@ -17,7 +80,7 @@
         "fields": [
           {
             "kind": "vector",
-            "name": "position",
+            "field_name": "position",
             "element_count": 3,
             "element_type": {
               "kind": "scalar",
@@ -26,7 +89,7 @@
           },
           {
             "kind": "vector",
-            "name": "color",
+            "field_name": "color",
             "element_count": 3,
             "element_type": {
               "kind": "scalar",
@@ -35,7 +98,7 @@
           },
           {
             "kind": "vector",
-            "name": "texCoord",
+            "field_name": "texCoord",
             "element_count": 2,
             "element_type": {
               "kind": "scalar",
@@ -47,7 +110,7 @@
     ]
   },
   "fragment_entry_point": {
-    "name": "fragMain",
+    "entry_point_name": "fragMain",
     "stage": "Fragment",
     "parameters": [
       {
@@ -57,7 +120,7 @@
         "fields": [
           {
             "kind": "vector",
-            "name": "position",
+            "field_name": "position",
             "element_count": 4,
             "element_type": {
               "kind": "scalar",
@@ -67,7 +130,7 @@
           },
           {
             "kind": "vector",
-            "name": "color",
+            "field_name": "color",
             "element_count": 3,
             "element_type": {
               "kind": "scalar",
@@ -76,7 +139,7 @@
           },
           {
             "kind": "vector",
-            "name": "texCoord",
+            "field_name": "texCoord",
             "element_count": 2,
             "element_type": {
               "kind": "scalar",

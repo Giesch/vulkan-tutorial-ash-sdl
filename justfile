@@ -51,10 +51,15 @@ shaders:
 alias s := shaders
 
 
-# prepare shaders & run all unit tests
+# run all unit tests
 test: shaders
     INSTA_UPDATE=no cargo test
 alias t := test
+
+# run and review snapshot tests
+insta: shaders
+  cargo insta test --review
+alias i := insta
 
 
 slang_version := "2025.17.2"
