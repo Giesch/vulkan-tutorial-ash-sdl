@@ -287,3 +287,49 @@ impl DescriptorSetLayoutBuilder {
         pipeline_layout_builder.descriptor_set_layouts[self.set_index] = Some(layout);
     }
 }
+
+impl ReflectedStageFlags {
+    // cpp getShaderStageFlags
+    pub fn from_slang(stage: slang::Stage) -> Self {
+        match stage {
+            slang::Stage::Vertex => Self::Vertex,
+            slang::Stage::Fragment => Self::Fragment,
+            slang::Stage::Compute => Self::Compute,
+            slang::Stage::None => Self::Empty,
+
+            // raytracing, mesh, tesselation, dispatch, & count
+            _ => unimplemented!(),
+        }
+    }
+}
+
+impl ReflectedBindingType {
+    // cpp mapSlangBindingTypeToVulkanDescriptorType
+    pub fn from_slang(binding_type: slang::BindingType) -> Self {
+        match binding_type {
+            slang::BindingType::Sampler => Self::Sampler,
+            slang::BindingType::Texture => Self::Texture,
+            slang::BindingType::ConstantBuffer => Self::ConstantBuffer,
+            slang::BindingType::CombinedTextureSampler => Self::CombinedTextureSampler,
+
+            slang::BindingType::PushConstant => todo!(),
+            slang::BindingType::ParameterBlock => todo!(),
+
+            slang::BindingType::VaryingInput => todo!(),
+            slang::BindingType::VaryingOutput => todo!(),
+            slang::BindingType::TypedBuffer => todo!(),
+            slang::BindingType::RawBuffer => todo!(),
+            slang::BindingType::InputRenderTarget => todo!(),
+            slang::BindingType::InlineUniformData => todo!(),
+            slang::BindingType::RayTracingAccelerationStructure => todo!(),
+            slang::BindingType::ExistentialValue => todo!(),
+            slang::BindingType::MutableFlag => todo!(),
+            slang::BindingType::MutableTeture => todo!(),
+            slang::BindingType::MutableTypedBuffer => todo!(),
+            slang::BindingType::MutableRawBuffer => todo!(),
+            slang::BindingType::BaseMask => todo!(),
+            slang::BindingType::ExtMask => todo!(),
+            slang::BindingType::Unknown => todo!(),
+        }
+    }
+}

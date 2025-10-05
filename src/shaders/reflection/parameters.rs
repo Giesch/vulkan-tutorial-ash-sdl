@@ -76,7 +76,7 @@ pub fn reflect_entry_points(
                     // this is only the vertexIndex system value for now
 
                     let semantic_name = param.semantic_name().unwrap().to_string();
-                    let scalar_type = ScalarType::from_slang(type_layout.scalar_type().unwrap());
+                    let scalar_type = scalar_from_slang(type_layout.scalar_type().unwrap());
 
                     EntryPointParameter::Scalar(ReflectedScalarParameter {
                         parameter_name,
@@ -146,7 +146,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
                 let vec_element_type_layout = field_type_layout.element_type_layout();
 
                 let slang_scalar_type = vec_element_type_layout.scalar_type().unwrap();
-                let scalar_type = ScalarType::from_slang(slang_scalar_type);
+                let scalar_type = scalar_from_slang(slang_scalar_type);
                 let vec_elem_type =
                     VectorElementType::Scalar(ScalarVectorElementType { scalar_type });
 
@@ -164,8 +164,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
 
                 let mat_element_type_layout = field_type_layout.element_type_layout();
 
-                let scalar_type =
-                    ScalarType::from_slang(mat_element_type_layout.scalar_type().unwrap());
+                let scalar_type = scalar_from_slang(mat_element_type_layout.scalar_type().unwrap());
                 let element_type =
                     VectorElementType::Scalar(ScalarVectorElementType { scalar_type });
 
@@ -201,7 +200,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
                     shader_slang::TypeKind::Vector => {
                         let element_count = result_type.element_count();
 
-                        let scalar_type = ScalarType::from_slang(result_type.scalar_type());
+                        let scalar_type = scalar_from_slang(result_type.scalar_type());
                         let element_type =
                             VectorElementType::Scalar(ScalarVectorElementType { scalar_type });
 
@@ -227,4 +226,12 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
     }
 
     fields
+}
+
+fn scalar_from_slang(scalar: slang::ScalarType) -> ScalarType {
+    match scalar {
+        slang::ScalarType::Uint32 => ScalarType::Uint32,
+        slang::ScalarType::Float32 => ScalarType::Float32,
+        k => todo!("slang scalar type not handled: {k:?}"),
+    }
 }

@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use shader_slang as slang;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
@@ -134,14 +133,4 @@ pub struct ScalarVectorElementType {
 pub enum ScalarType {
     Float32,
     Uint32,
-}
-
-impl ScalarType {
-    pub fn from_slang(scalar: slang::ScalarType) -> Self {
-        match scalar {
-            slang::ScalarType::Uint32 => Self::Uint32,
-            slang::ScalarType::Float32 => Self::Float32,
-            k => todo!("slang scalar type not handled: {k:?}"),
-        }
-    }
 }

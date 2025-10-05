@@ -2607,6 +2607,27 @@ impl shaders::json::ReflectedDescriptorSetLayout {
     }
 }
 
+impl shaders::json::ReflectedDescriptorSetLayoutBinding {
+    pub fn to_vk(&self) -> vk::DescriptorSetLayoutBinding<'static> {
+        vk::DescriptorSetLayoutBinding::default()
+            .stage_flags(self.stage_flags.to_vk())
+            .binding(self.binding)
+            .descriptor_count(self.descriptor_count)
+            .descriptor_type(self.descriptor_type.to_vk())
+    }
+}
+
+impl shaders::json::ReflectedBindingType {
+    pub fn to_vk(&self) -> vk::DescriptorType {
+        match self {
+            Self::Sampler => vk::DescriptorType::SAMPLER,
+            Self::Texture => vk::DescriptorType::SAMPLED_IMAGE,
+            Self::ConstantBuffer => vk::DescriptorType::UNIFORM_BUFFER,
+            Self::CombinedTextureSampler => vk::DescriptorType::COMBINED_IMAGE_SAMPLER,
+        }
+    }
+}
+
 impl shaders::json::ReflectedPipelineLayout {
     unsafe fn vk_create(
         &self,
@@ -2632,5 +2653,26 @@ impl shaders::json::ReflectedPipelineLayout {
             unsafe { device.create_pipeline_layout(&pipeline_layout_info, None)? };
 
         Ok((pipeline_layout, descriptor_set_layouts))
+    }
+}
+
+impl shaders::json::ReflectedPushConstantRange {
+    pub fn to_vk(&self) -> vk::PushConstantRange {
+        vk::PushConstantRange::default()
+            .stage_flags(self.stage_flags.to_vk())
+            .offset(self.size)
+            .size(self.size)
+    }
+}
+
+impl shaders::json::ReflectedStageFlags {
+    pub fn to_vk(self) -> vk::ShaderStageFlags {
+        match self {
+            Self::Vertex => vk::ShaderStageFlags::VERTEX,
+            Self::Fragment => vk::ShaderStageFlags::FRAGMENT,
+            Self::Compute => vk::ShaderStageFlags::COMPUTE,
+            Self::All => vk::ShaderStageFlags::ALL,
+            Self::Empty => vk::ShaderStageFlags::empty(),
+        }
     }
 }

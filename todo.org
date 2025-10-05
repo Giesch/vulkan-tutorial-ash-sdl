@@ -8,6 +8,7 @@
     - [X] support matrix types
     - [X] support texture sampler
     - [ ] include binding/index/offset
+      uniform buffer is handled differently than everything else?
       - [ ] top level parameters
       - [ ] struct fields
 
