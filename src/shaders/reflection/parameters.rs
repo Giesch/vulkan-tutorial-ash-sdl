@@ -67,24 +67,38 @@ pub fn reflect_entry_points(
                     let fields = reflect_struct_fields(type_layout);
                     let type_name = type_layout.name().unwrap().to_string();
 
-                    EntryPointParameter::Struct(ReflectedStructParameter {
+                    EntryPointParameter::Struct(StructEntryPointParameter {
                         parameter_name,
+                        binding: param_binding(param).unwrap(),
                         type_name,
                         fields,
                     })
                 }
 
                 slang::TypeKind::Scalar => {
-                    // this is only the vertexIndex system value for now
-
-                    let semantic_name = param.semantic_name().unwrap().to_string();
+                    let semantic = param.semantic_name().map(str::to_string);
                     let scalar_type = scalar_from_slang(type_layout.scalar_type().unwrap());
 
-                    EntryPointParameter::Scalar(ReflectedScalarParameter {
-                        parameter_name,
-                        scalar_type,
-                        semantic_name,
-                    })
+                    let scalar_param = match semantic {
+                        Some(semantic_name) => {
+                            ScalarEntryPointParameter::Semantic(SemanticScalarEntryPointParameter {
+                                parameter_name,
+                                scalar_type,
+                                semantic_name,
+                            })
+                        }
+
+                        None => {
+                            let binding = param_binding(param).unwrap();
+                            ScalarEntryPointParameter::Bound(BoundScalarEntryPointParameter {
+                                parameter_name,
+                                scalar_type,
+                                binding,
+                            })
+                        }
+                    };
+
+                    EntryPointParameter::Scalar(scalar_param)
                 }
 
                 k => todo!("type kind reflection not implemented: {k:?}"),
@@ -141,42 +155,8 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
         let field_semantic_name = field.semantic_name().map(str::to_string);
         let field_type_layout = field.type_layout();
 
-        let field_category = field.category();
-        let field_offset = field.offset(field_category);
-        let field_size = field_type_layout.size(field_category);
-
         // TODO handle this being optional in a better way; avoid the unwraps() below
-        let binding = match field_category {
-            slang::ParameterCategory::Uniform => {
-                Some(StructFieldBinding::Uniform(OffsetSizeBinding {
-                    offset: field_offset,
-                    size: field_size,
-                }))
-            }
-
-            slang::ParameterCategory::DescriptorTableSlot => {
-                Some(StructFieldBinding::DescriptorTableSlot(IndexCountBinding {
-                    index: field_offset,
-                    count: field_size,
-                }))
-            }
-            slang::ParameterCategory::VaryingInput => {
-                Some(StructFieldBinding::VaryingInput(IndexCountBinding {
-                    index: field_offset,
-                    count: field_size,
-                }))
-            }
-            slang::ParameterCategory::ConstantBuffer => {
-                Some(StructFieldBinding::ConstantBuffer(IndexCountBinding {
-                    index: field_offset,
-                    count: field_size,
-                }))
-            }
-
-            slang::ParameterCategory::None => None,
-
-            c => todo!("field category not handled: {c:?}"),
-        };
+        let binding = param_binding(field);
 
         let field_json = match field_type_layout.kind() {
             slang::TypeKind::Vector => {
@@ -294,5 +274,42 @@ fn scalar_from_slang(scalar: slang::ScalarType) -> ScalarType {
         slang::ScalarType::Uint32 => ScalarType::Uint32,
         slang::ScalarType::Float32 => ScalarType::Float32,
         k => todo!("slang scalar type not handled: {k:?}"),
+    }
+}
+
+fn param_binding(param: &slang::reflection::VariableLayout) -> Option<Binding> {
+    let category = param.category();
+
+    let offset = param.offset(category);
+    let size = param.type_layout().size(category);
+
+    match category {
+        slang::ParameterCategory::Uniform => {
+            Some(Binding::Uniform(OffsetSizeBinding { offset, size }))
+        }
+
+        slang::ParameterCategory::DescriptorTableSlot => {
+            Some(Binding::DescriptorTableSlot(IndexCountBinding {
+                index: offset,
+                count: size,
+            }))
+        }
+        slang::ParameterCategory::VaryingInput => Some(Binding::VaryingInput(IndexCountBinding {
+            index: offset,
+            count: size,
+        })),
+        slang::ParameterCategory::ConstantBuffer => {
+            Some(Binding::ConstantBuffer(IndexCountBinding {
+                index: offset,
+                count: size,
+            }))
+        }
+
+        // TODO is this correct?
+        slang::ParameterCategory::SubElementRegisterSpace => None,
+
+        slang::ParameterCategory::None => None,
+
+        c => todo!("param category not handled: {c:?}"),
     }
 }

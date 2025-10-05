@@ -10,8 +10,11 @@
     - [-] include binding/index/offset
       uniform buffer is handled differently than everything else?
       - [X] struct fields
-      - [ ] top level parameters
+      - [X] entry point params
         what are these bindings used for? look at slang-rhi?
+      - [-] global parameters
+        parameter blocks should not have bindings themselves
+        and the inner struct is handled already
 
 - [ ] generate rust modules from reflection
   - [ ] replacement macro for shader atlas

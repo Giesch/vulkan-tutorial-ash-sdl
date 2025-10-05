@@ -43,24 +43,40 @@ pub enum EntryPointStage {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum EntryPointParameter {
-    Struct(ReflectedStructParameter),
-    Scalar(ReflectedScalarParameter),
+    Struct(StructEntryPointParameter),
+    Scalar(ScalarEntryPointParameter),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReflectedStructParameter {
+pub struct StructEntryPointParameter {
     pub parameter_name: String,
+    pub binding: Binding,
     pub type_name: String,
     pub fields: Vec<StructField>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged, rename_all = "camelCase")]
+pub enum ScalarEntryPointParameter {
+    Bound(BoundScalarEntryPointParameter),
+    Semantic(SemanticScalarEntryPointParameter),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct ReflectedScalarParameter {
+pub struct BoundScalarEntryPointParameter {
     pub parameter_name: String,
+    pub binding: Binding,
     pub scalar_type: ScalarType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SemanticScalarEntryPointParameter {
+    pub parameter_name: String,
     pub semantic_name: String,
+    pub scalar_type: ScalarType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -74,7 +90,7 @@ pub enum StructField {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
-pub enum StructFieldBinding {
+pub enum Binding {
     Uniform(OffsetSizeBinding),
     DescriptorTableSlot(IndexCountBinding),
     VaryingInput(IndexCountBinding),
@@ -120,7 +136,7 @@ pub struct SemanticVectorStructField {
 #[serde(rename_all = "camelCase")]
 pub struct BoundVectorStructField {
     pub field_name: String,
-    pub binding: StructFieldBinding,
+    pub binding: Binding,
     pub element_count: usize,
     pub element_type: VectorElementType,
 }
@@ -129,7 +145,7 @@ pub struct BoundVectorStructField {
 #[serde(rename_all = "camelCase")]
 pub struct MatrixStructField {
     pub field_name: String,
-    pub binding: StructFieldBinding,
+    pub binding: Binding,
     pub row_count: u32,
     pub column_count: u32,
     pub element_type: VectorElementType,
@@ -139,7 +155,7 @@ pub struct MatrixStructField {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceStructField {
     pub field_name: String,
-    pub binding: StructFieldBinding,
+    pub binding: Binding,
     pub resource_shape: ResourceShape,
     pub result_type: ResourceResultType,
 }
@@ -167,7 +183,7 @@ pub struct VectorResultType {
 #[serde(rename_all = "camelCase")]
 pub struct StructStructField {
     pub field_name: String,
-    pub binding: StructFieldBinding,
+    pub binding: Binding,
     pub struct_type: StructFieldType,
 }
 

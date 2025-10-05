@@ -95,12 +95,17 @@
       {
         "kind": "scalar",
         "parameterName": "vertexIndex",
-        "scalarType": "uint32",
-        "semanticName": "SV_VERTEXID"
+        "semanticName": "SV_VERTEXID",
+        "scalarType": "uint32"
       },
       {
         "kind": "struct",
         "parameterName": "vertex",
+        "binding": {
+          "kind": "varyingInput",
+          "index": 0,
+          "count": 3
+        },
         "typeName": "Vertex",
         "fields": [
           {
@@ -156,6 +161,11 @@
       {
         "kind": "struct",
         "parameterName": "fragVertex",
+        "binding": {
+          "kind": "varyingInput",
+          "index": 0,
+          "count": 2
+        },
         "typeName": "FragVertex",
         "fields": [
           {
