@@ -1,12 +1,12 @@
+//! slang-reflection-based vulkan builders
+//! using automatically generated bindings from slang ParameterBlocks
+//!
+//! based on the example in the slang docs here:
+//! https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
+
 use shader_slang as slang;
 
 use crate::shaders::json::*;
-
-// slang-reflection-based vulkan builders
-// using automatically generated bindings from slang ParameterBlocks
-//
-// based on the example in the slang docs here:
-// https://docs.shader-slang.org/en/latest/parameter-blocks.html#using-parameter-blocks-with-reflection
 
 pub fn reflect_pipeline_layout(
     program_layout: &slang::reflection::Shader,

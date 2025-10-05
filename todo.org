@@ -12,10 +12,10 @@
       - [X] struct fields
       - [ ] top level parameters
 
-  - [-] add module docs?
+  - [X] add module docs?
     - [X] for params json
-    - [ ] for builders / auto bindings
-    - [ ] remove cpp file
+    - [X] for builders / auto bindings
+    - [X] remove cpp file
 
 - [ ] understand slanc's binding json differences
   - emitReflectionVarBindingInfoJSON

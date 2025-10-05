@@ -1,3 +1,6 @@
+//! reflection generating a json format based on slangc's, implemented originally here:
+//! https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp
+
 use shader_slang as slang;
 
 use crate::shaders::json::*;
