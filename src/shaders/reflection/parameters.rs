@@ -22,8 +22,10 @@ pub fn reflect_entry_points(
     for global_param in program_layout.parameters() {
         let parameter_name = global_param.name().unwrap().to_string();
 
-        let global_param_type_layout = global_param.type_layout();
-        assert!(global_param_type_layout.kind() == slang::TypeKind::ParameterBlock);
+        assert!(
+            global_param.type_layout().kind() == slang::TypeKind::ParameterBlock,
+            "non-ParameterBlock global: {parameter_name}; only ParameterBlock globals are supported",
+        );
 
         let element_type_layout = global_param.type_layout().element_type_layout();
 
@@ -54,14 +56,20 @@ pub fn reflect_entry_points(
 
         let mut params = vec![];
         for param in entry_point.parameters() {
-            let param_name = param.name().unwrap().to_string();
+            let parameter_name = param.name().unwrap().to_string();
 
             let type_layout = param.type_layout();
 
             let entry_point_param_json = match type_layout.kind() {
                 slang::TypeKind::Struct => {
-                    let struct_param = reflect_struct_parameter(type_layout, param_name);
-                    EntryPointParameter::Struct(struct_param)
+                    let fields = reflect_struct_fields(type_layout);
+                    let type_name = type_layout.name().unwrap().to_string();
+
+                    EntryPointParameter::Struct(ReflectedStructParameter {
+                        parameter_name,
+                        type_name,
+                        fields,
+                    })
                 }
 
                 slang::TypeKind::Scalar => {
@@ -71,7 +79,7 @@ pub fn reflect_entry_points(
                     let scalar_type = ScalarType::from_slang(type_layout.scalar_type().unwrap());
 
                     EntryPointParameter::Scalar(ReflectedScalarParameter {
-                        parameter_name: param_name,
+                        parameter_name,
                         scalar_type,
                         semantic_name,
                     })
@@ -121,20 +129,6 @@ pub fn reflect_entry_points(
     };
 
     Ok(parameters)
-}
-
-fn reflect_struct_parameter(
-    type_layout: &slang::reflection::TypeLayout,
-    param_name: String,
-) -> ReflectedStructParameter {
-    let fields = reflect_struct_fields(type_layout);
-    let struct_type_name = type_layout.name().unwrap().to_string();
-
-    ReflectedStructParameter {
-        parameter_name: param_name,
-        type_name: struct_type_name,
-        fields,
-    }
 }
 
 fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> Vec<StructField> {

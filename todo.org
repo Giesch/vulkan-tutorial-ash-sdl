@@ -7,10 +7,14 @@
     - [X] add global parmas to json
     - [X] support matrix types
     - [X] support texture sampler
-    - [ ] include bindings
+    - [ ] include binding/index/offset
+      - [ ] top level parameters
+      - [ ] struct fields
+
   - [ ] add module docs?
     - [ ] for builders / auto bindings
     - [ ] for params json
+    - [ ] remove cpp file
 
 - [ ] generate rust modules from reflection
   - [ ] replacement macro for shader atlas
@@ -18,8 +22,6 @@
       - [ ] vertex attributes
       - [ ] vertex binding descriptions
     - [ ] MVP matrix struct
-
-- [ ] remove cpp file and add reflection module docs
 
 - [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
