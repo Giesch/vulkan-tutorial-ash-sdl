@@ -2,8 +2,8 @@ use shader_slang as slang;
 
 use super::json::*;
 
-mod entry_points;
-use entry_points::*;
+mod parameters;
+use parameters::*;
 
 mod pipeline_layout;
 use pipeline_layout::*;

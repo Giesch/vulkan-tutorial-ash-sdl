@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-mod entry_points;
-pub use entry_points::*;
+mod parameters;
+pub use parameters::*;
 
 mod pipeline_builders;
 pub use pipeline_builders::*;

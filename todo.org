@@ -17,6 +17,8 @@
       - [ ] vertex binding descriptions
     - [ ] MVP matrix struct
 
+- [ ] remove cpp file and add reflection module docs
+
 - [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples
   - [X] uniform buffer handling
