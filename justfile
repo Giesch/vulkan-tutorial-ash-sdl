@@ -3,21 +3,23 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-Command"]
 # NOTE this does nothing on windows
 set dotenv-load := true
 
-
-# compiler watch
+# compiler/linter watch via bacon
 check:
     bacon check-all
+alias c := check
+
+
+# list all available just recipes
+list:
+    @just --list --unsorted
+alias l := list
 
 
 # run dev build with shader hot reload
 [unix]
 dev:
     cargo run
-
-# run with shader printf and vk validation layers at 'info'
-[unix]
-shader-debug:
-    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
+alias d := dev
 
 # run dev build with shader hot reload
 [windows]
@@ -25,10 +27,17 @@ dev:
     $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run
 
 
+# run with shader printf and vk validation layers at 'info'
+[unix]
+shader-debug:
+    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
+
+
 # run a release build
 [unix]
 release: shaders
     cargo run --release
+alias r := release
 
 # run a release build
 [windows]
@@ -36,9 +45,21 @@ release:
     $Env:SLANG_DIR = "$PWD\vendor\slang"; cargo run --release
 
 
+# write precompiled shader bytecode & metadata to disk
+shaders:
+    cargo run --bin prepare_shaders
+alias s := shaders
+
+
+# prepare shaders & run all unit tests
+test: shaders
+    INSTA_UPDATE=no cargo test
+alias t := test
+
+
 slang_version := "2025.17.2"
 
-# download Slang shader compiler
+# download the Slang shader compiler
 [linux]
 setup:
     rm -rf vendor/slang
@@ -47,7 +68,7 @@ setup:
     tar xzf vendor/slang.tar.gz --directory=vendor/slang
     rm vendor/slang.tar.gz
 
-# download Slang shader compiler
+# download the Slang shader compiler
 [windows]
 setup:
     if (Test-Path -Path vendor\slang) { Remove-Item vendor\slang -Recurse }
@@ -57,12 +78,3 @@ setup:
     Remove-Item vendor\slang.zip
 
 
-# write precompiled shader bytecode & metadata to disk
-shaders:
-    cargo run --bin prepare_shaders
-
-test: shaders
-    INSTA_UPDATE=no cargo test
-
-snap: shaders
-    cargo insta test
