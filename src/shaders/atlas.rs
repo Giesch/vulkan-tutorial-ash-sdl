@@ -49,13 +49,21 @@ impl DepthTextureShader {
 
     #[cfg(not(debug_assertions))]
     pub fn vert_entry_point_name(&self) -> CString {
-        let entry_point = self.reflection_json.vertex_entry_point.name.clone();
+        let entry_point = self
+            .reflection_json
+            .vertex_entry_point
+            .entry_point_name
+            .clone();
         CString::new(entry_point).unwrap()
     }
 
     #[cfg(not(debug_assertions))]
     pub fn frag_entry_point_name(&self) -> CString {
-        let entry_point = self.reflection_json.fragment_entry_point.name.clone();
+        let entry_point = self
+            .reflection_json
+            .fragment_entry_point
+            .entry_point_name
+            .clone();
         CString::new(entry_point).unwrap()
     }
 
