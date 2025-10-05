@@ -142,22 +142,32 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
         let field_offset = field.offset(field_category);
         let field_size = field_type_layout.size(field_category);
 
-        let offset_size = OffsetSizeBinding {
-            offset: field_offset,
-            size: field_size,
-        };
-
-        // TODO handle this being optional in a better way
+        // TODO handle this being optional in a better way; avoid the unwraps() below
         let binding = match field_category {
-            slang::ParameterCategory::Uniform => Some(StructFieldBinding::Uniform(offset_size)),
+            slang::ParameterCategory::Uniform => {
+                Some(StructFieldBinding::Uniform(OffsetSizeBinding {
+                    offset: field_offset,
+                    size: field_size,
+                }))
+            }
+
             slang::ParameterCategory::DescriptorTableSlot => {
-                Some(StructFieldBinding::DescriptorTableSlot(offset_size))
+                Some(StructFieldBinding::DescriptorTableSlot(IndexCountBinding {
+                    index: field_offset,
+                    count: field_size,
+                }))
             }
             slang::ParameterCategory::VaryingInput => {
-                Some(StructFieldBinding::VaryingInput(offset_size))
+                Some(StructFieldBinding::VaryingInput(IndexCountBinding {
+                    index: field_offset,
+                    count: field_size,
+                }))
             }
             slang::ParameterCategory::ConstantBuffer => {
-                Some(StructFieldBinding::ConstantBuffer(offset_size))
+                Some(StructFieldBinding::ConstantBuffer(IndexCountBinding {
+                    index: field_offset,
+                    count: field_size,
+                }))
             }
 
             slang::ParameterCategory::None => None,
@@ -177,19 +187,23 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
                     VectorElementType::Scalar(ScalarVectorElementType { scalar_type });
 
                 let vec_struct_field = match (binding, field_semantic_name) {
-                    (None, Some(s)) => VectorStructField::Semantic(SemanticVectorStructField {
-                        field_name,
-                        semantic_name: s,
-                        element_count: vec_elem_count,
-                        element_type: vec_elem_type,
-                    }),
+                    (None, Some(field_semantic)) => {
+                        VectorStructField::Semantic(SemanticVectorStructField {
+                            field_name,
+                            semantic_name: field_semantic,
+                            element_count: vec_elem_count,
+                            element_type: vec_elem_type,
+                        })
+                    }
 
-                    (Some(b), None) => VectorStructField::Bound(BoundVectorStructField {
-                        field_name,
-                        binding: b,
-                        element_count: vec_elem_count,
-                        element_type: vec_elem_type,
-                    }),
+                    (Some(field_binding), None) => {
+                        VectorStructField::Bound(BoundVectorStructField {
+                            field_name,
+                            binding: field_binding,
+                            element_count: vec_elem_count,
+                            element_type: vec_elem_type,
+                        })
+                    }
 
                     (b, s) => {
                         panic!("unexpected combination of vector binding and semantic {b:?}, {s:?}")

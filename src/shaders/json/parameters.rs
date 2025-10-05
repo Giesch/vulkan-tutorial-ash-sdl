@@ -1,3 +1,7 @@
+//! JSON format for global and entrypoint parameters
+//!
+//! this mostly follows slangc's format, with some exceptions and many limitations
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -72,9 +76,9 @@ pub enum StructField {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StructFieldBinding {
     Uniform(OffsetSizeBinding),
-    DescriptorTableSlot(OffsetSizeBinding),
-    VaryingInput(OffsetSizeBinding),
-    ConstantBuffer(OffsetSizeBinding),
+    DescriptorTableSlot(IndexCountBinding),
+    VaryingInput(IndexCountBinding),
+    ConstantBuffer(IndexCountBinding),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -82,6 +86,18 @@ pub enum StructFieldBinding {
 pub struct OffsetSizeBinding {
     pub offset: usize,
     pub size: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IndexCountBinding {
+    pub index: usize,
+    // NOTE slangc omits a count of 1,
+    // and replaces 'bitwise not 0' with the string 'unbounded'
+    // see SLANG_UNBOUNDED_SIZE
+    // https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/source/slang/slang-reflection-json.cpp#L124
+    // https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/include/slang.h#L2167
+    pub count: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

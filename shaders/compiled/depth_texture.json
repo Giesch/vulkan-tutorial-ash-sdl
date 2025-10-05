@@ -71,8 +71,8 @@
             "fieldName": "texture",
             "binding": {
               "kind": "descriptorTableSlot",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "resourceShape": "texture2D",
             "resultType": {
@@ -108,8 +108,8 @@
             "fieldName": "position",
             "binding": {
               "kind": "varyingInput",
-              "offset": 0,
-              "size": 1
+              "index": 0,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -122,8 +122,8 @@
             "fieldName": "color",
             "binding": {
               "kind": "varyingInput",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -136,8 +136,8 @@
             "fieldName": "texCoord",
             "binding": {
               "kind": "varyingInput",
-              "offset": 2,
-              "size": 1
+              "index": 2,
+              "count": 1
             },
             "elementCount": 2,
             "elementType": {
@@ -173,8 +173,8 @@
             "fieldName": "color",
             "binding": {
               "kind": "varyingInput",
-              "offset": 0,
-              "size": 1
+              "index": 0,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -187,8 +187,8 @@
             "fieldName": "texCoord",
             "binding": {
               "kind": "varyingInput",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "elementCount": 2,
             "elementType": {

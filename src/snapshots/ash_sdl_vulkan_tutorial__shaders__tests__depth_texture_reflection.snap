@@ -75,8 +75,8 @@ expression: shader.reflection_json
             "fieldName": "texture",
             "binding": {
               "kind": "descriptorTableSlot",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "resourceShape": "texture2D",
             "resultType": {
@@ -112,8 +112,8 @@ expression: shader.reflection_json
             "fieldName": "position",
             "binding": {
               "kind": "varyingInput",
-              "offset": 0,
-              "size": 1
+              "index": 0,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -126,8 +126,8 @@ expression: shader.reflection_json
             "fieldName": "color",
             "binding": {
               "kind": "varyingInput",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -140,8 +140,8 @@ expression: shader.reflection_json
             "fieldName": "texCoord",
             "binding": {
               "kind": "varyingInput",
-              "offset": 2,
-              "size": 1
+              "index": 2,
+              "count": 1
             },
             "elementCount": 2,
             "elementType": {
@@ -177,8 +177,8 @@ expression: shader.reflection_json
             "fieldName": "color",
             "binding": {
               "kind": "varyingInput",
-              "offset": 0,
-              "size": 1
+              "index": 0,
+              "count": 1
             },
             "elementCount": 3,
             "elementType": {
@@ -191,8 +191,8 @@ expression: shader.reflection_json
             "fieldName": "texCoord",
             "binding": {
               "kind": "varyingInput",
-              "offset": 1,
-              "size": 1
+              "index": 1,
+              "count": 1
             },
             "elementCount": 2,
             "elementType": {

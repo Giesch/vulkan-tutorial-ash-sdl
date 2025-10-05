@@ -1,3 +1,7 @@
+//! JSON format for pipeline & descriptor set layouts
+//!
+//! These are based on what's needed for the vulkan builders
+
 use serde::{Deserialize, Serialize};
 
 /// reflected data for creating a vulkan PipelineLayout
