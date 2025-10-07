@@ -1,3 +1,5 @@
+#language slang 2026
+
 module depth_texture;
 
 // modified from the official tutorial example here:

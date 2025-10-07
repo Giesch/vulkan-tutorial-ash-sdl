@@ -1,27 +1,15 @@
 #+title: Todo
 
 * Current
-- [-] reproduce slangc's json reflection
-  - [X] entry points
-  - [-] global parameters
-    - [X] add global parmas to json
-    - [X] support matrix types
-    - [X] support texture sampler
-    - [-] include binding/index/offset
-      uniform buffer is handled differently than everything else?
-      - [X] struct fields
-      - [X] entry point params
-        what are these bindings used for? look at slang-rhi?
-      - [-] global parameters
-        parameter blocks should not have bindings themselves
-        and the inner struct is handled already
-
 - [ ] generate rust modules from reflection
+  - [ ] assert that slang struct fields are in descending size order
+    - [ ] unit test this from the level of shader source code
   - [ ] replacement macro for shader atlas
-    - [ ] vertex struct
+    move the structs into the atlas?
+    - [ ] MVP matrix struct
+    - [ ] Vertex struct
       - [ ] vertex attributes
       - [ ] vertex binding descriptions
-    - [ ] MVP matrix struct
 
 - [-] move example-specific code out of the renderer
   ie, make the renderer more generic across examples

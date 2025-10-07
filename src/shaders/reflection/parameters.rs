@@ -230,10 +230,32 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
             }
 
             slang::TypeKind::Resource => {
-                let resource_shape = match field_type_layout.resource_shape().unwrap() {
-                    shader_slang::ResourceShape::SlangTexture2d => ResourceShape::Texture2D,
-                    s => todo!("resource shape not handled: {s:?}"),
+                let shape = field_type_layout.resource_shape().unwrap();
+
+                // FIXME these assertions pass with slang >= 2025.14
+                // https://github.com/shader-slang/slang/commit/c5091f0ae3a8b816af893e84ef289f745acf39dc
+                assert!(format!("{shape:?}") == "SlangResourceExtShapeMask");
+                assert!(shape != slang::ResourceShape::SlangResourceExtShapeMask);
+                assert!(shape as u32 == 258);
+                assert!(
+                    shape as u32
+                        == slang::ResourceShape::SlangTexture2d as u32
+                            | slang::ResourceShape::SlangTextureCombinedFlag as u32
+                );
+                // panics:
+                // let new_shape: slang::ResourceShape = unsafe { std::mem::transmute(shape as u32) };
+
+                let resource_shape = if shape as u32 == 258 {
+                    ResourceShape::Texture2D
+                } else {
+                    panic!()
                 };
+                // let resource_shape = match field_type_layout.resource_shape().unwrap() {
+                //     // FIXME neither of these match with slang >= 2025.14
+                //     slang::ResourceShape::SlangTexture2d => ResourceShape::Texture2D,
+                //     slang::ResourceShape::SlangResourceExtShapeMask => ResourceShape::Texture2D,
+                //     s => todo!("resource shape not handled: {s:?}"),
+                // };
 
                 let result_type = field_type_layout.resource_result_type().unwrap();
                 let result_type = match result_type.kind() {

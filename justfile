@@ -18,6 +18,8 @@ alias l := list
 # run dev build with shader hot reload
 [unix]
 dev:
+    # cargo build
+    # cp vendor/slang/lib/*.so target/debug/
     cargo run
 alias d := dev
 
@@ -36,6 +38,8 @@ shader-debug:
 # run a release build
 [unix]
 release: shaders
+    # cargo build --release
+    # cp vendor/slang/lib/*.so target/release/
     cargo run --release
 alias r := release
 
@@ -61,25 +65,44 @@ insta: shaders
   cargo insta test --review
 alias i := insta
 
+# so breaks with shape mask mismatch
+# slang_version := "2025.18.1"
 
-slang_version := "2025.17.2"
+# I thought this had no so? but now it does? when did that happen
+#   did they make a retroactive ci change or something?
+# it still breaks with the shape mask mismatch like 18.1
+# slang_version := "2025.17.2"
 
-# download the Slang shader compiler
-[linux]
-setup:
-    rm -rf vendor/slang
-    mkdir -p vendor/slang
-    wget -O vendor/slang.tar.gz "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-linux-x86_64.tar.gz"
-    tar xzf vendor/slang.tar.gz --directory=vendor/slang
-    rm vendor/slang.tar.gz
+# this matches my local vulkan sdk and works with the .so copy
+# slang_version := "2025.7.1"
 
-# download the Slang shader compiler
-[windows]
-setup:
-    if (Test-Path -Path vendor\slang) { Remove-Item vendor\slang -Recurse }
-    New-Item -Path vendor\slang -ItemType Directory | Out-Null
-    $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -OutFile vendor\slang.zip -Uri "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-windows-x86_64.zip"
-    Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
-    Remove-Item vendor\slang.zip
+# these work with the .so copy
+# slang_version := "2025.8"
+# slang_version := "2025.9"
 
+# these run, but have a different validation layer error re: DrawParameters
+# slang_version := "2025.10"
+# slang_version := "2025.11"
+# slang_version := "2025.12"
+# slang_version := "2025.13"
 
+# this is the first one that crashes with the shape mask mismatch like 18.1 does
+# slang_version := "2025.14"
+
+# # download the Slang shader compiler
+# [linux]
+# setup:
+#     rm -rf vendor/slang
+#     mkdir -p vendor/slang
+#     wget -O vendor/slang.tar.gz "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-linux-x86_64.tar.gz"
+#     tar xzf vendor/slang.tar.gz --directory=vendor/slang
+#     rm vendor/slang.tar.gz
+
+# # download the Slang shader compiler
+# [windows]
+# setup:
+#     if (Test-Path -Path vendor\slang) { Remove-Item vendor\slang -Recurse }
+#     New-Item -Path vendor\slang -ItemType Directory | Out-Null
+#     $ProgressPreference='SilentlyContinue'; Invoke-WebRequest -OutFile vendor\slang.zip -Uri "https://github.com/shader-slang/slang/releases/download/v{{slang_version}}/slang-{{slang_version}}-windows-x86_64.zip"
+#     Expand-Archive -Path vendor\slang.zip -DestinationPath vendor\slang
+#     Remove-Item vendor\slang.zip

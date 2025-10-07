@@ -937,7 +937,15 @@ impl QueueFamilyIndices {
     }
 }
 
-const REQUIRED_DEVICE_EXTENSIONS: [&CStr; 1] = [vk::KHR_SWAPCHAIN_NAME];
+const REQUIRED_DEVICE_EXTENSIONS: [&CStr; 2] = [
+    // always required
+    vk::KHR_SWAPCHAIN_NAME,
+    // required by slang's generated spirv after 2025.10
+    //   the feature is required by the 2024 roadmap
+    //   https://registry.khronos.org/vulkan/specs/latest/html/vkspec.html#profile-features-roadmap-2024
+    // it might be more correct to use physical device features 2 for this
+    vk::KHR_SHADER_DRAW_PARAMETERS_NAME,
+];
 
 fn choose_physical_device(
     instance: &ash::Instance,
