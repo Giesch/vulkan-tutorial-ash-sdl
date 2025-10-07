@@ -34,7 +34,7 @@ pub fn reflect_entry_points(
         let element_type = match element_type_layout.kind() {
             slang::TypeKind::Struct => {
                 let element_type_name = element_type_layout.name().unwrap().to_string();
-                let fields = reflect_struct_fields(element_type_layout);
+                let fields = reflect_struct_fields(element_type_layout)?;
 
                 ParameterBlockElementType {
                     type_name: element_type_name,
@@ -64,7 +64,7 @@ pub fn reflect_entry_points(
 
             let entry_point_param_json = match type_layout.kind() {
                 slang::TypeKind::Struct => {
-                    let fields = reflect_struct_fields(type_layout);
+                    let fields = reflect_struct_fields(type_layout)?;
                     let type_name = type_layout.name().unwrap().to_string();
 
                     EntryPointParameter::Struct(StructEntryPointParameter {
@@ -147,7 +147,9 @@ pub fn reflect_entry_points(
     Ok(parameters)
 }
 
-fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> Vec<StructField> {
+fn reflect_struct_fields(
+    struct_type_layout: &slang::reflection::TypeLayout,
+) -> anyhow::Result<Vec<StructField>> {
     let mut fields = vec![];
 
     for field in struct_type_layout.fields() {
@@ -189,7 +191,9 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
                     }
 
                     (b, s) => {
-                        panic!("unexpected combination of vector binding and semantic {b:?}, {s:?}")
+                        anyhow::bail!(
+                            "unexpected combination of vector binding and semantic {b:?}, {s:?}"
+                        )
                     }
                 };
 
@@ -216,7 +220,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
             }
 
             slang::TypeKind::Struct => {
-                let field_fields = reflect_struct_fields(field_type_layout);
+                let field_fields = reflect_struct_fields(field_type_layout)?;
                 let field_type_name = field_type_layout.name().unwrap().to_string();
 
                 StructField::Struct(StructStructField {
@@ -269,7 +273,7 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
         fields.push(field_json);
     }
 
-    fields
+    Ok(fields)
 }
 
 fn slang_base_shape(shape_with_flags: slang::ResourceShape) -> slang::ResourceShape {
