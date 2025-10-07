@@ -32,7 +32,7 @@ pub fn reflect_entry_points(
         let element_type_layout = global_param.type_layout().element_type_layout();
 
         let element_type = match element_type_layout.kind() {
-            shader_slang::TypeKind::Struct => {
+            slang::TypeKind::Struct => {
                 let element_type_name = element_type_layout.name().unwrap().to_string();
                 let fields = reflect_struct_fields(element_type_layout);
 
@@ -230,36 +230,17 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
             }
 
             slang::TypeKind::Resource => {
-                let shape = field_type_layout.resource_shape().unwrap();
+                let shape_with_flags = field_type_layout.resource_shape().unwrap();
+                let slang_base_shape = slang_base_shape(shape_with_flags);
 
-                // FIXME these assertions pass with slang >= 2025.14
-                // https://github.com/shader-slang/slang/commit/c5091f0ae3a8b816af893e84ef289f745acf39dc
-                assert!(format!("{shape:?}") == "SlangResourceExtShapeMask");
-                assert!(shape != slang::ResourceShape::SlangResourceExtShapeMask);
-                assert!(shape as u32 == 258);
-                assert!(
-                    shape as u32
-                        == slang::ResourceShape::SlangTexture2d as u32
-                            | slang::ResourceShape::SlangTextureCombinedFlag as u32
-                );
-                // panics:
-                // let new_shape: slang::ResourceShape = unsafe { std::mem::transmute(shape as u32) };
-
-                let resource_shape = if shape as u32 == 258 {
-                    ResourceShape::Texture2D
-                } else {
-                    panic!()
+                let resource_shape = match slang_base_shape {
+                    slang::ResourceShape::SlangTexture2d => ResourceShape::Texture2D,
+                    s => todo!("unhandled slang base shape: {s:?}"),
                 };
-                // let resource_shape = match field_type_layout.resource_shape().unwrap() {
-                //     // FIXME neither of these match with slang >= 2025.14
-                //     slang::ResourceShape::SlangTexture2d => ResourceShape::Texture2D,
-                //     slang::ResourceShape::SlangResourceExtShapeMask => ResourceShape::Texture2D,
-                //     s => todo!("resource shape not handled: {s:?}"),
-                // };
 
                 let result_type = field_type_layout.resource_result_type().unwrap();
                 let result_type = match result_type.kind() {
-                    shader_slang::TypeKind::Vector => {
+                    slang::TypeKind::Vector => {
                         let element_count = result_type.element_count();
 
                         let scalar_type = scalar_from_slang(result_type.scalar_type());
@@ -291,6 +272,14 @@ fn reflect_struct_fields(struct_type_layout: &slang::reflection::TypeLayout) -> 
     fields
 }
 
+fn slang_base_shape(shape_with_flags: slang::ResourceShape) -> slang::ResourceShape {
+    // this is reproducing the way the base shape mask is used here:
+    // https://github.com/shader-slang/slang/blob/9f9d28c1f496132dc71b80252b0eeddfa28cc8bc/source/slang/slang-reflection-json.cpp#L470
+    let base_shape =
+        shape_with_flags as u32 & slang::ResourceShape::SlangResourceBaseShapeMask as u32;
+    unsafe { std::mem::transmute(base_shape) }
+}
+
 fn scalar_from_slang(scalar: slang::ScalarType) -> ScalarType {
     match scalar {
         slang::ScalarType::Uint32 => ScalarType::Uint32,
@@ -299,6 +288,8 @@ fn scalar_from_slang(scalar: slang::ScalarType) -> ScalarType {
     }
 }
 
+// returns None for a param with a semantic,
+// where value will be provided by the driver
 fn param_binding(param: &slang::reflection::VariableLayout) -> Option<Binding> {
     let category = param.category();
 
@@ -326,9 +317,6 @@ fn param_binding(param: &slang::reflection::VariableLayout) -> Option<Binding> {
                 count: size,
             }))
         }
-
-        // TODO is this correct?
-        slang::ParameterCategory::SubElementRegisterSpace => None,
 
         slang::ParameterCategory::None => None,
 
