@@ -1,11 +1,11 @@
-use std::ffi::c_void;
 use std::path::PathBuf;
 use std::time::Instant;
+use std::{ffi::c_void, time::Duration};
 
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
-use crate::util::manifest_path;
+use crate::{renderer::RendererVertex, util::manifest_path, Renderer, RendererConfig};
 
 use super::shaders::COLUMN_MAJOR;
 
@@ -38,7 +38,32 @@ use mvp::MVPMatrices;
 // how can we map the create request struct into the created resources struct?
 //   need a macro
 pub trait Game {
-    fn uniform_buffer_size(&self) -> usize;
+    fn title(&self) -> &str;
+
+    fn renderer_config(&self) -> anyhow::Result<RendererConfig> {
+        let uniform_buffer_size = self.uniform_buffer_size();
+        let (vertices, indices) = self.load_vertices()?;
+        let image = self.load_texture()?;
+        let vertex_binding_descriptions = self.vertex_binding_descriptions();
+        let vertex_attribute_descriptions = self.vertex_attribute_descriptions();
+
+        Ok(RendererConfig {
+            uniform_buffer_size,
+            vertices,
+            indices,
+            image,
+            vertex_binding_descriptions,
+            vertex_attribute_descriptions,
+        })
+    }
+
+    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        renderer.draw_frame(|aspect_ratio, mapped_uniform_buffer| {
+            self.update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)
+        })
+    }
+
+    fn uniform_buffer_size(&self) -> u64;
 
     fn update_uniform_buffer(
         &self,
@@ -51,6 +76,18 @@ pub trait Game {
 
     fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription>;
     fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription>;
+
+    fn window_width(&self) -> u32 {
+        800
+    }
+
+    fn window_height(&self) -> u32 {
+        600
+    }
+
+    fn frame_delay(&self) -> Duration {
+        Duration::from_millis(15)
+    }
 }
 
 #[allow(unused)]
@@ -67,12 +104,16 @@ impl VikingRoom {
 }
 
 impl Game for VikingRoom {
+    fn title(&self) -> &str {
+        "Viking Room"
+    }
+
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
         load_image("viking_room.png")
     }
 
-    fn uniform_buffer_size(&self) -> usize {
-        std::mem::size_of::<MVPMatrices>()
+    fn uniform_buffer_size(&self) -> u64 {
+        std::mem::size_of::<MVPMatrices>() as u64
     }
 
     fn update_uniform_buffer(
@@ -88,11 +129,11 @@ impl Game for VikingRoom {
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
-        vec![Vertex::binding_description()]
+        Vertex::binding_descriptions()
     }
 
     fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions().to_vec()
+        Vertex::attribute_descriptions()
     }
 
     // From unknownue's rust version
@@ -205,12 +246,16 @@ impl DepthTexture {
 }
 
 impl Game for DepthTexture {
+    fn title(&self) -> &str {
+        "Depth Texture"
+    }
+
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
         load_image("texture.jpg")
     }
 
-    fn uniform_buffer_size(&self) -> usize {
-        std::mem::size_of::<MVPMatrices>()
+    fn uniform_buffer_size(&self) -> u64 {
+        std::mem::size_of::<MVPMatrices>() as u64
     }
 
     fn update_uniform_buffer(
@@ -226,11 +271,11 @@ impl Game for DepthTexture {
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
-        vec![Vertex::binding_description()]
+        Vertex::binding_descriptions()
     }
 
     fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions().to_vec()
+        Vertex::attribute_descriptions()
     }
 
     fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {

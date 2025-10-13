@@ -1,4 +1,4 @@
-use crate::renderer::gpu_write::GPUWrite;
+use crate::renderer::{gpu_write::GPUWrite, RendererVertex};
 
 #[derive(Debug, Clone)]
 #[repr(C, align(16))]
@@ -18,7 +18,7 @@ impl Vertex {
             .input_rate(ash::vk::VertexInputRate::VERTEX)
     }
 
-    pub fn attribute_descriptions() -> [ash::vk::VertexInputAttributeDescription; 3] {
+    pub fn raw_attribute_descriptions() -> [ash::vk::VertexInputAttributeDescription; 3] {
         // color formats are also used to define non-color vec sizes 1-4
         //   (the official tutorial is mildly apologetic)
         // BUT this does matter for defaults -
@@ -52,5 +52,15 @@ impl Vertex {
                 .format(glam_vec_2_format)
                 .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
         ]
+    }
+}
+
+impl RendererVertex for Vertex {
+    fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
+        vec![Self::binding_description()]
+    }
+
+    fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
+        Self::raw_attribute_descriptions().to_vec()
     }
 }

@@ -10,7 +10,6 @@ use ash::vk;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
-use crate::game::Game;
 use crate::shaders;
 use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
 
@@ -25,6 +24,9 @@ mod platform;
 pub mod gpu_write;
 use gpu_write::{write_to_gpu_buffer, GPUWrite};
 
+pub mod config;
+pub use config::*;
+
 /// enables both the validation layer and debug utils logging
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 /// applies MSAA-like sampling within textures
@@ -33,7 +35,7 @@ const ENABLE_SAMPLE_SHADING: bool = false;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
-    stuff_from_game: StuffFromGame,
+    config: RendererConfig,
 
     // fields that are created once
     total_frames: usize,
@@ -103,43 +105,8 @@ pub struct Renderer {
     current_frame: usize,
 }
 
-pub struct StuffFromGame {
-    uniform_buffer_size: vk::DeviceSize,
-    // TODO make this a generic somehow
-    vertices: Vec<crate::game::Vertex>,
-    indices: Vec<u32>,
-    image: image::DynamicImage,
-    vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
-    vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
-}
-
-impl StuffFromGame {
-    pub fn from_game(game: &dyn Game) -> anyhow::Result<Self> {
-        let uniform_buffer_size = game.uniform_buffer_size() as vk::DeviceSize;
-        let (vertices, indices) = game.load_vertices()?;
-        let image = game.load_texture()?;
-        let vertex_binding_descriptions = game.vertex_binding_descriptions();
-        let vertex_attribute_descriptions = game.vertex_attribute_descriptions();
-
-        Ok(Self {
-            uniform_buffer_size,
-            vertices,
-            indices,
-            image,
-            vertex_binding_descriptions,
-            vertex_attribute_descriptions,
-        })
-    }
-}
-
 impl Renderer {
-    pub fn init(window: Window, stuff_from_game: StuffFromGame) -> Result<Self, anyhow::Error> {
-        let uniform_buffer_size = stuff_from_game.uniform_buffer_size;
-        let vertex_binding_descriptions = &stuff_from_game.vertex_binding_descriptions;
-        let vertex_attribute_descriptions = &stuff_from_game.vertex_attribute_descriptions;
-        let vertices = &stuff_from_game.vertices;
-        let indices = &stuff_from_game.indices;
-
+    pub fn init(window: Window, config: RendererConfig) -> Result<Self, anyhow::Error> {
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
 
@@ -238,15 +205,6 @@ impl Renderer {
             msaa_samples,
         )?;
 
-        let pipeline = create_graphics_pipeline(
-            &device,
-            render_pass,
-            msaa_samples,
-            &compiled_shaders,
-            &vertex_binding_descriptions,
-            &vertex_attribute_descriptions,
-        )?;
-
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
 
@@ -278,8 +236,19 @@ impl Renderer {
             color_image_view,
         )?;
 
+        // TODO cut a new Pipeline struct here (config is unused before this line)
+        let pipeline = create_graphics_pipeline(
+            &device,
+            render_pass,
+            msaa_samples,
+            &compiled_shaders,
+            &config.vertex_binding_descriptions,
+            &config.vertex_attribute_descriptions,
+        )?;
+
+        // TODO split these components into a Texture sub-struct, allocated dynamically
         let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
-            &stuff_from_game.image,
+            &config.image,
             &instance,
             &device,
             physical_device,
@@ -301,7 +270,7 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
-            vertices,
+            &config.vertices,
         )?;
 
         let (index_buffer, index_buffer_memory) = create_index_buffer(
@@ -310,11 +279,16 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
-            indices,
+            &config.indices,
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            create_uniform_buffers(&instance, &device, physical_device, uniform_buffer_size)?;
+            create_uniform_buffers(
+                &instance,
+                &device,
+                physical_device,
+                config.uniform_buffer_size,
+            )?;
 
         let descriptor_pool = create_descriptor_pool(&device, &compiled_shaders)?;
         let descriptor_sets = create_descriptor_sets(
@@ -324,14 +298,14 @@ impl Renderer {
             &uniform_buffers,
             texture_image_view,
             texture_sampler,
-            uniform_buffer_size,
+            config.uniform_buffer_size,
         )?;
 
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
-            stuff_from_game,
+            config,
             total_frames: 0,
             shader_atlas,
             compiled_shaders,
@@ -486,7 +460,7 @@ impl Renderer {
 
             self.device.cmd_draw_indexed(
                 command_buffer,
-                self.stuff_from_game.indices.len() as u32,
+                self.config.indices.len() as u32,
                 1,
                 0,
                 0,
@@ -502,10 +476,13 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, game: &dyn Game) -> Result<(), anyhow::Error> {
+    pub fn draw_frame(
+        &mut self,
+        update_uniform_buffer: impl FnOnce(f32, *mut c_void) -> anyhow::Result<()>,
+    ) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
-        self.check_for_shader_recompile(game)?;
+        self.check_for_shader_recompile()?;
 
         let command_buffer = self.command_buffers[self.current_frame];
 
@@ -534,7 +511,7 @@ impl Renderer {
         //   give the game on_init and on_resize callbacks that get info from the renderer
         let aspect_ratio = self.image_extent.width as f32 / self.image_extent.height as f32;
         let mapped_uniform_buffer = self.uniform_buffers_mapped[self.current_frame];
-        game.update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)?;
+        update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)?;
 
         // NOTE only reset fences if we're submitting work
         //   ie, after early returns
@@ -694,7 +671,7 @@ impl Renderer {
     }
 
     #[cfg(debug_assertions)]
-    fn check_for_shader_recompile(&mut self, game: &dyn Game) -> Result<(), anyhow::Error> {
+    fn check_for_shader_recompile(&mut self) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
         for (i, (old_frame, old_pipeline, old_compiled_shaders)) in
@@ -728,7 +705,7 @@ impl Renderer {
         let edit_events = self.shader_changes.events()?;
         if !edit_events.is_empty() {
             info!("recompiling shaders...");
-            self.try_shader_recompile(&edit_events, game)?;
+            self.try_shader_recompile(&edit_events)?;
         }
 
         Ok(())
@@ -739,7 +716,6 @@ impl Renderer {
     fn try_shader_recompile(
         &mut self,
         _edit_events: &[notify::Event],
-        game: &dyn Game,
     ) -> Result<(), anyhow::Error> {
         let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
@@ -757,16 +733,13 @@ impl Renderer {
         self.old_pipelines
             .push((self.total_frames, self.pipeline, tmp_compiled_shaders));
 
-        // TODO move up
-        let vertex_binding_descriptions = game.vertex_binding_descriptions();
-        let vertex_attribute_descriptions = game.vertex_attribute_descriptions();
         self.pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
             self.msaa_samples,
             &self.compiled_shaders,
-            &vertex_binding_descriptions,
-            &vertex_attribute_descriptions,
+            &self.config.vertex_binding_descriptions,
+            &self.config.vertex_attribute_descriptions,
         )?;
 
         info!("finished recompiling shaders");
