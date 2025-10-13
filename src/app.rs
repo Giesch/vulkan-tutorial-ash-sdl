@@ -4,6 +4,7 @@ use sdl3::EventPump;
 
 use crate::game::Game;
 use crate::renderer::Renderer;
+use crate::Resize;
 
 pub struct App {
     pub quit: bool,
@@ -39,6 +40,9 @@ impl App {
                     WindowEvent::Resized(_new_width, _new_height) => {
                         // we take the new dimensions off the renderer's window ref
                         self.renderer.recreate_swapchain()?;
+
+                        let extent = self.renderer.current_extent();
+                        self.game.on_resize(Resize { extent });
                     }
                     WindowEvent::Minimized => {
                         self.minimized = true;

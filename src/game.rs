@@ -37,6 +37,10 @@ use mvp::MVPMatrices;
 //   so a combination of the reflected shader-atlas entry and other resources
 // how can we map the create request struct into the created resources struct?
 //   need a macro
+
+const INITIAL_WINDOW_WIDTH: u32 = 800;
+const INITIAL_WINDOW_HEIGHT: u32 = 600;
+
 pub trait Game {
     fn title(&self) -> &str;
 
@@ -58,18 +62,13 @@ pub trait Game {
     }
 
     fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
-        renderer.draw_frame(|aspect_ratio, mapped_uniform_buffer| {
-            self.update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)
-        })
+        renderer
+            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
     }
 
     fn uniform_buffer_size(&self) -> u64;
 
-    fn update_uniform_buffer(
-        &self,
-        aspect_ratio: f32,
-        mapped_uniform_buffer: *mut c_void,
-    ) -> anyhow::Result<()>;
+    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()>;
 
     fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error>;
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error>;
@@ -78,28 +77,40 @@ pub trait Game {
     fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription>;
 
     fn window_width(&self) -> u32 {
-        800
+        INITIAL_WINDOW_WIDTH
     }
 
     fn window_height(&self) -> u32 {
-        600
+        INITIAL_WINDOW_HEIGHT
     }
 
     fn frame_delay(&self) -> Duration {
         Duration::from_millis(15)
     }
+
+    fn on_resize(&mut self, resize: Resize);
+}
+
+pub struct Resize {
+    /// width and height
+    pub extent: (u32, u32),
 }
 
 #[allow(unused)]
 pub struct VikingRoom {
     start_time: Instant,
+    aspect_ratio: f32,
 }
 
 #[allow(unused)]
 impl VikingRoom {
     pub fn init() -> Self {
         let start_time = Instant::now();
-        Self { start_time }
+        let aspect_ratio = INITIAL_WINDOW_WIDTH as f32 / INITIAL_WINDOW_HEIGHT as f32;
+        Self {
+            start_time,
+            aspect_ratio,
+        }
     }
 }
 
@@ -116,14 +127,10 @@ impl Game for VikingRoom {
         std::mem::size_of::<MVPMatrices>() as u64
     }
 
-    fn update_uniform_buffer(
-        &self,
-        aspect_ratio: f32,
-        mapped_uniform_buffer: *mut c_void,
-    ) -> anyhow::Result<()> {
+    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()> {
         update_mvp_uniform_buffer(
             self.start_time,
-            aspect_ratio,
+            self.aspect_ratio,
             mapped_uniform_buffer as *mut MVPMatrices,
         )
     }
@@ -181,6 +188,10 @@ impl Game for VikingRoom {
 
         Ok((vertices, mesh.indices))
     }
+
+    fn on_resize(&mut self, resize: Resize) {
+        self.aspect_ratio = resize.extent.0 as f32 / resize.extent.1 as f32;
+    }
 }
 
 fn update_mvp_uniform_buffer(
@@ -235,13 +246,18 @@ fn update_mvp_uniform_buffer(
 #[allow(unused)]
 pub struct DepthTexture {
     start_time: Instant,
+    aspect_ratio: f32,
 }
 
 #[allow(unused)]
 impl DepthTexture {
     pub fn init() -> Self {
         let start_time = Instant::now();
-        Self { start_time }
+        let aspect_ratio = INITIAL_WINDOW_WIDTH as f32 / INITIAL_WINDOW_HEIGHT as f32;
+        Self {
+            start_time,
+            aspect_ratio,
+        }
     }
 }
 
@@ -258,14 +274,10 @@ impl Game for DepthTexture {
         std::mem::size_of::<MVPMatrices>() as u64
     }
 
-    fn update_uniform_buffer(
-        &self,
-        aspect_ratio: f32,
-        mapped_uniform_buffer: *mut c_void,
-    ) -> anyhow::Result<()> {
+    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()> {
         update_mvp_uniform_buffer(
             self.start_time,
-            aspect_ratio,
+            self.aspect_ratio,
             mapped_uniform_buffer as *mut MVPMatrices,
         )
     }
@@ -329,6 +341,10 @@ impl Game for DepthTexture {
         ];
 
         Ok((vertices, indices))
+    }
+
+    fn on_resize(&mut self, resize: Resize) {
+        self.aspect_ratio = resize.extent.0 as f32 / resize.extent.1 as f32;
     }
 }
 

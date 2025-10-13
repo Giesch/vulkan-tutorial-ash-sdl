@@ -476,9 +476,14 @@ impl Renderer {
         Ok(())
     }
 
+    /// width and height
+    pub fn current_extent(&self) -> (u32, u32) {
+        (self.image_extent.width, self.image_extent.height)
+    }
+
     pub fn draw_frame(
         &mut self,
-        update_uniform_buffer: impl FnOnce(f32, *mut c_void) -> anyhow::Result<()>,
+        update_uniform_buffer: impl FnOnce(*mut c_void) -> anyhow::Result<()>,
     ) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
@@ -506,12 +511,8 @@ impl Renderer {
             }
         };
 
-        // TODO make this a field on game struct; update it with a callback on resize
-        //   could that cause a 1-frame-delay? not if we do it directly alongside recreating the swapchain
-        //   give the game on_init and on_resize callbacks that get info from the renderer
-        let aspect_ratio = self.image_extent.width as f32 / self.image_extent.height as f32;
         let mapped_uniform_buffer = self.uniform_buffers_mapped[self.current_frame];
-        update_uniform_buffer(aspect_ratio, mapped_uniform_buffer)?;
+        update_uniform_buffer(mapped_uniform_buffer)?;
 
         // NOTE only reset fences if we're submitting work
         //   ie, after early returns
