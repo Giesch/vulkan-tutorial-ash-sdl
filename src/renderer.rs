@@ -33,6 +33,8 @@ const ENABLE_SAMPLE_SHADING: bool = false;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
+    stuff_from_game: StuffFromGame,
+
     // fields that are created once
     total_frames: usize,
     #[allow(unused)]
@@ -60,7 +62,6 @@ pub struct Renderer {
     msaa_samples: vk::SampleCountFlags,
 
     // fields that change, at least in theory
-    indices: Vec<u32>,
     image_format: vk::Format,
     image_extent: vk::Extent2D,
     swapchain: vk::SwapchainKHR,
@@ -102,8 +103,43 @@ pub struct Renderer {
     current_frame: usize,
 }
 
+pub struct StuffFromGame {
+    uniform_buffer_size: vk::DeviceSize,
+    // TODO make this a generic somehow
+    vertices: Vec<crate::game::Vertex>,
+    indices: Vec<u32>,
+    image: image::DynamicImage,
+    vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
+    vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
+}
+
+impl StuffFromGame {
+    pub fn from_game(game: &dyn Game) -> anyhow::Result<Self> {
+        let uniform_buffer_size = game.uniform_buffer_size() as vk::DeviceSize;
+        let (vertices, indices) = game.load_vertices()?;
+        let image = game.load_texture()?;
+        let vertex_binding_descriptions = game.vertex_binding_descriptions();
+        let vertex_attribute_descriptions = game.vertex_attribute_descriptions();
+
+        Ok(Self {
+            uniform_buffer_size,
+            vertices,
+            indices,
+            image,
+            vertex_binding_descriptions,
+            vertex_attribute_descriptions,
+        })
+    }
+}
+
 impl Renderer {
-    pub fn init(window: Window, game: &dyn Game) -> Result<Self, anyhow::Error> {
+    pub fn init(window: Window, stuff_from_game: StuffFromGame) -> Result<Self, anyhow::Error> {
+        let uniform_buffer_size = stuff_from_game.uniform_buffer_size;
+        let vertex_binding_descriptions = &stuff_from_game.vertex_binding_descriptions;
+        let vertex_attribute_descriptions = &stuff_from_game.vertex_attribute_descriptions;
+        let vertices = &stuff_from_game.vertices;
+        let indices = &stuff_from_game.indices;
+
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
 
@@ -202,8 +238,14 @@ impl Renderer {
             msaa_samples,
         )?;
 
-        let pipeline =
-            create_graphics_pipeline(game, &device, render_pass, msaa_samples, &compiled_shaders)?;
+        let pipeline = create_graphics_pipeline(
+            &device,
+            render_pass,
+            msaa_samples,
+            &compiled_shaders,
+            &vertex_binding_descriptions,
+            &vertex_attribute_descriptions,
+        )?;
 
         let command_pool = create_command_pool(&device, &queue_family_indices)?;
         let command_buffers = create_command_buffers(&device, command_pool)?;
@@ -237,7 +279,7 @@ impl Renderer {
         )?;
 
         let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
-            game,
+            &stuff_from_game.image,
             &instance,
             &device,
             physical_device,
@@ -253,15 +295,13 @@ impl Renderer {
         )?;
         let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
-        let (vertices, indices) = game.load_vertices()?;
-
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
             &device,
             physical_device,
             command_pool,
             graphics_queue,
-            &vertices,
+            vertices,
         )?;
 
         let (index_buffer, index_buffer_memory) = create_index_buffer(
@@ -270,16 +310,11 @@ impl Renderer {
             physical_device,
             command_pool,
             graphics_queue,
-            &indices,
+            indices,
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            create_uniform_buffers(
-                &instance,
-                &device,
-                physical_device,
-                game.uniform_buffer_size() as vk::DeviceSize,
-            )?;
+            create_uniform_buffers(&instance, &device, physical_device, uniform_buffer_size)?;
 
         let descriptor_pool = create_descriptor_pool(&device, &compiled_shaders)?;
         let descriptor_sets = create_descriptor_sets(
@@ -289,13 +324,14 @@ impl Renderer {
             &uniform_buffers,
             texture_image_view,
             texture_sampler,
-            game.uniform_buffer_size() as vk::DeviceSize,
+            uniform_buffer_size,
         )?;
 
         let (image_available, render_finished, frames_in_flight) =
             create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
+            stuff_from_game,
             total_frames: 0,
             shader_atlas,
             compiled_shaders,
@@ -317,7 +353,6 @@ impl Renderer {
             presentation_queue,
             swapchain_device_ext,
             msaa_samples,
-            indices,
             image_format,
             image_extent,
             swapchain,
@@ -412,9 +447,7 @@ impl Renderer {
             .min_depth(0.0)
             .max_depth(1.0);
         let viewports = [viewport];
-        unsafe {
-            self.device.cmd_set_viewport(command_buffer, 0, &viewports);
-        }
+        unsafe { self.device.cmd_set_viewport(command_buffer, 0, &viewports) };
 
         let scissor = vk::Rect2D::default()
             .offset(vk::Offset2D::default())
@@ -451,8 +484,14 @@ impl Renderer {
                 &[],
             );
 
-            self.device
-                .cmd_draw_indexed(command_buffer, self.indices.len() as u32, 1, 0, 0, 0);
+            self.device.cmd_draw_indexed(
+                command_buffer,
+                self.stuff_from_game.indices.len() as u32,
+                1,
+                0,
+                0,
+                0,
+            );
         }
 
         // END RENDER PASS
@@ -491,8 +530,7 @@ impl Renderer {
         };
 
         // TODO make this a field on game struct; update it with a callback on resize
-        //   could that cause a 1-frame-delay?
-        //   not if we do it directly alongside recreating the swapchain
+        //   could that cause a 1-frame-delay? not if we do it directly alongside recreating the swapchain
         //   give the game on_init and on_resize callbacks that get info from the renderer
         let aspect_ratio = self.image_extent.width as f32 / self.image_extent.height as f32;
         let mapped_uniform_buffer = self.uniform_buffers_mapped[self.current_frame];
@@ -719,12 +757,16 @@ impl Renderer {
         self.old_pipelines
             .push((self.total_frames, self.pipeline, tmp_compiled_shaders));
 
+        // TODO move up
+        let vertex_binding_descriptions = game.vertex_binding_descriptions();
+        let vertex_attribute_descriptions = game.vertex_attribute_descriptions();
         self.pipeline = create_graphics_pipeline(
-            game,
             &self.device,
             self.render_pass,
             self.msaa_samples,
             &self.compiled_shaders,
+            &vertex_binding_descriptions,
+            &vertex_attribute_descriptions,
         )?;
 
         info!("finished recompiling shaders");
@@ -1389,11 +1431,12 @@ fn read_shader_spv(shader_name: &str) -> Result<Vec<u32>, anyhow::Error> {
 }
 
 fn create_graphics_pipeline(
-    game: &dyn Game,
     device: &ash::Device,
     render_pass: vk::RenderPass,
     msaa_samples: vk::SampleCountFlags,
     compiled_shaders: &ShaderPipelineLayout,
+    vertex_binding_descriptions: &[vk::VertexInputBindingDescription],
+    vertex_attribute_descriptions: &[vk::VertexInputAttributeDescription],
 ) -> Result<vk::Pipeline, anyhow::Error> {
     let vert_shader_spv = &compiled_shaders.vertex_shader.shader_bytecode;
     let frag_shader_spv = &compiled_shaders.fragment_shader.shader_bytecode;
@@ -1418,11 +1461,9 @@ fn create_graphics_pipeline(
     let dynamic_state =
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
-    let binding_descriptions = game.vertex_binding_descriptions();
-    let attribute_descriptions = game.vertex_attribute_descriptions();
     let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()
-        .vertex_binding_descriptions(&binding_descriptions)
-        .vertex_attribute_descriptions(&attribute_descriptions);
+        .vertex_binding_descriptions(&vertex_binding_descriptions)
+        .vertex_attribute_descriptions(&vertex_attribute_descriptions);
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
@@ -1742,7 +1783,6 @@ fn find_memory_type_index(
     Err(anyhow::anyhow!("failed to find suitable memory type"))
 }
 
-// TODO could these be static arrays of 2 instead of vecs?
 fn create_uniform_buffers(
     instance: &ash::Instance,
     device: &ash::Device,
@@ -1865,15 +1905,13 @@ fn create_descriptor_sets(
 }
 
 fn create_texture_image(
-    game: &dyn Game,
+    image: &image::DynamicImage,
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
     command_pool: vk::CommandPool,
     graphics_queue: vk::Queue,
 ) -> Result<(vk::Image, vk::DeviceMemory, u32), anyhow::Error> {
-    let image = game.load_texture()?;
-
     let bytes = image.to_rgba8().into_raw();
     debug_assert!(
         bytes.len() == (image.width() * image.height() * 4) as usize,

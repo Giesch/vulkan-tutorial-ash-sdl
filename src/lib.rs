@@ -10,4 +10,4 @@ mod shader_watcher;
 
 pub use app::App;
 pub use game::*;
-pub use renderer::Renderer;
+pub use renderer::{Renderer, StuffFromGame};

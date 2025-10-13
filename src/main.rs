@@ -24,7 +24,8 @@ fn main() -> Result<(), anyhow::Error> {
     let game = VikingRoom::init();
     // let game = DepthTexture::init();
 
-    let renderer = Renderer::init(window, &game)?;
+    let stuff_from_game = StuffFromGame::from_game(&game)?;
+    let renderer = Renderer::init(window, stuff_from_game)?;
     let mut app = App::new(renderer, Box::new(game));
 
     let mut event_pump = sdl.event_pump()?;

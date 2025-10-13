@@ -10,7 +10,7 @@ use crate::util::manifest_path;
 use super::shaders::COLUMN_MAJOR;
 
 mod vertex;
-use vertex::*;
+pub use vertex::*;
 
 mod mvp;
 use mvp::MVPMatrices;
