@@ -10,8 +10,6 @@ mod shader_watcher;
 
 pub use game::*;
 
-use sdl3::sys::timer::SDL_DelayPrecise;
-
 use app::App;
 use renderer::{Renderer, RendererConfig};
 
@@ -27,29 +25,7 @@ pub fn run_game(game: impl Game + 'static) -> anyhow::Result<()> {
         .vulkan()
         .build()?;
 
-    let frame_delay = game.frame_delay().as_nanos() as u64;
-
-    let renderer_config = RendererConfig::from_game(&game)?;
-    let renderer = Renderer::init(window, renderer_config)?;
-    let mut app = App::new(renderer, Box::new(game));
-
-    let mut event_pump = sdl.event_pump()?;
-    loop {
-        let Ok(()) = app.handle_events(&mut event_pump) else {
-            break;
-        };
-        if app.quit {
-            break;
-        }
-
-        if !app.minimized {
-            app.game.draw_frame(&mut app.renderer)?;
-        }
-
-        unsafe { SDL_DelayPrecise(frame_delay) };
-    }
-
-    app.renderer.drain_gpu()?;
-
-    Ok(())
+    let mut app = App::init(window, game)?;
+    let event_pump = sdl.event_pump()?;
+    app.run_loop(event_pump)
 }

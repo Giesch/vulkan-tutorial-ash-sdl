@@ -191,9 +191,10 @@ impl Renderer {
         )?;
 
         let swapchain_images = unsafe { swapchain_device_ext.get_swapchain_images(swapchain)? };
-
         let swapchain_image_views =
             create_swapchain_image_views(&device, image_format, &swapchain_images)?;
+        let (image_available, render_finished, frames_in_flight) =
+            create_sync_objects(&device, &swapchain_images)?;
 
         let render_pass = create_render_pass(
             &instance,
@@ -291,9 +292,6 @@ impl Renderer {
             texture.sampler,
             config.uniform_buffer_size,
         )?;
-
-        let (image_available, render_finished, frames_in_flight) =
-            create_sync_objects(&device, &swapchain_images)?;
 
         Ok(Self {
             config,
@@ -561,7 +559,7 @@ impl Renderer {
         Ok(())
     }
 
-    pub fn drain_gpu(self) -> Result<(), anyhow::Error> {
+    pub fn drain_gpu(&mut self) -> Result<(), anyhow::Error> {
         unsafe { self.device.device_wait_idle()? };
         Ok(())
     }
