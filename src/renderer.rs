@@ -27,6 +27,9 @@ use gpu_write::{write_to_gpu_buffer, GPUWrite};
 pub mod config;
 pub use config::*;
 
+pub mod texture;
+pub use texture::*;
+
 /// enables both the validation layer and debug utils logging
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 /// applies MSAA-like sampling within textures
@@ -78,12 +81,7 @@ pub struct Renderer {
     depth_image: vk::Image,
     depth_image_memory: vk::DeviceMemory,
     depth_image_view: vk::ImageView,
-    texture_image: vk::Image,
-    texture_image_memory: vk::DeviceMemory,
-    texture_image_view: vk::ImageView,
-    #[expect(unused)] // currently not used after init
-    mip_levels: u32,
-    texture_sampler: vk::Sampler,
+    texture: Texture,
     vertex_buffer: vk::Buffer,
     vertex_buffer_memory: vk::DeviceMemory,
     index_buffer: vk::Buffer,
@@ -236,6 +234,17 @@ impl Renderer {
             color_image_view,
         )?;
 
+        // TODO create these dynamically; use handle when creating pipeline
+        let texture = create_texture(
+            &config.image,
+            &instance,
+            &device,
+            physical_device,
+            physical_device_properties,
+            command_pool,
+            graphics_queue,
+        )?;
+
         // TODO cut a new Pipeline struct here (config is unused before this line)
         let pipeline = create_graphics_pipeline(
             &device,
@@ -245,24 +254,6 @@ impl Renderer {
             &config.vertex_binding_descriptions,
             &config.vertex_attribute_descriptions,
         )?;
-
-        // TODO split these components into a Texture sub-struct, allocated dynamically
-        let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
-            &config.image,
-            &instance,
-            &device,
-            physical_device,
-            command_pool,
-            graphics_queue,
-        )?;
-        let texture_image_view = create_image_view(
-            &device,
-            texture_image,
-            vk::Format::R8G8B8A8_SRGB,
-            vk::ImageAspectFlags::COLOR,
-            mip_levels,
-        )?;
-        let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
             &instance,
@@ -296,8 +287,8 @@ impl Renderer {
             descriptor_pool,
             &compiled_shaders.descriptor_set_layouts,
             &uniform_buffers,
-            texture_image_view,
-            texture_sampler,
+            texture.image_view,
+            texture.sampler,
             config.uniform_buffer_size,
         )?;
 
@@ -341,11 +332,7 @@ impl Renderer {
             depth_image,
             depth_image_memory,
             depth_image_view,
-            texture_image,
-            texture_image_memory,
-            texture_image_view,
-            texture_sampler,
-            mip_levels,
+            texture,
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
@@ -778,11 +765,11 @@ impl Drop for Renderer {
             self.device.destroy_buffer(self.vertex_buffer, None);
             self.device.free_memory(self.vertex_buffer_memory, None);
 
-            self.device.destroy_sampler(self.texture_sampler, None);
+            self.device.destroy_sampler(self.texture.sampler, None);
             self.device
-                .destroy_image_view(self.texture_image_view, None);
-            self.device.destroy_image(self.texture_image, None);
-            self.device.free_memory(self.texture_image_memory, None);
+                .destroy_image_view(self.texture.image_view, None);
+            self.device.destroy_image(self.texture.image, None);
+            self.device.free_memory(self.texture.image_memory, None);
 
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.depth_image, None);
@@ -1876,6 +1863,43 @@ fn create_descriptor_sets(
     }
 
     Ok(descriptor_sets)
+}
+
+fn create_texture(
+    input_image: &image::DynamicImage,
+    instance: &ash::Instance,
+    device: &ash::Device,
+    physical_device: vk::PhysicalDevice,
+    physical_device_properties: vk::PhysicalDeviceProperties,
+    command_pool: vk::CommandPool,
+    graphics_queue: vk::Queue,
+) -> anyhow::Result<Texture> {
+    let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
+        input_image,
+        &instance,
+        &device,
+        physical_device,
+        command_pool,
+        graphics_queue,
+    )?;
+
+    let texture_image_view = create_image_view(
+        &device,
+        texture_image,
+        vk::Format::R8G8B8A8_SRGB,
+        vk::ImageAspectFlags::COLOR,
+        mip_levels,
+    )?;
+
+    let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
+
+    Ok(Texture {
+        image: texture_image,
+        image_memory: texture_image_memory,
+        mip_levels,
+        image_view: texture_image_view,
+        sampler: texture_sampler,
+    })
 }
 
 fn create_texture_image(
