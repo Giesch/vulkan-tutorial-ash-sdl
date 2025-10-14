@@ -427,13 +427,7 @@ impl Renderer {
                 vk::IndexType::UINT32,
             );
 
-            // see create_descriptor_sets
-            let descriptor_sets_per_frame = self.compiled_shaders.descriptor_set_layouts.len();
-            let descriptor_sets = self
-                .descriptor_sets
-                .chunks(descriptor_sets_per_frame)
-                .nth(self.current_frame)
-                .unwrap();
+            let descriptor_sets = self.descriptor_sets_for_frame();
             self.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
@@ -443,14 +437,9 @@ impl Renderer {
                 &[],
             );
 
-            self.device.cmd_draw_indexed(
-                command_buffer,
-                self.config.indices.len() as u32,
-                1,
-                0,
-                0,
-                0,
-            );
+            let index_count = self.config.indices.len() as u32;
+            self.device
+                .cmd_draw_indexed(command_buffer, index_count, 1, 0, 0, 0);
         }
 
         // END RENDER PASS
@@ -459,6 +448,15 @@ impl Renderer {
         unsafe { self.device.end_command_buffer(command_buffer)? };
 
         Ok(())
+    }
+
+    fn descriptor_sets_for_frame(&self) -> &[vk::DescriptorSet] {
+        // see create_descriptor_sets
+        let descriptor_sets_per_frame = self.compiled_shaders.descriptor_set_layouts.len();
+        self.descriptor_sets
+            .chunks(descriptor_sets_per_frame)
+            .nth(self.current_frame)
+            .unwrap()
     }
 
     /// width and height
