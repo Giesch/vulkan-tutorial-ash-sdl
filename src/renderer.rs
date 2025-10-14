@@ -1819,6 +1819,12 @@ fn create_descriptor_sets(
         .set_layouts(&set_layouts);
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
+    // TODO can some of this information come from reflection?
+    //   need to wire through the json info to here first
+    //   want to have created resources & reflected binding ranges zipped together
+    //     before this is called
+    //   reflected binding # - available already
+    //   reflected buffer_size - available but not yet
     #[expect(clippy::needless_range_loop)]
     for frame in 0..MAX_FRAMES_IN_FLIGHT {
         for layout_offset in 0..descriptor_set_layouts.len() {
