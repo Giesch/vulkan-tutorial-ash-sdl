@@ -11,7 +11,7 @@ use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
 
 use crate::shaders;
-use crate::shaders::atlas::{DepthTextureShader, ShaderAtlas};
+use crate::shaders::atlas::DepthTextureShader;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -30,6 +30,9 @@ pub use config::*;
 pub mod texture;
 pub use texture::*;
 
+pub mod pipeline;
+pub use pipeline::*;
+
 /// enables both the validation layer and debug utils logging
 const ENABLE_VALIDATION: bool = cfg!(debug_assertions);
 /// applies MSAA-like sampling within textures
@@ -38,14 +41,11 @@ const ENABLE_SAMPLE_SHADING: bool = false;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
+    // fields getting moved up & out
     config: RendererConfig,
 
     // fields that are created once
     total_frames: usize,
-    #[allow(unused)]
-    shader_atlas: ShaderAtlas,
-    #[allow(unused)]
-    compiled_shaders: ShaderPipelineLayout,
     #[cfg(debug_assertions)]
     shader_changes: shader_watcher::ShaderChanges,
     #[cfg(debug_assertions)]
@@ -59,6 +59,7 @@ pub struct Renderer {
     debug_loader: ash::ext::debug_utils::Instance,
     surface: vk::SurfaceKHR,
     physical_device: vk::PhysicalDevice,
+    physical_device_properties: vk::PhysicalDeviceProperties,
     queue_family_indices: QueueFamilyIndices,
     device: ash::Device,
     graphics_queue: vk::Queue,
@@ -73,7 +74,6 @@ pub struct Renderer {
     swapchain_images: Vec<vk::Image>,
     swapchain_image_views: Vec<vk::ImageView>,
     render_pass: vk::RenderPass,
-    pipeline: vk::Pipeline,
     swapchain_framebuffers: Vec<vk::Framebuffer>,
     color_image: vk::Image,
     color_image_memory: vk::DeviceMemory,
@@ -81,18 +81,8 @@ pub struct Renderer {
     depth_image: vk::Image,
     depth_image_memory: vk::DeviceMemory,
     depth_image_view: vk::ImageView,
-    texture: Texture,
-    vertex_buffer: vk::Buffer,
-    vertex_buffer_memory: vk::DeviceMemory,
-    index_buffer: vk::Buffer,
-    index_buffer_memory: vk::DeviceMemory,
-    uniform_buffers: Vec<vk::Buffer>,
-    uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    uniform_buffers_mapped: Vec<*mut c_void>,
     command_pool: vk::CommandPool,
     command_buffers: Vec<vk::CommandBuffer>,
-    descriptor_pool: vk::DescriptorPool,
-    descriptor_sets: Vec<vk::DescriptorSet>,
     /// image semaphores indexed by current_frame
     image_available: Vec<vk::Semaphore>,
     /// render finished semaphores indexed by image_index
@@ -101,6 +91,9 @@ pub struct Renderer {
     frames_in_flight: Vec<vk::Fence>,
     /// looping index
     current_frame: usize,
+
+    pipelines: PipelineStorage,
+    pipeline_handle: PipelineHandle,
 }
 
 impl Renderer {
@@ -165,10 +158,6 @@ impl Renderer {
         let (physical_device, queue_family_indices, physical_device_properties) =
             choose_physical_device(&instance, &surface_ext, surface)?;
         let device = create_logical_device(&instance, physical_device, &queue_family_indices)?;
-
-        let shader_atlas = ShaderAtlas::init();
-        let compiled_shaders =
-            ShaderPipelineLayout::create_from_atlas(&device, &shader_atlas.depth_texture)?;
 
         let msaa_samples = get_max_usable_sample_count(physical_device_properties);
 
@@ -246,6 +235,7 @@ impl Renderer {
             graphics_queue,
         )?;
 
+        let compiled_shaders = ShaderPipelineLayout::create_from_atlas(&device, &config.shader)?;
         // TODO cut a new Pipeline struct here (config is unused before this line)
         let pipeline = create_graphics_pipeline(
             &device,
@@ -293,11 +283,26 @@ impl Renderer {
             config.uniform_buffer_size,
         )?;
 
+        let mut pipelines = PipelineStorage::new();
+        let renderer_pipeline = RendererPipeline {
+            texture,
+            layout: compiled_shaders,
+            pipeline,
+            vertex_buffer,
+            vertex_buffer_memory,
+            index_buffer,
+            index_buffer_memory,
+            uniform_buffers,
+            uniform_buffers_memory,
+            uniform_buffers_mapped,
+            descriptor_pool,
+            descriptor_sets,
+        };
+        let pipeline_handle = pipelines.add(renderer_pipeline);
+
         Ok(Self {
             config,
             total_frames: 0,
-            shader_atlas,
-            compiled_shaders,
             #[cfg(debug_assertions)]
             shader_changes,
             #[cfg(debug_assertions)]
@@ -310,6 +315,7 @@ impl Renderer {
             debug_loader,
             surface,
             physical_device,
+            physical_device_properties,
             queue_family_indices,
             device,
             graphics_queue,
@@ -322,7 +328,6 @@ impl Renderer {
             swapchain_images,
             swapchain_image_views,
             render_pass,
-            pipeline,
             swapchain_framebuffers,
             color_image,
             color_image_memory,
@@ -330,7 +335,95 @@ impl Renderer {
             depth_image,
             depth_image_memory,
             depth_image_view,
+            command_pool,
+            command_buffers,
+            image_available,
+            render_finished,
+            frames_in_flight,
+            current_frame: 0,
+
+            pipelines,
+            pipeline_handle,
+        })
+    }
+
+    fn renderer_pipeline(&self, handle: &PipelineHandle) -> &RendererPipeline {
+        self.pipelines.get(handle)
+    }
+
+    // TODO take a create info arg;
+    // shader atlas entry, vertex definition, etc
+    pub fn create_pipeline(&mut self) -> anyhow::Result<PipelineHandle> {
+        let pipeline = self.init_pipeline()?;
+        let handle = self.pipelines.add(pipeline);
+
+        Ok(handle)
+    }
+
+    fn init_pipeline(&mut self) -> anyhow::Result<RendererPipeline> {
+        // TODO split this out
+        let texture = create_texture(
+            &self.config.image,
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.physical_device_properties,
+            self.command_pool,
+            self.graphics_queue,
+        )?;
+
+        let compiled_shaders =
+            ShaderPipelineLayout::create_from_atlas(&self.device, &self.config.shader)?;
+        let pipeline = create_graphics_pipeline(
+            &self.device,
+            self.render_pass,
+            self.msaa_samples,
+            &compiled_shaders,
+            &self.config.vertex_binding_descriptions,
+            &self.config.vertex_attribute_descriptions,
+        )?;
+
+        let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.command_pool,
+            self.graphics_queue,
+            &self.config.vertices,
+        )?;
+
+        let (index_buffer, index_buffer_memory) = create_index_buffer(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.command_pool,
+            self.graphics_queue,
+            &self.config.indices,
+        )?;
+
+        let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
+            create_uniform_buffers(
+                &self.instance,
+                &self.device,
+                self.physical_device,
+                self.config.uniform_buffer_size,
+            )?;
+
+        let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
+        let descriptor_sets = create_descriptor_sets(
+            &self.device,
+            descriptor_pool,
+            &compiled_shaders.descriptor_set_layouts,
+            &uniform_buffers,
+            texture.image_view,
+            texture.sampler,
+            self.config.uniform_buffer_size,
+        )?;
+
+        Ok(RendererPipeline {
             texture,
+            layout: compiled_shaders,
+            pipeline,
             vertex_buffer,
             vertex_buffer_memory,
             index_buffer,
@@ -338,18 +431,16 @@ impl Renderer {
             uniform_buffers,
             uniform_buffers_memory,
             uniform_buffers_mapped,
-            command_pool,
-            command_buffers,
             descriptor_pool,
             descriptor_sets,
-            image_available,
-            render_finished,
-            frames_in_flight,
-            current_frame: 0,
         })
     }
 
-    fn record_command_buffer(&mut self, image_index: u32) -> Result<(), anyhow::Error> {
+    fn record_command_buffer(
+        &mut self,
+        pipeline_handle: &PipelineHandle,
+        image_index: u32,
+    ) -> Result<(), anyhow::Error> {
         let command_buffer = self.command_buffers[self.current_frame];
 
         let begin_info = vk::CommandBufferBeginInfo::default();
@@ -394,7 +485,7 @@ impl Renderer {
             self.device.cmd_bind_pipeline(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.pipeline,
+                self.renderer_pipeline(pipeline_handle).pipeline,
             );
         }
 
@@ -415,23 +506,25 @@ impl Renderer {
         unsafe { self.device.cmd_set_scissor(command_buffer, 0, &scissors) };
 
         unsafe {
-            let buffers = [self.vertex_buffer];
+            let buffers = [self.renderer_pipeline(pipeline_handle).vertex_buffer];
             let offsets = [0];
             self.device
                 .cmd_bind_vertex_buffers(command_buffer, 0, &buffers, &offsets);
 
             self.device.cmd_bind_index_buffer(
                 command_buffer,
-                self.index_buffer,
+                self.renderer_pipeline(pipeline_handle).index_buffer,
                 0,
                 vk::IndexType::UINT32,
             );
 
-            let descriptor_sets = self.descriptor_sets_for_frame();
+            let descriptor_sets = self.descriptor_sets_for_frame(pipeline_handle);
             self.device.cmd_bind_descriptor_sets(
                 command_buffer,
                 vk::PipelineBindPoint::GRAPHICS,
-                self.compiled_shaders.pipeline_layout,
+                self.renderer_pipeline(pipeline_handle)
+                    .layout
+                    .pipeline_layout,
                 0,
                 descriptor_sets,
                 &[],
@@ -450,10 +543,15 @@ impl Renderer {
         Ok(())
     }
 
-    fn descriptor_sets_for_frame(&self) -> &[vk::DescriptorSet] {
+    fn descriptor_sets_for_frame(&self, pipeline_handle: &PipelineHandle) -> &[vk::DescriptorSet] {
         // see create_descriptor_sets
-        let descriptor_sets_per_frame = self.compiled_shaders.descriptor_set_layouts.len();
-        self.descriptor_sets
+        let descriptor_sets_per_frame = self
+            .renderer_pipeline(pipeline_handle)
+            .layout
+            .descriptor_set_layouts
+            .len();
+        self.renderer_pipeline(pipeline_handle)
+            .descriptor_sets
             .chunks(descriptor_sets_per_frame)
             .nth(self.current_frame)
             .unwrap()
@@ -464,13 +562,19 @@ impl Renderer {
         (self.image_extent.width, self.image_extent.height)
     }
 
+    // TODO either take a pipeline as an argument,
+    // or make this a method on a new 'PipelineRenderer' struct
     pub fn draw_frame(
         &mut self,
         update_uniform_buffer: impl FnOnce(*mut c_void) -> anyhow::Result<()>,
     ) -> Result<(), anyhow::Error> {
+        // TODO pass this in as a reference
+        let pipeline_handle_copy = self.pipeline_handle.clone();
+        let pipeline_handle = &pipeline_handle_copy;
+
         self.total_frames += 1;
         #[cfg(debug_assertions)]
-        self.check_for_shader_recompile()?;
+        self.check_for_shader_recompile(pipeline_handle)?;
 
         let command_buffer = self.command_buffers[self.current_frame];
 
@@ -494,7 +598,9 @@ impl Renderer {
             }
         };
 
-        let mapped_uniform_buffer = self.uniform_buffers_mapped[self.current_frame];
+        let mapped_uniform_buffer = self
+            .renderer_pipeline(pipeline_handle)
+            .uniform_buffers_mapped[self.current_frame];
         update_uniform_buffer(mapped_uniform_buffer)?;
 
         // NOTE only reset fences if we're submitting work
@@ -505,7 +611,7 @@ impl Renderer {
             self.device
                 .reset_command_buffer(command_buffer, Default::default())?;
         }
-        self.record_command_buffer(image_index)?;
+        self.record_command_buffer(pipeline_handle, image_index)?;
 
         let wait_semaphores = [self.image_available[self.current_frame]];
         let wait_dst_stage_mask = [vk::PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
@@ -655,7 +761,10 @@ impl Renderer {
     }
 
     #[cfg(debug_assertions)]
-    fn check_for_shader_recompile(&mut self) -> Result<(), anyhow::Error> {
+    fn check_for_shader_recompile(
+        &mut self,
+        pipeline_handle: &PipelineHandle,
+    ) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
         for (i, (old_frame, old_pipeline, old_compiled_shaders)) in
@@ -689,7 +798,7 @@ impl Renderer {
         let edit_events = self.shader_changes.events()?;
         if !edit_events.is_empty() {
             info!("recompiling shaders...");
-            self.try_shader_recompile(&edit_events)?;
+            self.try_shader_recompile(pipeline_handle, &edit_events)?;
         }
 
         Ok(())
@@ -699,29 +808,35 @@ impl Renderer {
     #[cfg(debug_assertions)]
     fn try_shader_recompile(
         &mut self,
+        pipeline_handle: &PipelineHandle,
         _edit_events: &[notify::Event],
     ) -> Result<(), anyhow::Error> {
-        let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
-            &self.device,
-            &self.shader_atlas.depth_texture,
-        ) {
-            Ok(shaders) => shaders,
-            Err(e) => {
-                error!("failed to compile shaders: {e}");
-                return Ok(());
-            }
-        };
+        let mut tmp_compiled_shaders =
+            match ShaderPipelineLayout::create_from_atlas(&self.device, &self.config.shader) {
+                Ok(shaders) => shaders,
+                Err(e) => {
+                    error!("failed to compile shaders: {e}");
+                    return Ok(());
+                }
+            };
 
-        std::mem::swap(&mut tmp_compiled_shaders, &mut self.compiled_shaders);
+        std::mem::swap(
+            &mut tmp_compiled_shaders,
+            &mut self.pipelines.get_mut(&mut self.pipeline_handle).layout,
+        );
 
-        self.old_pipelines
-            .push((self.total_frames, self.pipeline, tmp_compiled_shaders));
+        self.old_pipelines.push((
+            self.total_frames,
+            self.renderer_pipeline(pipeline_handle).pipeline,
+            tmp_compiled_shaders,
+        ));
 
-        self.pipeline = create_graphics_pipeline(
+        let render_pipeline_mut = self.pipelines.get_mut(&mut self.pipeline_handle);
+        render_pipeline_mut.pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
             self.msaa_samples,
-            &self.compiled_shaders,
+            &render_pipeline_mut.layout,
             &self.config.vertex_binding_descriptions,
             &self.config.vertex_attribute_descriptions,
         )?;
@@ -733,6 +848,7 @@ impl Renderer {
 }
 
 impl Drop for Renderer {
+    // FIXME loop through pipeline storage
     fn drop(&mut self) {
         unsafe {
             for fence in &self.frames_in_flight {
@@ -746,26 +862,64 @@ impl Drop for Renderer {
             }
 
             // this also destroys the sets from the pool
-            self.device
-                .destroy_descriptor_pool(self.descriptor_pool, None);
-            for &desc_set_layout in &self.compiled_shaders.descriptor_set_layouts {
+            self.device.destroy_descriptor_pool(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .descriptor_pool,
+                None,
+            );
+            for &desc_set_layout in &self
+                .renderer_pipeline(&self.pipeline_handle)
+                .layout
+                .descriptor_set_layouts
+            {
                 self.device
                     .destroy_descriptor_set_layout(desc_set_layout, None);
             }
 
             self.device.destroy_command_pool(self.command_pool, None);
 
-            self.device.destroy_buffer(self.index_buffer, None);
-            self.device.free_memory(self.index_buffer_memory, None);
+            self.device.destroy_buffer(
+                self.renderer_pipeline(&self.pipeline_handle).index_buffer,
+                None,
+            );
+            self.device.free_memory(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .index_buffer_memory,
+                None,
+            );
 
-            self.device.destroy_buffer(self.vertex_buffer, None);
-            self.device.free_memory(self.vertex_buffer_memory, None);
+            self.device.destroy_buffer(
+                self.renderer_pipeline(&self.pipeline_handle).vertex_buffer,
+                None,
+            );
+            self.device.free_memory(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .vertex_buffer_memory,
+                None,
+            );
 
-            self.device.destroy_sampler(self.texture.sampler, None);
-            self.device
-                .destroy_image_view(self.texture.image_view, None);
-            self.device.destroy_image(self.texture.image, None);
-            self.device.free_memory(self.texture.image_memory, None);
+            self.device.destroy_sampler(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .texture
+                    .sampler,
+                None,
+            );
+            self.device.destroy_image_view(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .texture
+                    .image_view,
+                None,
+            );
+            self.device.destroy_image(
+                self.renderer_pipeline(&self.pipeline_handle).texture.image,
+                None,
+            );
+            self.device.free_memory(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .texture
+                    .image_memory,
+                None,
+            );
 
             self.device.destroy_image_view(self.depth_image_view, None);
             self.device.destroy_image(self.depth_image, None);
@@ -775,9 +929,14 @@ impl Drop for Renderer {
             self.device.destroy_image(self.color_image, None);
             self.device.free_memory(self.color_image_memory, None);
 
-            self.device.destroy_pipeline(self.pipeline, None);
             self.device
-                .destroy_pipeline_layout(self.compiled_shaders.pipeline_layout, None);
+                .destroy_pipeline(self.renderer_pipeline(&self.pipeline_handle).pipeline, None);
+            self.device.destroy_pipeline_layout(
+                self.renderer_pipeline(&self.pipeline_handle)
+                    .layout
+                    .pipeline_layout,
+                None,
+            );
 
             #[cfg(debug_assertions)]
             for (_frame, old_pipeline, old_compiled_shaders) in &self.old_pipelines {
@@ -796,9 +955,16 @@ impl Drop for Renderer {
             self.cleanup_swapchain();
 
             for i in 0..MAX_FRAMES_IN_FLIGHT {
-                self.device.destroy_buffer(self.uniform_buffers[i], None);
-                self.device
-                    .free_memory(self.uniform_buffers_memory[i], None);
+                self.device.destroy_buffer(
+                    self.renderer_pipeline(&self.pipeline_handle)
+                        .uniform_buffers[i],
+                    None,
+                );
+                self.device.free_memory(
+                    self.renderer_pipeline(&self.pipeline_handle)
+                        .uniform_buffers_memory[i],
+                    None,
+                );
             }
 
             self.device.destroy_device(None);

@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::game::Game;
+use crate::shaders::atlas::DepthTextureShader;
 
 pub struct RendererConfig {
     pub uniform_buffer_size: u64,
@@ -14,25 +14,9 @@ pub struct RendererConfig {
     // TODO and not direct vk types
     pub vertex_binding_descriptions: Vec<vk::VertexInputBindingDescription>,
     pub vertex_attribute_descriptions: Vec<vk::VertexInputAttributeDescription>,
-}
 
-impl RendererConfig {
-    pub fn from_game(game: &dyn Game) -> anyhow::Result<Self> {
-        let uniform_buffer_size = game.uniform_buffer_size() as vk::DeviceSize;
-        let (vertices, indices) = game.load_vertices()?;
-        let image = game.load_texture()?;
-        let vertex_binding_descriptions = game.vertex_binding_descriptions();
-        let vertex_attribute_descriptions = game.vertex_attribute_descriptions();
-
-        Ok(Self {
-            uniform_buffer_size,
-            vertices,
-            indices,
-            image,
-            vertex_binding_descriptions,
-            vertex_attribute_descriptions,
-        })
-    }
+    // TODO pass this when creating a pipeline
+    pub shader: DepthTextureShader,
 }
 
 pub trait RendererVertex: super::GPUWrite {

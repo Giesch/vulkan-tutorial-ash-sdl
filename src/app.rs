@@ -4,7 +4,7 @@ use sdl3::sys::timer::SDL_DelayPrecise;
 use sdl3::EventPump;
 
 use crate::game::Game;
-use crate::renderer::{Renderer, RendererConfig};
+use crate::renderer::Renderer;
 use crate::Resize;
 
 pub struct App {
@@ -16,7 +16,7 @@ pub struct App {
 
 impl App {
     pub fn init(window: sdl3::video::Window, game: impl Game + 'static) -> anyhow::Result<App> {
-        let renderer_config = RendererConfig::from_game(&game)?;
+        let renderer_config = game.renderer_config()?;
         let renderer = Renderer::init(window, renderer_config)?;
 
         Ok(Self {

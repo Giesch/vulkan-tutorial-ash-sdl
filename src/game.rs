@@ -5,6 +5,7 @@ use std::{ffi::c_void, time::Duration};
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
+use crate::shaders::atlas::ShaderAtlas;
 use crate::{renderer::RendererVertex, util::manifest_path, Renderer, RendererConfig};
 
 use super::shaders::COLUMN_MAJOR;
@@ -51,6 +52,9 @@ pub trait Game {
         let vertex_binding_descriptions = self.vertex_binding_descriptions();
         let vertex_attribute_descriptions = self.vertex_attribute_descriptions();
 
+        let shader_atlas = ShaderAtlas::init();
+        let shader = shader_atlas.depth_texture;
+
         Ok(RendererConfig {
             uniform_buffer_size,
             vertices,
@@ -58,6 +62,7 @@ pub trait Game {
             image,
             vertex_binding_descriptions,
             vertex_attribute_descriptions,
+            shader,
         })
     }
 
