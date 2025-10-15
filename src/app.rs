@@ -15,9 +15,8 @@ pub struct App {
 }
 
 impl App {
-    pub fn init(window: sdl3::video::Window, game: impl Game + 'static) -> anyhow::Result<App> {
-        let renderer_config = game.renderer_config()?;
-        let renderer = Renderer::init(window, renderer_config)?;
+    pub fn init(window: sdl3::video::Window, mut game: impl Game + 'static) -> anyhow::Result<App> {
+        let renderer = game.setup_renderer(window)?;
 
         Ok(Self {
             game: Box::new(game),

@@ -42,8 +42,12 @@ use mvp::MVPMatrices;
 const INITIAL_WINDOW_WIDTH: u32 = 800;
 const INITIAL_WINDOW_HEIGHT: u32 = 600;
 
+// TODO split the pre-init api and the post-init api somehow
+// ie; some way to allocate required graphics resources
 pub trait Game {
     fn title(&self) -> &str;
+
+    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer>;
 
     fn renderer_config(&self) -> anyhow::Result<RendererConfig> {
         let uniform_buffer_size = self.uniform_buffer_size();
@@ -66,10 +70,7 @@ pub trait Game {
         })
     }
 
-    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
-        renderer
-            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
-    }
+    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()>;
 
     fn uniform_buffer_size(&self) -> u64;
 
@@ -124,8 +125,19 @@ impl Game for VikingRoom {
         "Viking Room"
     }
 
+    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer> {
+        let renderer_config = self.renderer_config()?;
+        let renderer = Renderer::init(window, renderer_config)?;
+        Ok(renderer)
+    }
+
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
         load_image("viking_room.png")
+    }
+
+    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        renderer
+            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
     }
 
     fn uniform_buffer_size(&self) -> u64 {
@@ -271,8 +283,19 @@ impl Game for DepthTexture {
         "Depth Texture"
     }
 
+    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer> {
+        let renderer_config = self.renderer_config()?;
+        let renderer = Renderer::init(window, renderer_config)?;
+        Ok(renderer)
+    }
+
     fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
         load_image("texture.jpg")
+    }
+
+    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        renderer
+            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
     }
 
     fn uniform_buffer_size(&self) -> u64 {
