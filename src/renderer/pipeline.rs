@@ -1,10 +1,9 @@
 use std::ffi::c_void;
 
-use super::{texture::Texture, ShaderPipelineLayout};
+use super::ShaderPipelineLayout;
 use ash::vk;
 
-// TODO remove clone after finishing refactor
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct PipelineHandle(usize);
 
 pub struct PipelineStorage(Vec<Option<RendererPipeline>>);
@@ -38,8 +37,6 @@ impl PipelineStorage {
 }
 
 pub struct RendererPipeline {
-    pub(super) texture: Texture,
-
     pub(super) layout: ShaderPipelineLayout,
     pub(super) pipeline: vk::Pipeline,
 

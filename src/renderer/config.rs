@@ -8,7 +8,6 @@ pub struct RendererConfig {
     // maybe as a pipeline create arg instead of renderer init arg
     pub vertices: Vec<crate::game::Vertex>,
     pub indices: Vec<u32>,
-    pub image: image::DynamicImage,
 
     // TODO make these generic
     // TODO and not direct vk types

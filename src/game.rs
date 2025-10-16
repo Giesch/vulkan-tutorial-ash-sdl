@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
-use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex};
+use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex, TextureHandle};
 use crate::shaders::atlas::ShaderAtlas;
 use crate::util::manifest_path;
 
@@ -52,6 +52,7 @@ pub struct VikingRoom {
     aspect_ratio: f32,
     renderer: Renderer,
     pipeline_handle: PipelineHandle,
+    texture_handle: TextureHandle,
 }
 
 impl VikingRoom {
@@ -135,14 +136,14 @@ impl Game for VikingRoom {
             uniform_buffer_size,
             vertices,
             indices,
-            image,
             vertex_binding_descriptions,
             vertex_attribute_descriptions,
             shader,
         };
 
         let mut renderer = Renderer::init(window, renderer_config)?;
-        let pipeline_handle = renderer.create_pipeline()?;
+        let texture_handle = renderer.create_texture(&image)?;
+        let pipeline_handle = renderer.create_pipeline(&texture_handle)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();
@@ -153,6 +154,7 @@ impl Game for VikingRoom {
             aspect_ratio,
             renderer,
             pipeline_handle,
+            texture_handle,
         })
     }
 
@@ -178,6 +180,7 @@ impl Game for VikingRoom {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
+        self.renderer.drop_texture(self.texture_handle);
         self.renderer.drop_pipeline(self.pipeline_handle);
 
         Ok(())
@@ -189,6 +192,7 @@ pub struct DepthTexture {
     aspect_ratio: f32,
     renderer: Renderer,
     pipeline_handle: PipelineHandle,
+    texture_handle: TextureHandle,
 }
 
 #[allow(unused)]
@@ -280,14 +284,14 @@ impl Game for DepthTexture {
             uniform_buffer_size,
             vertices,
             indices,
-            image,
             vertex_binding_descriptions,
             vertex_attribute_descriptions,
             shader,
         };
 
         let mut renderer = Renderer::init(window, renderer_config)?;
-        let pipeline_handle = renderer.create_pipeline()?;
+        let texture_handle = renderer.create_texture(&image)?;
+        let pipeline_handle = renderer.create_pipeline(&texture_handle)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();
@@ -298,6 +302,7 @@ impl Game for DepthTexture {
             aspect_ratio,
             renderer,
             pipeline_handle,
+            texture_handle,
         })
     }
 
@@ -323,6 +328,7 @@ impl Game for DepthTexture {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
+        self.renderer.drop_texture(self.texture_handle);
         self.renderer.drop_pipeline(self.pipeline_handle);
 
         Ok(())

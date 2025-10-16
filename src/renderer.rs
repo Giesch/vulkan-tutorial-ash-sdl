@@ -93,6 +93,7 @@ pub struct Renderer {
     current_frame: usize,
 
     pipelines: PipelineStorage,
+    textures: TextureStorage,
 }
 
 impl Renderer {
@@ -224,6 +225,7 @@ impl Renderer {
         )?;
 
         let pipelines = PipelineStorage::new();
+        let textures = TextureStorage::new();
 
         Ok(Self {
             config,
@@ -268,6 +270,7 @@ impl Renderer {
             current_frame: 0,
 
             pipelines,
+            textures,
         })
     }
 
@@ -275,10 +278,41 @@ impl Renderer {
         self.pipelines.get(handle)
     }
 
+    pub fn create_texture(&mut self, image: &image::DynamicImage) -> anyhow::Result<TextureHandle> {
+        let texture = create_texture(
+            image,
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            self.physical_device_properties,
+            self.command_pool,
+            self.graphics_queue,
+        )?;
+
+        let handle = self.textures.add(texture);
+
+        Ok(handle)
+    }
+
+    pub fn drop_texture(&mut self, texture_handle: TextureHandle) {
+        let texture = self.textures.take(texture_handle);
+
+        unsafe {
+            self.device.destroy_sampler(texture.sampler, None);
+            self.device.destroy_image_view(texture.image_view, None);
+            self.device.destroy_image(texture.image, None);
+            self.device.free_memory(texture.image_memory, None);
+        }
+    }
+
     // TODO take a create info arg;
     // shader atlas entry, vertex definition, etc
-    pub fn create_pipeline(&mut self) -> anyhow::Result<PipelineHandle> {
-        let pipeline = self.init_pipeline()?;
+    // make texture an optional field/collection
+    pub fn create_pipeline(
+        &mut self,
+        texture_handle: &TextureHandle,
+    ) -> anyhow::Result<PipelineHandle> {
+        let pipeline = self.init_pipeline(texture_handle)?;
         let handle = self.pipelines.add(pipeline);
 
         Ok(handle)
@@ -304,12 +338,6 @@ impl Renderer {
             self.device.destroy_buffer(pipeline.vertex_buffer, None);
             self.device.free_memory(pipeline.vertex_buffer_memory, None);
 
-            self.device.destroy_sampler(pipeline.texture.sampler, None);
-            self.device
-                .destroy_image_view(pipeline.texture.image_view, None);
-            self.device.destroy_image(pipeline.texture.image, None);
-            self.device.free_memory(pipeline.texture.image_memory, None);
-
             self.device.destroy_pipeline(pipeline.pipeline, None);
             self.device
                 .destroy_pipeline_layout(pipeline.layout.pipeline_layout, None);
@@ -323,18 +351,11 @@ impl Renderer {
         }
     }
 
-    fn init_pipeline(&mut self) -> anyhow::Result<RendererPipeline> {
-        // TODO split this out
-        // create these dynamically; use handle when creating pipeline
-        let texture = create_texture(
-            &self.config.image,
-            &self.instance,
-            &self.device,
-            self.physical_device,
-            self.physical_device_properties,
-            self.command_pool,
-            self.graphics_queue,
-        )?;
+    fn init_pipeline(
+        &mut self,
+        texture_handle: &TextureHandle,
+    ) -> anyhow::Result<RendererPipeline> {
+        let texture = self.textures.get(texture_handle);
 
         let compiled_shaders =
             ShaderPipelineLayout::create_from_atlas(&self.device, &self.config.shader)?;
@@ -385,7 +406,6 @@ impl Renderer {
         )?;
 
         Ok(RendererPipeline {
-            texture,
             layout: compiled_shaders,
             pipeline,
             vertex_buffer,
@@ -807,7 +827,6 @@ impl Renderer {
 }
 
 impl Drop for Renderer {
-    // FIXME loop through pipeline storage; drop and warn
     fn drop(&mut self) {
         unsafe {
             for fence in &self.frames_in_flight {

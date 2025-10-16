@@ -22,15 +22,15 @@ pub struct DepthTextureShader {
 }
 
 impl DepthTextureShader {
-    // dev and release
+    // dev only
 
+    #[cfg(debug_assertions)]
     const SOURCE_FILE_NAME: &str = "depth_texture.slang";
 
+    #[cfg(debug_assertions)]
     pub fn source_file_name(&self) -> &str {
         Self::SOURCE_FILE_NAME
     }
-
-    // dev only
 
     #[cfg(debug_assertions)]
     pub fn init() -> Self {

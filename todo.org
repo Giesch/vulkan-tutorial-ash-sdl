@@ -1,6 +1,12 @@
 #+title: Todo
 
 * Current
+- [ ] need a plan for more dynamically created descriptor sets
+  ie the todo in create_descriptor_sets
+  - [ ] take an enum/struct arg that specifies each descriptor fully
+    - DescriptorBuffer
+    - DescriptorImageInfo
+
 - [ ] change renderer to allow dynamic graphics resources
   - [ ] move game methods to renderer constructor args
     ie, passed in from Game struct/module

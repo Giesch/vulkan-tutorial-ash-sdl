@@ -86,6 +86,7 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
     Ok(reflected_shader)
 }
 
+#[cfg(debug_assertions)]
 pub fn dev_compile_slang_shaders(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
     prepare_reflected_shader(source_file_name)
 }
@@ -98,6 +99,7 @@ pub struct CompiledShader {
 
 impl CompiledShader {
     /// converts compiled spv to vulkan-readable u32s
+    #[cfg(debug_assertions)]
     pub fn spv_bytes(&self) -> Result<Vec<u32>, std::io::Error> {
         let byte_reader = &mut std::io::Cursor::new(self.shader_bytecode.as_slice());
         ash::util::read_spv(byte_reader)
