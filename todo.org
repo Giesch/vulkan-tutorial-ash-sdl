@@ -102,6 +102,10 @@
 * Next
 - [ ] add input/gobal type info to reflection data & shader atlas
 
+- [ ] have the 'framework' do more before calling Game::setup
+  ie, make an empty renderer, pass in other runtime config (cli flags/env vars)
+  precompiled stuff? no reason to pass it as an argument
+
 - [ ] handle shaders with different entry points in reflection
   ie, only compute, only fragment, etc
 

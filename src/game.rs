@@ -1,12 +1,12 @@
 use std::path::PathBuf;
-use std::time::Instant;
-use std::{ffi::c_void, time::Duration};
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
+use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex};
 use crate::shaders::atlas::ShaderAtlas;
-use crate::{renderer::RendererVertex, util::manifest_path, Renderer, RendererConfig};
+use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
 
@@ -15,6 +15,13 @@ pub use vertex::*;
 
 mod mvp;
 use mvp::MVPMatrices;
+
+pub mod traits;
+pub use traits::{Game, WindowDescription};
+
+const INITIAL_WINDOW_WIDTH: u32 = 800;
+const INITIAL_WINDOW_HEIGHT: u32 = 600;
+const FRAME_DELAY: Duration = Duration::from_millis(15);
 
 // TODO
 // we want a more zoomed-out api than this
@@ -39,130 +46,18 @@ use mvp::MVPMatrices;
 // how can we map the create request struct into the created resources struct?
 //   need a macro
 
-const INITIAL_WINDOW_WIDTH: u32 = 800;
-const INITIAL_WINDOW_HEIGHT: u32 = 600;
-
-// TODO split the pre-init api and the post-init api somehow
-// ie; some way to allocate required graphics resources
-pub trait Game {
-    fn title(&self) -> &str;
-
-    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer>;
-
-    fn renderer_config(&self) -> anyhow::Result<RendererConfig> {
-        let uniform_buffer_size = self.uniform_buffer_size();
-        let (vertices, indices) = self.load_vertices()?;
-        let image = self.load_texture()?;
-        let vertex_binding_descriptions = self.vertex_binding_descriptions();
-        let vertex_attribute_descriptions = self.vertex_attribute_descriptions();
-
-        let shader_atlas = ShaderAtlas::init();
-        let shader = shader_atlas.depth_texture;
-
-        Ok(RendererConfig {
-            uniform_buffer_size,
-            vertices,
-            indices,
-            image,
-            vertex_binding_descriptions,
-            vertex_attribute_descriptions,
-            shader,
-        })
-    }
-
-    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()>;
-
-    fn uniform_buffer_size(&self) -> u64;
-
-    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()>;
-
-    fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error>;
-    fn load_texture(&self) -> Result<DynamicImage, anyhow::Error>;
-
-    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription>;
-    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription>;
-
-    fn window_width(&self) -> u32 {
-        INITIAL_WINDOW_WIDTH
-    }
-
-    fn window_height(&self) -> u32 {
-        INITIAL_WINDOW_HEIGHT
-    }
-
-    fn frame_delay(&self) -> Duration {
-        Duration::from_millis(15)
-    }
-
-    fn on_resize(&mut self, resize: Resize);
-}
-
-pub struct Resize {
-    /// width and height
-    pub extent: (u32, u32),
-}
-
 #[allow(unused)]
 pub struct VikingRoom {
     start_time: Instant,
     aspect_ratio: f32,
+    renderer: Renderer,
+    pipeline_handle: PipelineHandle,
 }
 
-#[allow(unused)]
 impl VikingRoom {
-    pub fn init() -> Self {
-        let start_time = Instant::now();
-        let aspect_ratio = INITIAL_WINDOW_WIDTH as f32 / INITIAL_WINDOW_HEIGHT as f32;
-        Self {
-            start_time,
-            aspect_ratio,
-        }
-    }
-}
-
-impl Game for VikingRoom {
-    fn title(&self) -> &str {
-        "Viking Room"
-    }
-
-    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer> {
-        let renderer_config = self.renderer_config()?;
-        let renderer = Renderer::init(window, renderer_config)?;
-        Ok(renderer)
-    }
-
-    fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
-        load_image("viking_room.png")
-    }
-
-    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
-        renderer
-            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
-    }
-
-    fn uniform_buffer_size(&self) -> u64 {
-        std::mem::size_of::<MVPMatrices>() as u64
-    }
-
-    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()> {
-        update_mvp_uniform_buffer(
-            self.start_time,
-            self.aspect_ratio,
-            mapped_uniform_buffer as *mut MVPMatrices,
-        )
-    }
-
-    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
-        Vertex::binding_descriptions()
-    }
-
-    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions()
-    }
-
-    // From unknownue's rust version
+    // From unknownue's rust version of the vulkan tutorial
     // https://github.com/unknownue/vulkan-tutorial-rust/blob/master/src/tutorials/27_model_loading.rs
-    fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
+    fn load_vertices() -> anyhow::Result<(Vec<Vertex>, Vec<u32>)> {
         let file_path: PathBuf = [env!("CARGO_MANIFEST_DIR"), "models", "viking_room.obj"]
             .iter()
             .collect();
@@ -205,120 +100,100 @@ impl Game for VikingRoom {
 
         Ok((vertices, mesh.indices))
     }
-
-    fn on_resize(&mut self, resize: Resize) {
-        self.aspect_ratio = resize.extent.0 as f32 / resize.extent.1 as f32;
-    }
 }
 
-fn update_mvp_uniform_buffer(
-    start_time: Instant,
-    aspect_ratio: f32,
-    mapped_uniform_buffer: *mut MVPMatrices,
-) -> Result<(), anyhow::Error> {
-    const TURN_DEGREES_PER_SECOND: f32 = 5.0;
-    const STARTING_ANGLE_DEGREES: f32 = 45.0;
-
-    let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
-    let turn_radians = elapsed_seconds * TURN_DEGREES_PER_SECOND.to_radians();
-
-    let model = glam::Mat4::from_rotation_z(turn_radians);
-    let view = glam::Mat4::look_at_rh(
-        glam::Vec3::splat(2.0),
-        glam::Vec3::splat(0.0),
-        glam::Vec3::new(0.0, 0.0, 1.0),
-    );
-    let projection =
-        glam::Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
-
-    let mut mvp = MVPMatrices {
-        model,
-        view,
-        projection,
-    };
-
-    // "GLM was originally designed for OpenGL,
-    // where the Y coordinate of the clip coordinates is inverted.
-    // The easiest way to compensate for that is to flip the sign
-    // on the scaling factor of the Y axis in the projection matrix.
-    // If you don’t do this, then the image will be rendered upside down."
-    // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
-    mvp.projection.y_axis.y *= -1.0;
-
-    if !COLUMN_MAJOR {
-        // it's also possible to avoid this by reversing the mul() calls in shaders
-        // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
-        mvp.model = mvp.model.transpose();
-        mvp.view = mvp.view.transpose();
-        mvp.projection = mvp.projection.transpose();
+impl Game for VikingRoom {
+    fn window_description() -> WindowDescription {
+        WindowDescription {
+            title: "Viking Room",
+            width: INITIAL_WINDOW_WIDTH,
+            height: INITIAL_WINDOW_HEIGHT,
+        }
     }
 
-    unsafe {
-        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
+    fn frame_delay(&self) -> Duration {
+        FRAME_DELAY
     }
 
-    Ok(())
+    fn setup(window: sdl3::video::Window) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let uniform_buffer_size = std::mem::size_of::<MVPMatrices>() as u64;
+
+        let (vertices, indices) = Self::load_vertices()?;
+
+        let image = load_image("viking_room.png")?;
+
+        let vertex_binding_descriptions = Vertex::binding_descriptions();
+        let vertex_attribute_descriptions = Vertex::attribute_descriptions();
+
+        let shader_atlas = ShaderAtlas::init();
+        let shader = shader_atlas.depth_texture;
+
+        let renderer_config = RendererConfig {
+            uniform_buffer_size,
+            vertices,
+            indices,
+            image,
+            vertex_binding_descriptions,
+            vertex_attribute_descriptions,
+            shader,
+        };
+
+        let mut renderer = Renderer::init(window, renderer_config)?;
+        let pipeline_handle = renderer.create_pipeline()?;
+
+        let start_time = Instant::now();
+        let window_desc = Self::window_description();
+        let aspect_ratio = window_desc.width as f32 / window_desc.height as f32;
+
+        Ok(Self {
+            start_time,
+            aspect_ratio,
+            renderer,
+            pipeline_handle,
+        })
+    }
+
+    fn draw_frame(&mut self) -> anyhow::Result<()> {
+        self.renderer
+            .draw_frame(&self.pipeline_handle, |mapped_uniform_buffer| {
+                update_mvp_uniform_buffer(
+                    self.start_time,
+                    self.aspect_ratio,
+                    mapped_uniform_buffer as *mut MVPMatrices,
+                )
+            })
+    }
+
+    fn on_resize(&mut self) -> anyhow::Result<()> {
+        self.renderer.recreate_swapchain()?;
+
+        let (width, height) = self.renderer.current_extent();
+        self.aspect_ratio = width as f32 / height as f32;
+
+        Ok(())
+    }
+
+    fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
+        self.renderer.drain_gpu()?;
+        self.renderer.drop_pipeline(self.pipeline_handle);
+
+        Ok(())
+    }
 }
-
 #[allow(unused)]
 pub struct DepthTexture {
     start_time: Instant,
     aspect_ratio: f32,
+    renderer: Renderer,
+    pipeline_handle: PipelineHandle,
 }
 
 #[allow(unused)]
 impl DepthTexture {
-    pub fn init() -> Self {
-        let start_time = Instant::now();
-        let aspect_ratio = INITIAL_WINDOW_WIDTH as f32 / INITIAL_WINDOW_HEIGHT as f32;
-        Self {
-            start_time,
-            aspect_ratio,
-        }
-    }
-}
-
-impl Game for DepthTexture {
-    fn title(&self) -> &str {
-        "Depth Texture"
-    }
-
-    fn setup_renderer(&mut self, window: sdl3::video::Window) -> anyhow::Result<Renderer> {
-        let renderer_config = self.renderer_config()?;
-        let renderer = Renderer::init(window, renderer_config)?;
-        Ok(renderer)
-    }
-
-    fn load_texture(&self) -> Result<DynamicImage, anyhow::Error> {
-        load_image("texture.jpg")
-    }
-
-    fn draw_frame(&self, renderer: &mut Renderer) -> anyhow::Result<()> {
-        renderer
-            .draw_frame(|mapped_uniform_buffer| self.update_uniform_buffer(mapped_uniform_buffer))
-    }
-
-    fn uniform_buffer_size(&self) -> u64 {
-        std::mem::size_of::<MVPMatrices>() as u64
-    }
-
-    fn update_uniform_buffer(&self, mapped_uniform_buffer: *mut c_void) -> anyhow::Result<()> {
-        update_mvp_uniform_buffer(
-            self.start_time,
-            self.aspect_ratio,
-            mapped_uniform_buffer as *mut MVPMatrices,
-        )
-    }
-
-    fn vertex_binding_descriptions(&self) -> Vec<ash::vk::VertexInputBindingDescription> {
-        Vertex::binding_descriptions()
-    }
-
-    fn vertex_attribute_descriptions(&self) -> Vec<ash::vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions()
-    }
-
-    fn load_vertices(&self) -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
+    fn load_vertices() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
         let vertices = vec![
             Vertex {
                 position: glam::Vec3::new(-0.5, -0.5, 0.0),
@@ -370,9 +245,87 @@ impl Game for DepthTexture {
 
         Ok((vertices, indices))
     }
+}
 
-    fn on_resize(&mut self, resize: Resize) {
-        self.aspect_ratio = resize.extent.0 as f32 / resize.extent.1 as f32;
+impl Game for DepthTexture {
+    fn window_description() -> WindowDescription {
+        WindowDescription {
+            title: "Depth Texture",
+            width: INITIAL_WINDOW_WIDTH,
+            height: INITIAL_WINDOW_HEIGHT,
+        }
+    }
+
+    fn frame_delay(&self) -> Duration {
+        FRAME_DELAY
+    }
+
+    fn setup(window: sdl3::video::Window) -> anyhow::Result<Self>
+    where
+        Self: Sized,
+    {
+        let uniform_buffer_size = std::mem::size_of::<MVPMatrices>() as u64;
+
+        let (vertices, indices) = Self::load_vertices()?;
+
+        let image = load_image("texture.jpg")?;
+
+        let vertex_binding_descriptions = Vertex::binding_descriptions();
+        let vertex_attribute_descriptions = Vertex::attribute_descriptions();
+
+        let shader_atlas = ShaderAtlas::init();
+        let shader = shader_atlas.depth_texture;
+
+        let renderer_config = RendererConfig {
+            uniform_buffer_size,
+            vertices,
+            indices,
+            image,
+            vertex_binding_descriptions,
+            vertex_attribute_descriptions,
+            shader,
+        };
+
+        let mut renderer = Renderer::init(window, renderer_config)?;
+        let pipeline_handle = renderer.create_pipeline()?;
+
+        let start_time = Instant::now();
+        let window_desc = Self::window_description();
+        let aspect_ratio = window_desc.width as f32 / window_desc.height as f32;
+
+        Ok(Self {
+            start_time,
+            aspect_ratio,
+            renderer,
+            pipeline_handle,
+        })
+    }
+
+    fn draw_frame(&mut self) -> anyhow::Result<()> {
+        self.renderer
+            .draw_frame(&self.pipeline_handle, |mapped_uniform_buffer| {
+                update_mvp_uniform_buffer(
+                    self.start_time,
+                    self.aspect_ratio,
+                    mapped_uniform_buffer as *mut MVPMatrices,
+                )
+            })
+    }
+
+    fn on_resize(&mut self) -> anyhow::Result<()> {
+        self.renderer.recreate_swapchain()?;
+
+        let (width, height) = self.renderer.current_extent();
+        self.aspect_ratio = width as f32 / height as f32;
+
+        Ok(())
+    }
+
+    fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
+        self.renderer.drain_gpu()?;
+        self.renderer.drop_pipeline(self.pipeline_handle);
+
+        Ok(())
     }
 }
 
@@ -384,4 +337,53 @@ fn load_image(file_name: &str) -> anyhow::Result<DynamicImage> {
         .with_context(|| format!("failed to decode image: {file_path:?}"))?;
 
     Ok(image)
+}
+
+fn update_mvp_uniform_buffer(
+    start_time: Instant,
+    aspect_ratio: f32,
+    mapped_uniform_buffer: *mut MVPMatrices,
+) -> Result<(), anyhow::Error> {
+    const TURN_DEGREES_PER_SECOND: f32 = 5.0;
+    const STARTING_ANGLE_DEGREES: f32 = 45.0;
+
+    let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
+    let turn_radians = elapsed_seconds * TURN_DEGREES_PER_SECOND.to_radians();
+
+    let model = glam::Mat4::from_rotation_z(turn_radians);
+    let view = glam::Mat4::look_at_rh(
+        glam::Vec3::splat(2.0),
+        glam::Vec3::splat(0.0),
+        glam::Vec3::new(0.0, 0.0, 1.0),
+    );
+    let projection =
+        glam::Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
+
+    let mut mvp = MVPMatrices {
+        model,
+        view,
+        projection,
+    };
+
+    // "GLM was originally designed for OpenGL,
+    // where the Y coordinate of the clip coordinates is inverted.
+    // The easiest way to compensate for that is to flip the sign
+    // on the scaling factor of the Y axis in the projection matrix.
+    // If you don’t do this, then the image will be rendered upside down."
+    // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
+    mvp.projection.y_axis.y *= -1.0;
+
+    if !COLUMN_MAJOR {
+        // it's also possible to avoid this by reversing the mul() calls in shaders
+        // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
+        mvp.model = mvp.model.transpose();
+        mvp.view = mvp.view.transpose();
+        mvp.projection = mvp.projection.transpose();
+    }
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
+    }
+
+    Ok(())
 }

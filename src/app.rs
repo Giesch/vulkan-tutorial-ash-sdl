@@ -3,30 +3,24 @@ use sdl3::keyboard::Keycode;
 use sdl3::sys::timer::SDL_DelayPrecise;
 use sdl3::EventPump;
 
-use crate::game::Game;
-use crate::renderer::Renderer;
-use crate::Resize;
+use crate::game::traits::RuntimeGame;
 
 pub struct App {
-    pub quit: bool,
+    pub game: Box<dyn RuntimeGame>,
     pub minimized: bool,
-    pub renderer: Renderer,
-    pub game: Box<dyn Game>,
+    pub quit: bool,
 }
 
 impl App {
-    pub fn init(window: sdl3::video::Window, mut game: impl Game + 'static) -> anyhow::Result<App> {
-        let renderer = game.setup_renderer(window)?;
-
+    pub fn init(game: impl RuntimeGame + 'static) -> anyhow::Result<App> {
         Ok(Self {
             game: Box::new(game),
-            renderer,
-            quit: false,
             minimized: false,
+            quit: false,
         })
     }
 
-    pub fn run_loop(&mut self, mut event_pump: EventPump) -> anyhow::Result<()> {
+    pub fn run_loop(mut self, mut event_pump: EventPump) -> anyhow::Result<()> {
         loop {
             let Ok(()) = self.handle_events(&mut event_pump) else {
                 break;
@@ -36,13 +30,13 @@ impl App {
             }
 
             if !self.minimized {
-                self.draw_frame()?;
+                self.game.draw_frame()?;
             }
 
             self.delay_frame();
         }
 
-        self.renderer.drain_gpu()?;
+        self.game.deinit()?;
 
         Ok(())
     }
@@ -63,10 +57,7 @@ impl App {
                 Event::Window { win_event, .. } => match win_event {
                     WindowEvent::Resized(_new_width, _new_height) => {
                         // we take the new dimensions off the renderer's window ref
-                        self.renderer.recreate_swapchain()?;
-
-                        let extent = self.renderer.current_extent();
-                        self.game.on_resize(Resize { extent });
+                        self.game.on_resize()?;
                     }
                     WindowEvent::Minimized => {
                         self.minimized = true;
@@ -115,10 +106,6 @@ impl App {
         }
 
         Ok(())
-    }
-
-    pub fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.game.draw_frame(&mut self.renderer)
     }
 
     pub fn delay_frame(&self) {

@@ -7,8 +7,9 @@ use ash::vk;
 #[derive(Debug, Clone)]
 pub struct PipelineHandle(usize);
 
-pub struct PipelineStorage(Vec<RendererPipeline>);
+pub struct PipelineStorage(Vec<Option<RendererPipeline>>);
 
+// TODO docs w/ panics sections
 impl PipelineStorage {
     pub fn new() -> Self {
         Self(Default::default())
@@ -16,17 +17,23 @@ impl PipelineStorage {
 
     pub fn add(&mut self, pipeline: RendererPipeline) -> PipelineHandle {
         let handle = PipelineHandle(self.0.len());
-        self.0.push(pipeline);
+        self.0.push(Some(pipeline));
 
         handle
     }
 
     pub fn get(&self, handle: &PipelineHandle) -> &RendererPipeline {
-        &self.0[handle.0]
+        self.0[handle.0].as_ref().unwrap()
     }
 
-    pub fn get_mut(&mut self, handle: &mut PipelineHandle) -> &mut RendererPipeline {
-        &mut self.0[handle.0]
+    // used only for hot reload
+    #[cfg(debug_assertions)]
+    pub fn get_mut(&mut self, handle: &PipelineHandle) -> &mut RendererPipeline {
+        self.0[handle.0].as_mut().unwrap()
+    }
+
+    pub fn take(&mut self, handle: PipelineHandle) -> RendererPipeline {
+        self.0[handle.0].take().unwrap()
     }
 }
 
