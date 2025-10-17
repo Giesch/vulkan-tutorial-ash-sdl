@@ -6,27 +6,34 @@
   - [ ] take an enum/struct arg that specifies each descriptor fully
     - DescriptorBuffer
     - DescriptorImageInfo
+
 - [ ] get vertex attribute & binding descriptions via reflection
 
-- [ ] change renderer to allow dynamic graphics resources
-  - [ ] move game methods to renderer constructor args
+- [ ] make the shader atlas entry type carry more generics
+  - [ ] vertex type
+    associated type on a Shader trait?
+  - [ ] required resources (ie one texture)
+    what's a nice way to handle this? use the same struct as create_descriptor_sets?
+
+- [-] change renderer to allow dynamic graphics resources
+  - [-] move game methods to renderer constructor args
     ie, passed in from Game struct/module
-    - [ ] compiled shaders
+    - [X] compiled shaders
       pre-compiled owned by game; ultimately passed to create pipeline
-    - [ ] uniform buffer
+    - [-] uniform buffer
       renderer should have a vec of vecs for these
       basically an allocator
         how is dealloc handled? tied to a 'scene'?
         just leak for now
-    - [ ] load texture
+    - [X] load texture
       game loads asset; calls renderer to allocate vk::Image & vk::DeviceMemory
-    - [ ] create pipeline
+    - [X] create pipeline
       also make an allocator for these? when do you have multiple pipelines?
       maybe just one for now?
       how is the pipeline handle used?
-  - [ ] split constructor args out into separate method calls
+  - [X] split constructor args out into separate method calls
 
-- [ ] generate rust modules from reflection
+- [-] generate rust modules from reflection
   - [ ] generate structs (template not macro) from reflection json
     - put generated code in the shader atlas entry?
       or generate the shader atlas entry too
@@ -35,7 +42,8 @@
       - repr(C, align(16))
     - [ ] generate tests that sizes & offsets match
 
-  - [ ] assert that slang struct fields are in descending size order
+  - [-] assert that slang struct fields are in descending size order
+    - [X] get parameter block buffer size
     - [ ] unit test this from the level of shader source code
 
   - [ ] switch to a macro from string template
@@ -43,15 +51,7 @@
     - is a plain replacement macro possible?
     - libraries for proc macros
 
-  - [ ] Vertex 'class methods'
-    how to handle custom vertex structs?
-    could make the vertex description a separate thing, passed in at pipeline creation
-    - [ ] vertex attributes
-    - [ ] binding descriptions
-
-  - [ ] how would this work with bindless / buffer device addresses?
-
-
+  - [ ] how would this all work with bindless / buffer device addresses?
 
 
 - [-] move example-specific code out of the renderer
