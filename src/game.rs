@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
-use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex, TextureHandle};
+use crate::renderer::{PipelineHandle, Renderer, RendererConfig, TextureHandle};
 use crate::shaders::atlas::{MVPMatrices, ShaderAtlas, Vertex};
 use crate::util::manifest_path;
 
@@ -118,17 +118,12 @@ impl Game for VikingRoom {
 
         let image = load_image("viking_room.png")?;
 
-        let vertex_binding_descriptions = Vertex::binding_descriptions();
-        let vertex_attribute_descriptions = Vertex::attribute_descriptions();
-
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
         let renderer_config = RendererConfig {
             vertices,
             indices,
-            vertex_binding_descriptions,
-            vertex_attribute_descriptions,
             shader,
         };
 
@@ -263,17 +258,12 @@ impl Game for DepthTexture {
 
         let image = load_image("texture.jpg")?;
 
-        let vertex_binding_descriptions = Vertex::binding_descriptions();
-        let vertex_attribute_descriptions = Vertex::attribute_descriptions();
-
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
         let renderer_config = RendererConfig {
             vertices,
             indices,
-            vertex_binding_descriptions,
-            vertex_attribute_descriptions,
             shader,
         };
 

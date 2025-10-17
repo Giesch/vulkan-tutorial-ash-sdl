@@ -6,6 +6,7 @@
   - [ ] take an enum/struct arg that specifies each descriptor fully
     - DescriptorBuffer
     - DescriptorImageInfo
+- [ ] get vertex attribute & binding descriptions via reflection
 
 - [ ] change renderer to allow dynamic graphics resources
   - [ ] move game methods to renderer constructor args

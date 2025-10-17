@@ -1,7 +1,9 @@
 #[cfg_attr(debug_assertions, expect(unused))]
 use std::ffi::CString;
 
-use crate::shaders::ReflectionJson;
+use ash::vk;
+
+use crate::{renderer::RendererVertex, shaders::ReflectionJson};
 
 mod mvp_matrices;
 pub use mvp_matrices::*;
@@ -49,6 +51,14 @@ impl DepthTextureShader {
 
     pub fn uniform_buffer_size(&self) -> usize {
         std::mem::size_of::<MVPMatrices>()
+    }
+
+    pub fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
+        Vertex::binding_descriptions()
+    }
+
+    pub fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
+        Vertex::attribute_descriptions()
     }
 
     // dev only

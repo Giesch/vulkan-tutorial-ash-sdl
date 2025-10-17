@@ -364,8 +364,8 @@ impl Renderer {
             self.render_pass,
             self.msaa_samples,
             &compiled_shaders,
-            &self.config.vertex_binding_descriptions,
-            &self.config.vertex_attribute_descriptions,
+            &self.config.shader.vertex_binding_descriptions(),
+            &self.config.shader.vertex_attribute_descriptions(),
         )?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
@@ -816,8 +816,8 @@ impl Renderer {
             self.render_pass,
             self.msaa_samples,
             &render_pipeline_mut.layout,
-            &self.config.vertex_binding_descriptions,
-            &self.config.vertex_attribute_descriptions,
+            &self.config.shader.vertex_binding_descriptions(),
+            &self.config.shader.vertex_attribute_descriptions(),
         )?;
 
         info!("finished recompiling shaders");
