@@ -21,6 +21,8 @@ pub struct ParameterBlockGlobalParameter {
 #[serde(rename_all = "camelCase")]
 pub struct ParameterBlockElementType {
     pub type_name: String,
+    /// the size of the automatically-added uniform buffer
+    pub uniform_size: usize,
     pub fields: Vec<StructField>,
 }
 
@@ -88,6 +90,20 @@ pub enum StructField {
     Resource(ResourceStructField),
 }
 
+impl StructField {
+    pub fn binding(&self) -> Option<&Binding> {
+        match self {
+            StructField::Vector(v) => match v {
+                VectorStructField::Bound(b) => Some(&b.binding),
+                VectorStructField::Semantic(_) => None,
+            },
+            StructField::Struct(s) => Some(&s.binding),
+            StructField::Matrix(m) => Some(&m.binding),
+            StructField::Resource(r) => Some(&r.binding),
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum Binding {
@@ -95,6 +111,17 @@ pub enum Binding {
     DescriptorTableSlot(IndexCountBinding),
     VaryingInput(IndexCountBinding),
     ConstantBuffer(IndexCountBinding),
+}
+
+impl Binding {
+    pub fn uniform_buffer_size(&self) -> Option<usize> {
+        match self {
+            Binding::Uniform(u) => Some(u.size),
+            Binding::DescriptorTableSlot(_) => None,
+            Binding::VaryingInput(_) => None,
+            Binding::ConstantBuffer(_) => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]

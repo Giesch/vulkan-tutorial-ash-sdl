@@ -5,6 +5,7 @@ use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
 use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex, TextureHandle};
+use crate::shaders::atlas::MVPMatrices;
 use crate::shaders::atlas::ShaderAtlas;
 use crate::util::manifest_path;
 
@@ -12,9 +13,6 @@ use super::shaders::COLUMN_MAJOR;
 
 mod vertex;
 pub use vertex::*;
-
-mod mvp;
-use mvp::MVPMatrices;
 
 pub mod traits;
 pub use traits::{Game, WindowDescription};
@@ -120,8 +118,6 @@ impl Game for VikingRoom {
     where
         Self: Sized,
     {
-        let uniform_buffer_size = std::mem::size_of::<MVPMatrices>() as u64;
-
         let (vertices, indices) = Self::load_vertices()?;
 
         let image = load_image("viking_room.png")?;
@@ -133,7 +129,6 @@ impl Game for VikingRoom {
         let shader = shader_atlas.depth_texture;
 
         let renderer_config = RendererConfig {
-            uniform_buffer_size,
             vertices,
             indices,
             vertex_binding_descriptions,
@@ -268,8 +263,6 @@ impl Game for DepthTexture {
     where
         Self: Sized,
     {
-        let uniform_buffer_size = std::mem::size_of::<MVPMatrices>() as u64;
-
         let (vertices, indices) = Self::load_vertices()?;
 
         let image = load_image("texture.jpg")?;
@@ -281,7 +274,6 @@ impl Game for DepthTexture {
         let shader = shader_atlas.depth_texture;
 
         let renderer_config = RendererConfig {
-            uniform_buffer_size,
             vertices,
             indices,
             vertex_binding_descriptions,

@@ -3,7 +3,6 @@ use ash::vk;
 use crate::shaders::atlas::DepthTextureShader;
 
 pub struct RendererConfig {
-    pub uniform_buffer_size: u64,
     // TODO make this a generic
     // maybe as a pipeline create arg instead of renderer init arg
     pub vertices: Vec<crate::game::Vertex>,

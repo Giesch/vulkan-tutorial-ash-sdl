@@ -163,6 +163,7 @@ impl DescriptorSetLayoutBuilder {
         }
     }
 
+    /// https://docs.shader-slang.org/en/latest/parameter-blocks.html#automatically-introduced-uniform-buffer
     pub fn add_descriptor_ranges_for_parameter_block_element(
         &mut self,
         element_layout: &slang::reflection::TypeLayout,

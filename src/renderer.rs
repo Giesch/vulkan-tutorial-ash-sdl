@@ -391,7 +391,7 @@ impl Renderer {
                 &self.instance,
                 &self.device,
                 self.physical_device,
-                self.config.uniform_buffer_size,
+                self.config.shader.uniform_buffer_size() as u64,
             )?;
 
         let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
@@ -400,9 +400,9 @@ impl Renderer {
             descriptor_pool,
             &compiled_shaders.descriptor_set_layouts,
             &uniform_buffers,
+            self.config.shader.uniform_buffer_size() as u64,
             texture.image_view,
             texture.sampler,
-            self.config.uniform_buffer_size,
         )?;
 
         Ok(RendererPipeline {
@@ -1867,10 +1867,17 @@ fn create_descriptor_sets(
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layouts: &[vk::DescriptorSetLayout],
     uniform_buffers: &[vk::Buffer],
+    buffer_size: vk::DeviceSize,
     texture_image_view: vk::ImageView,
     texture_sampler: vk::Sampler,
-    buffer_size: vk::DeviceSize,
 ) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
+    // this vec and the resulting vec of descriptor sets are arranged like this:
+    // [
+    //     frame_0_set_0,
+    //     frame_0_set_1,
+    //     frame_1_set_0,
+    //     frame_1_set_1,
+    // ]
     let mut set_layouts = vec![];
     for _frame in 0..MAX_FRAMES_IN_FLIGHT {
         for &descriptor_set_layout in descriptor_set_layouts {
@@ -1888,16 +1895,15 @@ fn create_descriptor_sets(
     //   want to have created resources & reflected binding ranges zipped together
     //     before this is called
     //   reflected binding # - available already
-    //   reflected buffer_size - available but not yet
+    //   reflected buffer_size - available but not yet (include in reflected desc set)
     #[expect(clippy::needless_range_loop)]
     for frame in 0..MAX_FRAMES_IN_FLIGHT {
         for layout_offset in 0..descriptor_set_layouts.len() {
-            let buffer = uniform_buffers[frame];
             let ds = frame * descriptor_set_layouts.len() + layout_offset;
             let dst_set = descriptor_sets[ds];
 
             let buffer_info = vk::DescriptorBufferInfo::default()
-                .buffer(buffer)
+                .buffer(uniform_buffers[frame])
                 .offset(0)
                 .range(buffer_size);
             let buffer_info = [buffer_info];
