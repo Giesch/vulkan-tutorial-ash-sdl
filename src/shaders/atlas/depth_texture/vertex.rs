@@ -1,4 +1,4 @@
-use crate::renderer::{gpu_write::GPUWrite, RendererVertex};
+use crate::renderer::{gpu_write::GPUWrite, vertex_description::VertexDescription};
 
 #[derive(Debug, Clone)]
 #[repr(C, align(16))]
@@ -10,7 +10,7 @@ pub struct Vertex {
 
 impl GPUWrite for Vertex {}
 
-impl RendererVertex for Vertex {
+impl VertexDescription for Vertex {
     fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
         let binding_description = ash::vk::VertexInputBindingDescription::default()
             .binding(0)

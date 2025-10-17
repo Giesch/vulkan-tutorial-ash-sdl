@@ -9,6 +9,7 @@ use std::path::PathBuf;
 use ash::vk;
 use sdl3::sys::vulkan::SDL_Vulkan_DestroySurface;
 use sdl3::video::Window;
+use vertex_description::VertexDescription;
 
 use crate::shaders;
 use crate::shaders::atlas::DepthTextureShader;
@@ -24,8 +25,7 @@ mod platform;
 pub mod gpu_write;
 use gpu_write::{write_to_gpu_buffer, GPUWrite};
 
-pub mod config;
-pub use config::*;
+pub mod vertex_description;
 
 pub mod texture;
 pub use texture::*;
@@ -41,9 +41,6 @@ const ENABLE_SAMPLE_SHADING: bool = false;
 const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
-    // fields getting moved up & out
-    config: RendererConfig,
-
     // fields that are created once
     total_frames: usize,
     #[cfg(debug_assertions)]
@@ -97,7 +94,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn init(window: Window, config: RendererConfig) -> Result<Self, anyhow::Error> {
+    pub fn init(window: Window) -> Result<Self, anyhow::Error> {
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
 
@@ -228,7 +225,6 @@ impl Renderer {
         let textures = TextureStorage::new();
 
         Ok(Self {
-            config,
             total_frames: 0,
             #[cfg(debug_assertions)]
             shader_changes,
@@ -305,14 +301,11 @@ impl Renderer {
         }
     }
 
-    // TODO take a create info arg;
-    // shader atlas entry, vertex definition, etc
-    // make texture an optional field/collection
-    pub fn create_pipeline(
+    pub fn create_pipeline<V: VertexDescription>(
         &mut self,
-        texture_handle: &TextureHandle,
+        config: PipelineConfig<V>,
     ) -> anyhow::Result<PipelineHandle> {
-        let pipeline = self.init_pipeline(texture_handle)?;
+        let pipeline = self.init_pipeline(config)?;
         let handle = self.pipelines.add(pipeline);
 
         Ok(handle)
@@ -351,21 +344,21 @@ impl Renderer {
         }
     }
 
-    fn init_pipeline(
+    fn init_pipeline<V: VertexDescription>(
         &mut self,
-        texture_handle: &TextureHandle,
+        config: PipelineConfig<V>,
     ) -> anyhow::Result<RendererPipeline> {
-        let texture = self.textures.get(texture_handle);
+        let texture = self.textures.get(config.texture_handle);
 
         let compiled_shaders =
-            ShaderPipelineLayout::create_from_atlas(&self.device, &self.config.shader)?;
+            ShaderPipelineLayout::create_from_atlas(&self.device, &config.shader)?;
         let pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
             self.msaa_samples,
             &compiled_shaders,
-            &self.config.shader.vertex_binding_descriptions(),
-            &self.config.shader.vertex_attribute_descriptions(),
+            &config.shader.vertex_binding_descriptions(),
+            &config.shader.vertex_attribute_descriptions(),
         )?;
 
         let (vertex_buffer, vertex_buffer_memory) = create_vertex_buffer(
@@ -374,7 +367,7 @@ impl Renderer {
             self.physical_device,
             self.command_pool,
             self.graphics_queue,
-            &self.config.vertices,
+            &config.vertices,
         )?;
 
         let (index_buffer, index_buffer_memory) = create_index_buffer(
@@ -383,7 +376,7 @@ impl Renderer {
             self.physical_device,
             self.command_pool,
             self.graphics_queue,
-            &self.config.indices,
+            &config.indices,
         )?;
 
         let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
@@ -391,7 +384,7 @@ impl Renderer {
                 &self.instance,
                 &self.device,
                 self.physical_device,
-                self.config.shader.uniform_buffer_size() as u64,
+                config.shader.uniform_buffer_size() as u64,
             )?;
 
         let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
@@ -400,7 +393,7 @@ impl Renderer {
             descriptor_pool,
             &compiled_shaders.descriptor_set_layouts,
             &uniform_buffers,
-            self.config.shader.uniform_buffer_size() as u64,
+            config.shader.uniform_buffer_size() as u64,
             texture.image_view,
             texture.sampler,
         )?;
@@ -417,6 +410,8 @@ impl Renderer {
             uniform_buffers_mapped,
             descriptor_pool,
             descriptor_sets,
+            index_count: config.indices.len(),
+            shader: config.shader,
         })
     }
 
@@ -514,7 +509,7 @@ impl Renderer {
                 &[],
             );
 
-            let index_count = self.config.indices.len() as u32;
+            let index_count = self.renderer_pipeline(pipeline_handle).index_count as u32;
             self.device
                 .cmd_draw_indexed(command_buffer, index_count, 1, 0, 0, 0);
         }
@@ -792,14 +787,16 @@ impl Renderer {
         pipeline_handle: &PipelineHandle,
         _edit_events: &[notify::Event],
     ) -> Result<(), anyhow::Error> {
-        let mut tmp_compiled_shaders =
-            match ShaderPipelineLayout::create_from_atlas(&self.device, &self.config.shader) {
-                Ok(shaders) => shaders,
-                Err(e) => {
-                    error!("failed to compile shaders: {e}");
-                    return Ok(());
-                }
-            };
+        let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
+            &self.device,
+            &self.renderer_pipeline(pipeline_handle).shader,
+        ) {
+            Ok(shaders) => shaders,
+            Err(e) => {
+                error!("failed to compile shaders: {e}");
+                return Ok(());
+            }
+        };
 
         let render_pipeline_mut = self.pipelines.get_mut(&pipeline_handle);
 
@@ -816,8 +813,8 @@ impl Renderer {
             self.render_pass,
             self.msaa_samples,
             &render_pipeline_mut.layout,
-            &self.config.shader.vertex_binding_descriptions(),
-            &self.config.shader.vertex_attribute_descriptions(),
+            &render_pipeline_mut.shader.vertex_binding_descriptions(),
+            &render_pipeline_mut.shader.vertex_attribute_descriptions(),
         )?;
 
         info!("finished recompiling shaders");

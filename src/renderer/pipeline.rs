@@ -1,12 +1,14 @@
 use std::ffi::c_void;
 
-use super::ShaderPipelineLayout;
+use crate::shaders::atlas::DepthTextureShader;
+
+use super::{vertex_description::VertexDescription, ShaderPipelineLayout, TextureHandle};
 use ash::vk;
 
 #[derive(Debug)]
 pub struct PipelineHandle(usize);
 
-pub struct PipelineStorage(Vec<Option<RendererPipeline>>);
+pub(super) struct PipelineStorage(Vec<Option<RendererPipeline>>);
 
 // TODO docs w/ panics sections
 impl PipelineStorage {
@@ -36,20 +38,33 @@ impl PipelineStorage {
     }
 }
 
-pub struct RendererPipeline {
-    pub(super) layout: ShaderPipelineLayout,
-    pub(super) pipeline: vk::Pipeline,
+pub(super) struct RendererPipeline {
+    pub layout: ShaderPipelineLayout,
+    pub pipeline: vk::Pipeline,
 
-    pub(super) vertex_buffer: vk::Buffer,
-    pub(super) vertex_buffer_memory: vk::DeviceMemory,
+    pub vertex_buffer: vk::Buffer,
+    pub vertex_buffer_memory: vk::DeviceMemory,
 
-    pub(super) index_buffer: vk::Buffer,
-    pub(super) index_buffer_memory: vk::DeviceMemory,
+    pub index_buffer: vk::Buffer,
+    pub index_buffer_memory: vk::DeviceMemory,
 
-    pub(super) uniform_buffers: Vec<vk::Buffer>,
-    pub(super) uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    pub(super) uniform_buffers_mapped: Vec<*mut c_void>,
+    pub uniform_buffers: Vec<vk::Buffer>,
+    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
+    pub uniform_buffers_mapped: Vec<*mut c_void>,
 
-    pub(super) descriptor_pool: vk::DescriptorPool,
-    pub(super) descriptor_sets: Vec<vk::DescriptorSet>,
+    pub descriptor_pool: vk::DescriptorPool,
+    pub descriptor_sets: Vec<vk::DescriptorSet>,
+
+    pub index_count: usize,
+    #[cfg_attr(not(debug_assertions), expect(unused))]
+    pub shader: DepthTextureShader,
+}
+
+/// arguments for creating a pipeline
+pub struct PipelineConfig<'a, V: VertexDescription> {
+    pub shader: DepthTextureShader,
+    pub vertices: Vec<V>,
+    pub indices: Vec<u32>,
+    // TODO make this a vec/iterable
+    pub texture_handle: &'a TextureHandle,
 }

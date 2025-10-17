@@ -3,7 +3,8 @@ use std::ffi::CString;
 
 use ash::vk;
 
-use crate::{renderer::RendererVertex, shaders::ReflectionJson};
+use crate::renderer::vertex_description::VertexDescription;
+use crate::shaders::ReflectionJson;
 
 mod mvp_matrices;
 pub use mvp_matrices::*;

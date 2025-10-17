@@ -4,7 +4,7 @@ use std::time::{Duration, Instant};
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
-use crate::renderer::{PipelineHandle, Renderer, RendererConfig, TextureHandle};
+use crate::renderer::{PipelineConfig, PipelineHandle, Renderer, TextureHandle};
 use crate::shaders::atlas::{MVPMatrices, ShaderAtlas, Vertex};
 use crate::util::manifest_path;
 
@@ -121,15 +121,15 @@ impl Game for VikingRoom {
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let renderer_config = RendererConfig {
+        let mut renderer = Renderer::init(window)?;
+        let texture_handle = renderer.create_texture(&image)?;
+        let pipeline_config = PipelineConfig {
+            shader,
             vertices,
             indices,
-            shader,
+            texture_handle: &texture_handle,
         };
-
-        let mut renderer = Renderer::init(window, renderer_config)?;
-        let texture_handle = renderer.create_texture(&image)?;
-        let pipeline_handle = renderer.create_pipeline(&texture_handle)?;
+        let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();
@@ -261,15 +261,15 @@ impl Game for DepthTexture {
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let renderer_config = RendererConfig {
+        let mut renderer = Renderer::init(window)?;
+        let texture_handle = renderer.create_texture(&image)?;
+        let pipeline_config = PipelineConfig {
+            shader,
             vertices,
             indices,
-            shader,
+            texture_handle: &texture_handle,
         };
-
-        let mut renderer = Renderer::init(window, renderer_config)?;
-        let texture_handle = renderer.create_texture(&image)?;
-        let pipeline_handle = renderer.create_pipeline(&texture_handle)?;
+        let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();

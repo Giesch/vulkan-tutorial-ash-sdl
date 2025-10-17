@@ -3,7 +3,7 @@ use ash::vk;
 #[derive(Debug)]
 pub struct TextureHandle(usize);
 
-pub struct TextureStorage(Vec<Option<Texture>>);
+pub(super) struct TextureStorage(Vec<Option<Texture>>);
 
 // TODO docs w/ panics sections
 // maybe extract a generic version
@@ -28,11 +28,11 @@ impl TextureStorage {
     }
 }
 
-pub struct Texture {
-    pub(super) image: vk::Image,
-    pub(super) image_memory: vk::DeviceMemory,
-    pub(super) image_view: vk::ImageView,
-    pub(super) sampler: vk::Sampler,
+pub(super) struct Texture {
+    pub image: vk::Image,
+    pub image_memory: vk::DeviceMemory,
+    pub image_view: vk::ImageView,
+    pub sampler: vk::Sampler,
     #[expect(unused)] // currently unused after init
-    pub(super) mip_levels: u32,
+    pub mip_levels: u32,
 }
