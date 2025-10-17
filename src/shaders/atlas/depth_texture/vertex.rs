@@ -10,15 +10,17 @@ pub struct Vertex {
 
 impl GPUWrite for Vertex {}
 
-impl Vertex {
-    pub fn binding_description() -> ash::vk::VertexInputBindingDescription {
-        ash::vk::VertexInputBindingDescription::default()
+impl RendererVertex for Vertex {
+    fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
+        let binding_description = ash::vk::VertexInputBindingDescription::default()
             .binding(0)
             .stride(std::mem::size_of::<Self>() as u32)
-            .input_rate(ash::vk::VertexInputRate::VERTEX)
+            .input_rate(ash::vk::VertexInputRate::VERTEX);
+
+        vec![binding_description]
     }
 
-    pub fn raw_attribute_descriptions() -> [ash::vk::VertexInputAttributeDescription; 3] {
+    fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
         // color formats are also used to define non-color vec sizes 1-4
         //   (the official tutorial is mildly apologetic)
         // BUT this does matter for defaults -
@@ -32,7 +34,7 @@ impl Vertex {
         // bindings - the index in the array passed to cmd_bind_vertex_buffers
         //   in our case, always 0 because there is only one
         // locations - a unique identifier for the attribute
-        [
+        vec![
             // position
             ash::vk::VertexInputAttributeDescription::default()
                 .binding(0)
@@ -52,15 +54,5 @@ impl Vertex {
                 .format(glam_vec_2_format)
                 .offset(std::mem::offset_of!(Vertex, tex_coord) as u32),
         ]
-    }
-}
-
-impl RendererVertex for Vertex {
-    fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
-        vec![Self::binding_description()]
-    }
-
-    fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
-        Self::raw_attribute_descriptions().to_vec()
     }
 }
