@@ -5,14 +5,10 @@ use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
 use crate::renderer::{PipelineHandle, Renderer, RendererConfig, RendererVertex, TextureHandle};
-use crate::shaders::atlas::MVPMatrices;
-use crate::shaders::atlas::ShaderAtlas;
+use crate::shaders::atlas::{MVPMatrices, ShaderAtlas, Vertex};
 use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
-
-mod vertex;
-pub use vertex::*;
 
 pub mod traits;
 pub use traits::{Game, WindowDescription};

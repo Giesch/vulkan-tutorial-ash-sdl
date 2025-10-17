@@ -6,6 +6,9 @@ use crate::shaders::ReflectionJson;
 mod mvp_matrices;
 pub use mvp_matrices::*;
 
+mod vertex;
+pub use vertex::*;
+
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
 }
