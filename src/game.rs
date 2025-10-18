@@ -110,7 +110,7 @@ impl Game for VikingRoom {
         FRAME_DELAY
     }
 
-    fn setup(window: sdl3::video::Window) -> anyhow::Result<Self>
+    fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -121,7 +121,6 @@ impl Game for VikingRoom {
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let mut renderer = Renderer::init(window)?;
         let texture_handle = renderer.create_texture(&image)?;
         let pipeline_config = PipelineConfig {
             shader,
@@ -250,7 +249,7 @@ impl Game for DepthTexture {
         FRAME_DELAY
     }
 
-    fn setup(window: sdl3::video::Window) -> anyhow::Result<Self>
+    fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -261,7 +260,6 @@ impl Game for DepthTexture {
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let mut renderer = Renderer::init(window)?;
         let texture_handle = renderer.create_texture(&image)?;
         let pipeline_config = PipelineConfig {
             shader,

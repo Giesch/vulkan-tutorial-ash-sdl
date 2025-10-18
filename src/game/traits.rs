@@ -1,14 +1,13 @@
 use std::time::Duration;
 
-use sdl3::video::Window;
-
 use crate::app::App;
+use crate::renderer::Renderer;
 
 /// This is the only trait from this module to implement directly.
 pub trait Game {
     fn window_description() -> WindowDescription;
 
-    fn setup(window: Window) -> anyhow::Result<Self>
+    fn setup(renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized;
 
@@ -36,7 +35,8 @@ pub trait Game {
             .vulkan()
             .build()?;
 
-        let game = Self::setup(window)?;
+        let renderer = Renderer::init(window)?;
+        let game = Self::setup(renderer)?;
         let app = App::init(game)?;
 
         let event_pump = sdl.event_pump()?;
@@ -55,7 +55,7 @@ pub struct WindowDescription {
 pub trait GameSetup {
     fn window_description() -> WindowDescription;
 
-    fn setup(window: Window) -> anyhow::Result<Self>
+    fn setup(renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized;
 }
@@ -80,11 +80,11 @@ where
         G::window_description()
     }
 
-    fn setup(window: Window) -> anyhow::Result<Self>
+    fn setup(renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
-        G::setup(window)
+        G::setup(renderer)
     }
 }
 

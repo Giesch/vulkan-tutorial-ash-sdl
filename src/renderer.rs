@@ -12,7 +12,7 @@ use sdl3::video::Window;
 use vertex_description::VertexDescription;
 
 use crate::shaders;
-use crate::shaders::atlas::DepthTextureShader;
+use crate::shaders::atlas::{DepthTextureShader, ShaderAtlasEntry};
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -388,14 +388,28 @@ impl Renderer {
             )?;
 
         let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
+
+        // TODO get bindings from reflection api
+        // and allow a dynamic number of these descriptions
+        let uniform_buffer_description = UniformBufferDescription {
+            size: config.shader.uniform_buffer_size() as u64,
+            binding: 0,
+            descriptor_count: 1,
+        };
+        let texture_description = TextureDescription {
+            layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+            binding: 1,
+            descriptor_count: 1,
+        };
+
         let descriptor_sets = create_descriptor_sets(
             &self.device,
             descriptor_pool,
             &compiled_shaders.descriptor_set_layouts,
             &uniform_buffers,
-            config.shader.uniform_buffer_size() as u64,
-            texture.image_view,
-            texture.sampler,
+            uniform_buffer_description,
+            texture_description,
+            &texture,
         )?;
 
         Ok(RendererPipeline {
@@ -1859,14 +1873,28 @@ fn create_descriptor_pool(
     Ok(pool)
 }
 
+struct UniformBufferDescription {
+    size: u64,
+    binding: u32,
+    // the number of descriptors in the descriptor set?
+    descriptor_count: u32,
+}
+
+struct TextureDescription {
+    layout: vk::ImageLayout,
+    binding: u32,
+    // the number of descriptors in the descriptor set?
+    descriptor_count: u32,
+}
+
 fn create_descriptor_sets(
     device: &ash::Device,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layouts: &[vk::DescriptorSetLayout],
     uniform_buffers: &[vk::Buffer],
-    buffer_size: vk::DeviceSize,
-    texture_image_view: vk::ImageView,
-    texture_sampler: vk::Sampler,
+    uniform_buffer_description: UniformBufferDescription,
+    texture_description: TextureDescription,
+    texture: &Texture,
 ) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
     // this vec and the resulting vec of descriptor sets are arranged like this:
     // [
@@ -1887,10 +1915,11 @@ fn create_descriptor_sets(
         .set_layouts(&set_layouts);
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
-    // TODO can some of this information come from reflection?
+    // TODO can some/all of this information come from reflection?
     //   need to wire through the json info to here first
     //   want to have created resources & reflected binding ranges zipped together
     //     before this is called
+    //
     //   reflected binding # - available already
     //   reflected buffer_size - available but not yet (include in reflected desc set)
     #[expect(clippy::needless_range_loop)]
@@ -1900,29 +1929,29 @@ fn create_descriptor_sets(
             let dst_set = descriptor_sets[ds];
 
             let buffer_info = vk::DescriptorBufferInfo::default()
-                .buffer(uniform_buffers[frame])
                 .offset(0)
-                .range(buffer_size);
+                .buffer(uniform_buffers[frame])
+                .range(uniform_buffer_description.size);
             let buffer_info = [buffer_info];
             let uniform_buffer_write = vk::WriteDescriptorSet::default()
                 .dst_set(dst_set)
-                .dst_binding(0)
+                .dst_binding(uniform_buffer_description.binding)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(1)
+                .descriptor_count(uniform_buffer_description.descriptor_count)
                 .buffer_info(&buffer_info);
 
             let image_info = vk::DescriptorImageInfo::default()
-                .image_layout(vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL)
-                .image_view(texture_image_view)
-                .sampler(texture_sampler);
+                .image_layout(texture_description.layout)
+                .image_view(texture.image_view)
+                .sampler(texture.sampler);
             let image_info = [image_info];
             let image_write = vk::WriteDescriptorSet::default()
                 .dst_set(dst_set)
-                .dst_binding(1)
+                .dst_binding(texture_description.binding)
                 .dst_array_element(0)
                 .descriptor_type(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(1)
+                .descriptor_count(texture_description.descriptor_count)
                 .image_info(&image_info);
 
             let writes = [uniform_buffer_write, image_write];

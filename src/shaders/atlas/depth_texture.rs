@@ -1,10 +1,12 @@
-#[cfg_attr(debug_assertions, expect(unused))]
 use std::ffi::CString;
 
 use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
 use crate::shaders::ReflectionJson;
+
+#[cfg_attr(not(debug_assertions), expect(unused))]
+use super::ShaderAtlasEntry;
 
 mod mvp_matrices;
 pub use mvp_matrices::*;
@@ -17,8 +19,6 @@ pub struct DepthTextureShader {
 }
 
 impl DepthTextureShader {
-    // dev and release
-
     pub fn init() -> Self {
         let json_str = include_str!("../../../shaders/compiled/depth_texture.json");
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
@@ -28,16 +28,13 @@ impl DepthTextureShader {
         // assertions that static values match shader reflection
         #[cfg(debug_assertions)]
         {
-            use crate::shaders::json::GlobalParameter;
+            use crate::shaders::json::GlobalParameter::ParameterBlock;
 
-            let mut parameter_blocks =
-                shader
-                    .reflection_json
-                    .global_parameters
-                    .iter()
-                    .map(|global_parameter| match global_parameter {
-                        GlobalParameter::ParameterBlock(p) => p,
-                    });
+            let mut parameter_blocks = shader
+                .reflection_json
+                .global_parameters
+                .iter()
+                .map(|ParameterBlock(p)| p);
 
             assert!(parameter_blocks.len() == 1);
 
@@ -49,57 +46,52 @@ impl DepthTextureShader {
 
         shader
     }
+}
 
-    pub fn uniform_buffer_size(&self) -> usize {
-        std::mem::size_of::<MVPMatrices>()
-    }
-
-    pub fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
-        Vertex::binding_descriptions()
-    }
-
-    pub fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions()
-    }
-
-    // dev only
-
-    #[cfg(debug_assertions)]
-    pub fn source_file_name(&self) -> &str {
+impl super::ShaderAtlasEntry for DepthTextureShader {
+    fn source_file_name(&self) -> &str {
         &self.reflection_json.source_file_name
     }
 
-    // release only
+    fn uniform_buffer_size(&self) -> usize {
+        std::mem::size_of::<MVPMatrices>()
+    }
 
-    #[cfg(not(debug_assertions))]
-    pub fn vert_entry_point_name(&self) -> CString {
+    fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
+        Vertex::binding_descriptions()
+    }
+
+    fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
+        Vertex::attribute_descriptions()
+    }
+
+    fn vert_entry_point_name(&self) -> CString {
         let entry_point = self
             .reflection_json
             .vertex_entry_point
             .entry_point_name
             .clone();
+
         CString::new(entry_point).unwrap()
     }
 
-    #[cfg(not(debug_assertions))]
-    pub fn frag_entry_point_name(&self) -> CString {
-        let entry_point = self
-            .reflection_json
-            .fragment_entry_point
-            .entry_point_name
-            .clone();
-        CString::new(entry_point).unwrap()
-    }
-
-    #[cfg(not(debug_assertions))]
-    pub fn vert_spv(&self) -> Vec<u32> {
+    fn vert_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!("../../../shaders/compiled/depth_texture.vert.spv");
         let byte_reader = &mut std::io::Cursor::new(bytes);
         ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 
-    #[cfg(not(debug_assertions))]
-    pub fn frag_spv(&self) -> Vec<u32> {
+    fn frag_entry_point_name(&self) -> CString {
+        let entry_point = self
+            .reflection_json
+            .fragment_entry_point
+            .entry_point_name
+            .clone();
+
+        CString::new(entry_point).unwrap()
+    }
+
+    fn frag_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!("../../../shaders/compiled/depth_texture.frag.spv");
         let byte_reader = &mut std::io::Cursor::new(bytes);
         ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")

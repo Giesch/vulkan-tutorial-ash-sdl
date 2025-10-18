@@ -1,6 +1,9 @@
 #+title: Todo
 
 * Current
+- [ ] do the official vulkan compute shader tutorial
+  make it one of the examples here
+
 - [ ] need a plan for more dynamically created descriptor sets
   ie the todo in create_descriptor_sets
   - [ ] take an enum/struct arg that specifies each descriptor fully
