@@ -2002,6 +2002,13 @@ fn create_descriptor_sets(
     Ok(descriptor_sets)
 }
 
+// TODO what is the correct way to determine this?
+// is it an os difference or a graphics card difference?
+#[cfg(target_os = "windows")]
+const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
+#[cfg(target_os = "linux")]
+const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;
+
 fn create_texture(
     input_image: &image::DynamicImage,
     instance: &ash::Instance,
@@ -2023,7 +2030,7 @@ fn create_texture(
     let texture_image_view = create_image_view(
         &device,
         texture_image,
-        vk::Format::R8G8B8A8_SRGB,
+        TEXTURE_IMAGE_FORMAT,
         vk::ImageAspectFlags::COLOR,
         mip_levels,
     )?;
@@ -2072,7 +2079,7 @@ fn create_texture_image(
         .height(image.height());
     let image_options = ImageOptions {
         extent,
-        format: vk::Format::R8G8B8A8_SRGB,
+        format: TEXTURE_IMAGE_FORMAT,
         tiling: vk::ImageTiling::OPTIMAL,
         usage: vk::ImageUsageFlags::TRANSFER_DST
             | vk::ImageUsageFlags::SAMPLED
