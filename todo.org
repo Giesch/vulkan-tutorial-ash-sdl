@@ -1,14 +1,16 @@
 #+title: Todo
 
 * Current
-- [ ] do the official vulkan compute shader tutorial
-  make it one of the examples here
-
 - [ ] need a plan for more dynamically created descriptor sets
   ie the todo in create_descriptor_sets
+  - [ ] handle textures dynamically
+    need a way to associate the right texture with the right descriptor set
   - [ ] take an enum/struct arg that specifies each descriptor fully
     - DescriptorBuffer
     - DescriptorImageInfo
+
+- [ ] do the official vulkan compute shader tutorial
+  make it one of the examples here
 
 - [ ] get vertex attribute & binding descriptions via reflection
 

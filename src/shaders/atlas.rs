@@ -5,6 +5,8 @@ use ash::vk;
 mod depth_texture;
 pub use depth_texture::*;
 
+use crate::renderer::LayoutDescription;
+
 pub struct ShaderAtlas {
     pub depth_texture: DepthTextureShader,
 }
@@ -32,6 +34,9 @@ pub trait ShaderAtlasEntry {
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription>;
     fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription>;
+
+    // one set of descriptions per descriptor set
+    fn layout_bindings(&self) -> Vec<Vec<LayoutDescription>>;
 
     // release only
 

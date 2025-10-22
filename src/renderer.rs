@@ -389,42 +389,7 @@ impl Renderer {
 
         let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
 
-        let layout_bindings: Vec<Vec<LayoutDescription>> = config
-            .shader
-            .reflection_json
-            .pipeline_layout
-            .descriptor_set_layouts
-            .iter()
-            .map(|dsl| {
-                use shaders::json::ReflectedBindingType;
-
-                dsl.binding_ranges
-                    .iter()
-                    .map(|b| match b.descriptor_type {
-                        ReflectedBindingType::ConstantBuffer => {
-                            LayoutDescription::Uniform(UniformBufferDescription {
-                                size: config.shader.uniform_buffer_size() as u64,
-                                binding: b.binding,
-                                descriptor_count: 1,
-                            })
-                        }
-
-                        // TODO how do we associate the texture with this?
-                        // expecially when there's more than one texture
-                        ReflectedBindingType::CombinedTextureSampler => {
-                            LayoutDescription::Texture(TextureDescription {
-                                layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                                binding: b.binding,
-                                descriptor_count: 1,
-                            })
-                        }
-
-                        ReflectedBindingType::Sampler => todo!(),
-                        ReflectedBindingType::Texture => todo!(),
-                    })
-                    .collect()
-            })
-            .collect();
+        let layout_bindings = config.shader.layout_bindings();
 
         // TODO pass a collection of textures with ids/handles
         // associate those with reflected bindings somehow
@@ -1899,7 +1864,7 @@ fn create_descriptor_pool(
 }
 
 #[derive(Debug)]
-enum LayoutDescription {
+pub enum LayoutDescription {
     Uniform(UniformBufferDescription),
     Texture(TextureDescription),
 }

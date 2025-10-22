@@ -3,6 +3,7 @@ use std::ffi::CString;
 use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
+use crate::renderer::{LayoutDescription, TextureDescription, UniformBufferDescription};
 use crate::shaders::ReflectionJson;
 
 #[cfg_attr(not(debug_assertions), expect(unused))]
@@ -63,6 +64,45 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
 
     fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
         Vertex::attribute_descriptions()
+    }
+
+    fn layout_bindings(&self) -> Vec<Vec<LayoutDescription>> {
+        self.reflection_json
+            .pipeline_layout
+            .descriptor_set_layouts
+            .iter()
+            .map(|dsl| {
+                use crate::shaders::json::ReflectedBindingType;
+
+                dsl.binding_ranges
+                    .iter()
+                    .map(|b| match b.descriptor_type {
+                        ReflectedBindingType::ConstantBuffer => {
+                            LayoutDescription::Uniform(UniformBufferDescription {
+                                // TODO associate these in the json
+                                // maybe like the top level 'bindings' key in slangc's
+                                size: self.uniform_buffer_size() as u64,
+                                binding: b.binding,
+                                descriptor_count: 1,
+                            })
+                        }
+
+                        // TODO how do we associate the texture with this?
+                        // expecially when there's more than one texture
+                        ReflectedBindingType::CombinedTextureSampler => {
+                            LayoutDescription::Texture(TextureDescription {
+                                layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
+                                binding: b.binding,
+                                descriptor_count: 1,
+                            })
+                        }
+
+                        ReflectedBindingType::Sampler => todo!(),
+                        ReflectedBindingType::Texture => todo!(),
+                    })
+                    .collect()
+            })
+            .collect()
     }
 
     fn vert_entry_point_name(&self) -> CString {
