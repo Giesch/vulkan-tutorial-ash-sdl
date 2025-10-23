@@ -10,6 +10,7 @@ expression: shader.reflection_json
       "parameterName": "depthTexture",
       "elementType": {
         "typeName": "DepthTexture",
+        "uniformSize": 192,
         "fields": [
           {
             "kind": "struct",

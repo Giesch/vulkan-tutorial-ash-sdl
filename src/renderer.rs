@@ -12,7 +12,7 @@ use sdl3::video::Window;
 use vertex_description::VertexDescription;
 
 use crate::shaders;
-use crate::shaders::atlas::{DepthTextureShader, ShaderAtlasEntry};
+use crate::shaders::atlas::ShaderAtlasEntry;
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -350,13 +350,13 @@ impl Renderer {
     ) -> anyhow::Result<RendererPipeline> {
         let texture = self.textures.get(config.texture_handle);
 
-        let compiled_shaders =
+        let pipeline_layout =
             ShaderPipelineLayout::create_from_atlas(&self.device, &config.shader)?;
         let pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
             self.msaa_samples,
-            &compiled_shaders,
+            &pipeline_layout,
             &config.shader.vertex_binding_descriptions(),
             &config.shader.vertex_attribute_descriptions(),
         )?;
@@ -387,7 +387,7 @@ impl Renderer {
                 config.shader.uniform_buffer_size() as u64,
             )?;
 
-        let descriptor_pool = create_descriptor_pool(&self.device, &compiled_shaders)?;
+        let descriptor_pool = create_descriptor_pool(&self.device, &pipeline_layout)?;
 
         let layout_bindings = config.shader.layout_bindings();
 
@@ -396,14 +396,14 @@ impl Renderer {
         let descriptor_sets = create_descriptor_sets(
             &self.device,
             descriptor_pool,
-            &compiled_shaders.descriptor_set_layouts,
+            &pipeline_layout.descriptor_set_layouts,
             &uniform_buffers,
-            &texture,
+            texture,
             layout_bindings,
         )?;
 
         Ok(RendererPipeline {
-            layout: compiled_shaders,
+            layout: pipeline_layout,
             pipeline,
             vertex_buffer,
             vertex_buffer_memory,
@@ -747,7 +747,7 @@ impl Renderer {
     ) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
-        for (i, (old_frame, old_pipeline, old_compiled_shaders)) in
+        for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
             self.old_pipelines.iter().enumerate()
         {
             let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
@@ -758,10 +758,10 @@ impl Renderer {
             unsafe {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
-                    .destroy_pipeline_layout(old_compiled_shaders.pipeline_layout, None);
+                    .destroy_pipeline_layout(old_pipeline_layout.pipeline_layout, None);
             }
 
-            for &desc_set_layout in &old_compiled_shaders.descriptor_set_layouts {
+            for &desc_set_layout in &old_pipeline_layout.descriptor_set_layouts {
                 unsafe {
                     self.device
                         .destroy_descriptor_set_layout(desc_set_layout, None);
@@ -791,7 +791,7 @@ impl Renderer {
         pipeline_handle: &PipelineHandle,
         _edit_events: &[notify::Event],
     ) -> Result<(), anyhow::Error> {
-        let mut tmp_compiled_shaders = match ShaderPipelineLayout::create_from_atlas(
+        let mut tmp_pipeline_layout = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
             &self.renderer_pipeline(pipeline_handle).shader,
         ) {
@@ -802,14 +802,14 @@ impl Renderer {
             }
         };
 
-        let render_pipeline_mut = self.pipelines.get_mut(&pipeline_handle);
+        let render_pipeline_mut = self.pipelines.get_mut(pipeline_handle);
 
-        std::mem::swap(&mut tmp_compiled_shaders, &mut render_pipeline_mut.layout);
+        std::mem::swap(&mut tmp_pipeline_layout, &mut render_pipeline_mut.layout);
 
         self.old_pipelines.push((
             self.total_frames,
             render_pipeline_mut.pipeline,
-            tmp_compiled_shaders,
+            tmp_pipeline_layout,
         ));
 
         render_pipeline_mut.pipeline = create_graphics_pipeline(
@@ -851,12 +851,12 @@ impl Drop for Renderer {
             self.device.free_memory(self.color_image_memory, None);
 
             #[cfg(debug_assertions)]
-            for (_frame, old_pipeline, old_compiled_shaders) in &self.old_pipelines {
+            for (_frame, old_pipeline, old_pipeline_layout) in &self.old_pipelines {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
-                    .destroy_pipeline_layout(old_compiled_shaders.pipeline_layout, None);
+                    .destroy_pipeline_layout(old_pipeline_layout.pipeline_layout, None);
 
-                for &desc_set_layout in &old_compiled_shaders.descriptor_set_layouts {
+                for &desc_set_layout in &old_pipeline_layout.descriptor_set_layouts {
                     self.device
                         .destroy_descriptor_set_layout(desc_set_layout, None);
                 }
@@ -1456,12 +1456,12 @@ fn create_graphics_pipeline(
     device: &ash::Device,
     render_pass: vk::RenderPass,
     msaa_samples: vk::SampleCountFlags,
-    compiled_shaders: &ShaderPipelineLayout,
+    pipeline_layout: &ShaderPipelineLayout,
     vertex_binding_descriptions: &[vk::VertexInputBindingDescription],
     vertex_attribute_descriptions: &[vk::VertexInputAttributeDescription],
 ) -> Result<vk::Pipeline, anyhow::Error> {
-    let vert_shader_spv = &compiled_shaders.vertex_shader.shader_bytecode;
-    let frag_shader_spv = &compiled_shaders.fragment_shader.shader_bytecode;
+    let vert_shader_spv = &pipeline_layout.vertex_shader.shader_bytecode;
+    let frag_shader_spv = &pipeline_layout.fragment_shader.shader_bytecode;
 
     let vert_create_info = vk::ShaderModuleCreateInfo::default().code(vert_shader_spv);
     let frag_create_info = vk::ShaderModuleCreateInfo::default().code(frag_shader_spv);
@@ -1472,11 +1472,11 @@ fn create_graphics_pipeline(
     let vert_create_info = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::VERTEX)
         .module(vert_shader)
-        .name(&compiled_shaders.vertex_shader.entry_point_name);
+        .name(&pipeline_layout.vertex_shader.entry_point_name);
     let frag_create_info = vk::PipelineShaderStageCreateInfo::default()
         .stage(vk::ShaderStageFlags::FRAGMENT)
         .module(frag_shader)
-        .name(&compiled_shaders.fragment_shader.entry_point_name);
+        .name(&pipeline_layout.fragment_shader.entry_point_name);
     let stages = [vert_create_info, frag_create_info];
 
     let dynamic_states = vec![vk::DynamicState::VIEWPORT, vk::DynamicState::SCISSOR];
@@ -1484,8 +1484,8 @@ fn create_graphics_pipeline(
         vk::PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
     let vertex_input_state = vk::PipelineVertexInputStateCreateInfo::default()
-        .vertex_binding_descriptions(&vertex_binding_descriptions)
-        .vertex_attribute_descriptions(&vertex_attribute_descriptions);
+        .vertex_binding_descriptions(vertex_binding_descriptions)
+        .vertex_attribute_descriptions(vertex_attribute_descriptions);
 
     let input_assembly_state = vk::PipelineInputAssemblyStateCreateInfo::default()
         .topology(vk::PrimitiveTopology::TRIANGLE_LIST)
@@ -1536,7 +1536,7 @@ fn create_graphics_pipeline(
         .multisample_state(&multisample_state)
         .color_blend_state(&color_blend_state)
         .dynamic_state(&dynamic_state)
-        .layout(compiled_shaders.pipeline_layout)
+        .layout(pipeline_layout.pipeline_layout)
         .render_pass(render_pass)
         .subpass(0)
         .depth_stencil_state(&depth_stencil_state);
@@ -1842,9 +1842,9 @@ fn create_uniform_buffers(
 
 fn create_descriptor_pool(
     device: &ash::Device,
-    compiled_shaders: &ShaderPipelineLayout,
+    pipeline_layout: &ShaderPipelineLayout,
 ) -> Result<vk::DescriptorPool, anyhow::Error> {
-    let descriptor_sets_per_frame = compiled_shaders.descriptor_set_layouts.len() as u32;
+    let descriptor_sets_per_frame = pipeline_layout.descriptor_set_layouts.len() as u32;
     let descriptor_set_count = descriptor_sets_per_frame * MAX_FRAMES_IN_FLIGHT as u32;
     let uniform_buffer_pool_size = vk::DescriptorPoolSize::default()
         .ty(vk::DescriptorType::UNIFORM_BUFFER)
@@ -1969,8 +1969,10 @@ fn create_descriptor_sets(
 
 // TODO what is the correct way to determine this?
 // is it an os difference or a graphics card difference?
+#[cfg_attr(not(target_os = "windows"), expect(unused))]
 #[cfg(target_os = "windows")]
 const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
+#[cfg_attr(not(target_os = "linux"), expect(unused))]
 #[cfg(target_os = "linux")]
 const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;
 
@@ -1985,22 +1987,22 @@ fn create_texture(
 ) -> anyhow::Result<Texture> {
     let (texture_image, texture_image_memory, mip_levels) = create_texture_image(
         input_image,
-        &instance,
-        &device,
+        instance,
+        device,
         physical_device,
         command_pool,
         graphics_queue,
     )?;
 
     let texture_image_view = create_image_view(
-        &device,
+        device,
         texture_image,
         TEXTURE_IMAGE_FORMAT,
         vk::ImageAspectFlags::COLOR,
         mip_levels,
     )?;
 
-    let texture_sampler = create_texture_sampler(&device, physical_device_properties)?;
+    let texture_sampler = create_texture_sampler(device, physical_device_properties)?;
 
     Ok(Texture {
         image: texture_image,
@@ -2692,22 +2694,22 @@ impl ShaderPipelineLayout {
     #[cfg(debug_assertions)]
     fn create_from_atlas(
         device: &ash::Device,
-        shader: &DepthTextureShader,
+        shader: &dyn ShaderAtlasEntry,
     ) -> Result<Self, anyhow::Error> {
-        let prepared_shader = shaders::dev_compile_slang_shaders(shader.source_file_name())?;
+        let reflected_shader = shaders::dev_compile_slang_shaders(shader.source_file_name())?;
 
         let vertex_shader = CompiledShaderEntryPoint {
-            shader_bytecode: prepared_shader.vertex_shader.spv_bytes()?,
-            entry_point_name: prepared_shader.vertex_shader.entry_point_name,
+            shader_bytecode: reflected_shader.vertex_shader.spv_bytes()?,
+            entry_point_name: reflected_shader.vertex_shader.entry_point_name,
         };
 
         let fragment_shader = CompiledShaderEntryPoint {
-            shader_bytecode: prepared_shader.fragment_shader.spv_bytes()?,
-            entry_point_name: prepared_shader.fragment_shader.entry_point_name,
+            shader_bytecode: reflected_shader.fragment_shader.spv_bytes()?,
+            entry_point_name: reflected_shader.fragment_shader.entry_point_name,
         };
 
         let (pipeline_layout, descriptor_set_layouts) = unsafe {
-            prepared_shader
+            reflected_shader
                 .reflection_json
                 .pipeline_layout
                 .vk_create(device)?
@@ -2771,7 +2773,7 @@ impl shaders::json::ReflectedDescriptorSetLayoutBinding {
 }
 
 impl shaders::json::ReflectedBindingType {
-    pub fn to_vk(&self) -> vk::DescriptorType {
+    pub fn to_vk(self) -> vk::DescriptorType {
         match self {
             Self::Sampler => vk::DescriptorType::SAMPLER,
             Self::Texture => vk::DescriptorType::SAMPLED_IMAGE,
