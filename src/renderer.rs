@@ -550,8 +550,6 @@ impl Renderer {
         (self.image_extent.width, self.image_extent.height)
     }
 
-    // TODO either take a pipeline as an argument,
-    // or make this a method on a new 'PipelineRenderer' struct
     pub fn draw_frame(
         &mut self,
         pipeline_handle: &PipelineHandle,
@@ -2747,7 +2745,8 @@ impl ShaderPipelineLayout {
             shader_bytecode: precompiled.frag.spv_bytes,
         };
 
-        let (pipeline_layout, descriptor_set_layouts) = shader.create_pipeline_layout(device)?;
+        let (pipeline_layout, descriptor_set_layouts) =
+            unsafe { shader.pipeline_layout().vk_create(device)? };
 
         Ok(ShaderPipelineLayout {
             vertex_shader,
@@ -2771,7 +2770,7 @@ impl shaders::json::ReflectedDescriptorSetLayout {
 }
 
 impl shaders::json::ReflectedDescriptorSetLayoutBinding {
-    pub fn to_vk(&self) -> vk::DescriptorSetLayoutBinding<'static> {
+    fn to_vk(&self) -> vk::DescriptorSetLayoutBinding<'static> {
         vk::DescriptorSetLayoutBinding::default()
             .stage_flags(self.stage_flags.to_vk())
             .binding(self.binding)
@@ -2781,7 +2780,7 @@ impl shaders::json::ReflectedDescriptorSetLayoutBinding {
 }
 
 impl shaders::json::ReflectedBindingType {
-    pub fn to_vk(self) -> vk::DescriptorType {
+    fn to_vk(self) -> vk::DescriptorType {
         match self {
             Self::Sampler => vk::DescriptorType::SAMPLER,
             Self::Texture => vk::DescriptorType::SAMPLED_IMAGE,
@@ -2792,8 +2791,7 @@ impl shaders::json::ReflectedBindingType {
 }
 
 impl shaders::json::ReflectedPipelineLayout {
-    // TODO move these vk constructor/interop methods to their own module
-    pub unsafe fn vk_create(
+    unsafe fn vk_create(
         &self,
         device: &ash::Device,
     ) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), vk::Result> {
@@ -2821,7 +2819,7 @@ impl shaders::json::ReflectedPipelineLayout {
 }
 
 impl shaders::json::ReflectedPushConstantRange {
-    pub fn to_vk(&self) -> vk::PushConstantRange {
+    fn to_vk(&self) -> vk::PushConstantRange {
         vk::PushConstantRange::default()
             .stage_flags(self.stage_flags.to_vk())
             .offset(self.size)
@@ -2830,7 +2828,7 @@ impl shaders::json::ReflectedPushConstantRange {
 }
 
 impl shaders::json::ReflectedStageFlags {
-    pub fn to_vk(self) -> vk::ShaderStageFlags {
+    fn to_vk(self) -> vk::ShaderStageFlags {
         match self {
             Self::Vertex => vk::ShaderStageFlags::VERTEX,
             Self::Fragment => vk::ShaderStageFlags::FRAGMENT,

@@ -7,6 +7,8 @@ pub use depth_texture::*;
 
 use crate::renderer::LayoutDescription;
 
+use super::json::ReflectedPipelineLayout;
+
 pub struct ShaderAtlas {
     pub depth_texture: DepthTextureShader,
 }
@@ -45,10 +47,7 @@ pub trait ShaderAtlasEntry {
     fn precompiled_shaders(&self) -> PrecompiledShaders;
 
     #[cfg_attr(debug_assertions, expect(unused))]
-    fn create_pipeline_layout(
-        &self,
-        device: &ash::Device,
-    ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)>;
+    fn pipeline_layout(&self) -> &ReflectedPipelineLayout;
 }
 
 #[cfg_attr(debug_assertions, expect(unused))]

@@ -4,6 +4,7 @@ use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
 use crate::renderer::{LayoutDescription, TextureDescription, UniformBufferDescription};
+use crate::shaders::json::ReflectedPipelineLayout;
 use crate::shaders::ReflectionJson;
 
 #[cfg_attr(not(debug_assertions), expect(unused))]
@@ -162,11 +163,7 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
         super::PrecompiledShaders { vert, frag }
     }
 
-    fn create_pipeline_layout(
-        &self,
-        device: &ash::Device,
-    ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)> {
-        let layouts = unsafe { self.reflection_json.pipeline_layout.vk_create(device)? };
-        Ok(layouts)
+    fn pipeline_layout(&self) -> &ReflectedPipelineLayout {
+        &self.reflection_json.pipeline_layout
     }
 }
