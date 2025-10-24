@@ -19,12 +19,13 @@ impl ShaderAtlas {
     }
 }
 
-// TODO need to allow optional vert/frag
+// TODO need to allow optional vert/frag entrypoints
 // how does that work with vertex descriptions?
 
 pub trait ShaderAtlasEntry {
     // dev only
 
+    // used in hot reload
     #[cfg_attr(not(debug_assertions), expect(unused))]
     fn source_file_name(&self) -> &str;
 
@@ -41,20 +42,24 @@ pub trait ShaderAtlasEntry {
     // release only
 
     #[cfg_attr(debug_assertions, expect(unused))]
+    fn precompiled_shaders(&self) -> PrecompiledShaders;
+
+    #[cfg_attr(debug_assertions, expect(unused))]
     fn create_pipeline_layout(
         &self,
         device: &ash::Device,
     ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)>;
+}
 
-    #[cfg_attr(debug_assertions, expect(unused))]
-    fn vert_entry_point_name(&self) -> CString;
+#[cfg_attr(debug_assertions, expect(unused))]
+pub struct PrecompiledShaders {
+    pub vert: PrecompiledShader,
+    pub frag: PrecompiledShader,
+}
 
-    #[cfg_attr(debug_assertions, expect(unused))]
-    fn vert_spv(&self) -> Vec<u32>;
-
-    #[cfg_attr(debug_assertions, expect(unused))]
-    fn frag_entry_point_name(&self) -> CString;
-
-    #[cfg_attr(debug_assertions, expect(unused))]
-    fn frag_spv(&self) -> Vec<u32>;
+#[cfg_attr(debug_assertions, expect(unused))]
+pub struct PrecompiledShader {
+    pub entry_point_name: CString,
+    pub spv_bytes: Vec<u32>,
+}
 }

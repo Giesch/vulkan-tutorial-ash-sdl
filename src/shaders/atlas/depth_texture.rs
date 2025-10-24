@@ -20,6 +20,8 @@ pub struct DepthTextureShader {
 }
 
 impl DepthTextureShader {
+    // dev and release
+
     pub fn init() -> Self {
         let json_str = include_str!("../../../shaders/compiled/depth_texture.json");
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
@@ -46,6 +48,44 @@ impl DepthTextureShader {
         }
 
         shader
+    }
+
+    // release only
+
+    #[cfg_attr(debug_assertions, expect(unused))]
+    fn vert_entry_point_name(&self) -> CString {
+        let entry_point = self
+            .reflection_json
+            .vertex_entry_point
+            .entry_point_name
+            .clone();
+
+        CString::new(entry_point).unwrap()
+    }
+
+    #[cfg_attr(debug_assertions, expect(unused))]
+    fn vert_spv(&self) -> Vec<u32> {
+        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.vert.spv");
+        let byte_reader = &mut std::io::Cursor::new(bytes);
+        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
+    }
+
+    #[cfg_attr(debug_assertions, expect(unused))]
+    fn frag_entry_point_name(&self) -> CString {
+        let entry_point = self
+            .reflection_json
+            .fragment_entry_point
+            .entry_point_name
+            .clone();
+
+        CString::new(entry_point).unwrap()
+    }
+
+    #[cfg_attr(debug_assertions, expect(unused))]
+    fn frag_spv(&self) -> Vec<u32> {
+        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.frag.spv");
+        let byte_reader = &mut std::io::Cursor::new(bytes);
+        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 }
 
@@ -108,43 +148,25 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
             .collect()
     }
 
+    fn precompiled_shaders(&self) -> super::PrecompiledShaders {
+        let vert = super::PrecompiledShader {
+            entry_point_name: self.vert_entry_point_name(),
+            spv_bytes: self.vert_spv(),
+        };
+
+        let frag = super::PrecompiledShader {
+            entry_point_name: self.frag_entry_point_name(),
+            spv_bytes: self.frag_spv(),
+        };
+
+        super::PrecompiledShaders { vert, frag }
+    }
+
     fn create_pipeline_layout(
         &self,
         device: &ash::Device,
     ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)> {
         let layouts = unsafe { self.reflection_json.pipeline_layout.vk_create(device)? };
         Ok(layouts)
-    }
-
-    fn vert_entry_point_name(&self) -> CString {
-        let entry_point = self
-            .reflection_json
-            .vertex_entry_point
-            .entry_point_name
-            .clone();
-
-        CString::new(entry_point).unwrap()
-    }
-
-    fn vert_spv(&self) -> Vec<u32> {
-        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.vert.spv");
-        let byte_reader = &mut std::io::Cursor::new(bytes);
-        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
-    }
-
-    fn frag_entry_point_name(&self) -> CString {
-        let entry_point = self
-            .reflection_json
-            .fragment_entry_point
-            .entry_point_name
-            .clone();
-
-        CString::new(entry_point).unwrap()
-    }
-
-    fn frag_spv(&self) -> Vec<u32> {
-        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.frag.spv");
-        let byte_reader = &mut std::io::Cursor::new(bytes);
-        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 }

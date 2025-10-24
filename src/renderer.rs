@@ -2735,14 +2735,16 @@ impl ShaderPipelineLayout {
         device: &ash::Device,
         shader: &dyn ShaderAtlasEntry,
     ) -> Result<Self, anyhow::Error> {
+        let precompiled = shader.precompiled_shaders();
+
         let vertex_shader = CompiledShaderEntryPoint {
-            entry_point_name: shader.vert_entry_point_name(),
-            shader_bytecode: shader.vert_spv(),
+            entry_point_name: precompiled.vert.entry_point_name,
+            shader_bytecode: precompiled.vert.spv_bytes,
         };
 
         let fragment_shader = CompiledShaderEntryPoint {
-            entry_point_name: shader.frag_entry_point_name(),
-            shader_bytecode: shader.frag_spv(),
+            entry_point_name: precompiled.frag.entry_point_name,
+            shader_bytecode: precompiled.frag.spv_bytes,
         };
 
         let (pipeline_layout, descriptor_set_layouts) = shader.create_pipeline_layout(device)?;
