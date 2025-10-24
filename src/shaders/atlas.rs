@@ -41,6 +41,12 @@ pub trait ShaderAtlasEntry {
     // release only
 
     #[cfg_attr(debug_assertions, expect(unused))]
+    fn create_pipeline_layout(
+        &self,
+        device: &ash::Device,
+    ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)>;
+
+    #[cfg_attr(debug_assertions, expect(unused))]
     fn vert_entry_point_name(&self) -> CString;
 
     #[cfg_attr(debug_assertions, expect(unused))]

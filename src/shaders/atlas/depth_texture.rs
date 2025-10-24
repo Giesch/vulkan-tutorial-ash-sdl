@@ -89,6 +89,10 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
 
                         // TODO how do we associate the texture with this?
                         // expecially when there's more than one texture
+                        //
+                        // need one method on here that takes a texture id / struct of one,
+                        // and returns all the binding info
+                        // that resources struct could be a generated associated type on the trait
                         ReflectedBindingType::CombinedTextureSampler => {
                             LayoutDescription::Texture(TextureDescription {
                                 layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
@@ -97,12 +101,19 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
                             })
                         }
 
-                        ReflectedBindingType::Sampler => todo!(),
-                        ReflectedBindingType::Texture => todo!(),
+                        b => todo!("unhandled binding type: {b:?}"),
                     })
                     .collect()
             })
             .collect()
+    }
+
+    fn create_pipeline_layout(
+        &self,
+        device: &ash::Device,
+    ) -> anyhow::Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>)> {
+        let layouts = unsafe { self.reflection_json.pipeline_layout.vk_create(device)? };
+        Ok(layouts)
     }
 
     fn vert_entry_point_name(&self) -> CString {

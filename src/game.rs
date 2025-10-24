@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
@@ -12,10 +12,6 @@ use super::shaders::COLUMN_MAJOR;
 
 pub mod traits;
 pub use traits::{Game, WindowDescription};
-
-const INITIAL_WINDOW_WIDTH: u32 = 800;
-const INITIAL_WINDOW_HEIGHT: u32 = 600;
-const FRAME_DELAY: Duration = Duration::from_millis(15);
 
 // TODO
 // we want a more zoomed-out api than this
@@ -98,16 +94,8 @@ impl VikingRoom {
 }
 
 impl Game for VikingRoom {
-    fn window_description() -> WindowDescription {
-        WindowDescription {
-            title: "Viking Room",
-            width: INITIAL_WINDOW_WIDTH,
-            height: INITIAL_WINDOW_HEIGHT,
-        }
-    }
-
-    fn frame_delay(&self) -> Duration {
-        FRAME_DELAY
+    fn window_title() -> &'static str {
+        "Viking Room"
     }
 
     fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
@@ -116,12 +104,13 @@ impl Game for VikingRoom {
     {
         let (vertices, indices) = Self::load_vertices()?;
 
-        let image = load_image("viking_room.png")?;
+        const IMAGE_FILE_NAME: &str = "viking_room.png";
+        let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let texture_handle = renderer.create_texture(&image)?;
+        let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let pipeline_config = PipelineConfig {
             shader,
             vertices,
@@ -237,16 +226,8 @@ impl DepthTexture {
 }
 
 impl Game for DepthTexture {
-    fn window_description() -> WindowDescription {
-        WindowDescription {
-            title: "Depth Texture",
-            width: INITIAL_WINDOW_WIDTH,
-            height: INITIAL_WINDOW_HEIGHT,
-        }
-    }
-
-    fn frame_delay(&self) -> Duration {
-        FRAME_DELAY
+    fn window_title() -> &'static str {
+        "Depth Texture"
     }
 
     fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
@@ -255,12 +236,13 @@ impl Game for DepthTexture {
     {
         let (vertices, indices) = Self::load_vertices()?;
 
-        let image = load_image("texture.jpg")?;
+        const IMAGE_FILE_NAME: &str = "texture.jpg";
+        let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
         let shader = shader_atlas.depth_texture;
 
-        let texture_handle = renderer.create_texture(&image)?;
+        let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let pipeline_config = PipelineConfig {
             shader,
             vertices,

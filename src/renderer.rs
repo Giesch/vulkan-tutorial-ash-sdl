@@ -274,8 +274,13 @@ impl Renderer {
         self.pipelines.get(handle)
     }
 
-    pub fn create_texture(&mut self, image: &image::DynamicImage) -> anyhow::Result<TextureHandle> {
+    pub fn create_texture(
+        &mut self,
+        source_file_name: impl Into<String>,
+        image: &image::DynamicImage,
+    ) -> anyhow::Result<TextureHandle> {
         let texture = create_texture(
+            source_file_name.into(),
             image,
             &self.instance,
             &self.device,
@@ -1977,6 +1982,7 @@ const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
 const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;
 
 fn create_texture(
+    source_file_name: String,
     input_image: &image::DynamicImage,
     instance: &ash::Instance,
     device: &ash::Device,
@@ -2005,6 +2011,7 @@ fn create_texture(
     let texture_sampler = create_texture_sampler(device, physical_device_properties)?;
 
     Ok(Texture {
+        source_file_name,
         image: texture_image,
         image_memory: texture_image_memory,
         mip_levels,
@@ -2726,7 +2733,7 @@ impl ShaderPipelineLayout {
     #[cfg(not(debug_assertions))]
     fn create_from_atlas(
         device: &ash::Device,
-        shader: &DepthTextureShader,
+        shader: &dyn ShaderAtlasEntry,
     ) -> Result<Self, anyhow::Error> {
         let vertex_shader = CompiledShaderEntryPoint {
             entry_point_name: shader.vert_entry_point_name(),
@@ -2738,8 +2745,7 @@ impl ShaderPipelineLayout {
             shader_bytecode: shader.frag_spv(),
         };
 
-        let (pipeline_layout, descriptor_set_layouts) =
-            unsafe { shader.reflection_json.pipeline_layout.vk_create(device)? };
+        let (pipeline_layout, descriptor_set_layouts) = shader.create_pipeline_layout(device)?;
 
         Ok(ShaderPipelineLayout {
             vertex_shader,
@@ -2784,7 +2790,8 @@ impl shaders::json::ReflectedBindingType {
 }
 
 impl shaders::json::ReflectedPipelineLayout {
-    unsafe fn vk_create(
+    // TODO move these vk constructor/interop methods to their own module
+    pub unsafe fn vk_create(
         &self,
         device: &ash::Device,
     ) -> Result<(vk::PipelineLayout, Vec<vk::DescriptorSetLayout>), vk::Result> {

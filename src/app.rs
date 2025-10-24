@@ -33,7 +33,8 @@ impl App {
                 self.game.draw_frame()?;
             }
 
-            self.delay_frame();
+            let frame_delay = self.game.frame_delay().as_nanos() as u64;
+            unsafe { SDL_DelayPrecise(frame_delay) };
         }
 
         self.game.deinit()?;
@@ -106,11 +107,5 @@ impl App {
         }
 
         Ok(())
-    }
-
-    pub fn delay_frame(&self) {
-        let frame_delay = self.game.frame_delay().as_nanos() as u64;
-
-        unsafe { SDL_DelayPrecise(frame_delay) };
     }
 }

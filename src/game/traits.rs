@@ -3,10 +3,12 @@ use std::time::Duration;
 use crate::app::App;
 use crate::renderer::Renderer;
 
+const DEFAULT_FRAME_DELAY: Duration = Duration::from_millis(15); // about 60 fps
+const DEFAULT_WINDOW_SIZE: (u32, u32) = (800, 600);
+const DEFAULT_WINDOW_TITLE: &str = "Game";
+
 /// This is the only trait from this module to implement directly.
 pub trait Game {
-    fn window_description() -> WindowDescription;
-
     fn setup(renderer: Renderer) -> anyhow::Result<Self>
     where
         Self: Sized;
@@ -15,9 +17,30 @@ pub trait Game {
 
     fn on_resize(&mut self) -> anyhow::Result<()>;
 
-    fn frame_delay(&self) -> Duration;
-
     fn deinit(self: Box<Self>) -> anyhow::Result<()>;
+
+    fn window_title() -> &'static str {
+        DEFAULT_WINDOW_TITLE
+    }
+
+    fn window_size() -> (u32, u32) {
+        DEFAULT_WINDOW_SIZE
+    }
+
+    fn window_description() -> WindowDescription {
+        let title = Self::window_title();
+        let (width, height) = Self::window_size();
+
+        WindowDescription {
+            title,
+            width,
+            height,
+        }
+    }
+
+    fn frame_delay(&self) -> Duration {
+        DEFAULT_FRAME_DELAY
+    }
 
     fn run() -> anyhow::Result<()>
     where

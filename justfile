@@ -49,9 +49,10 @@ insta: shaders
 alias i := insta
 
 
-# lint with warnings denied
+# lint in debug and release with warnings denied
 lint:
     cargo clippy -- -D warnings
+    cargo clippy --release -- -D warnings
 alias l := lint
 
 

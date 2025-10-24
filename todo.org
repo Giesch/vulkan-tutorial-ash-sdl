@@ -260,3 +260,9 @@
   see SLANG_UNBOUNDED_SIZE
   https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/source/slang/slang-reflection-json.cpp#L124
   https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/include/slang.h#L2167
+
+* Roc Questions
+- [ ] are ref-counted platform resource heaps still going to be a thing?
+- [ ] will compiler apis be available for compile-time reflection by platforms?
+- [ ] will there be some way to say "I'm trying to implement this interface"
+  like to get nicer error messages
