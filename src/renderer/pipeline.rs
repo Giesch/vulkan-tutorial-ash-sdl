@@ -1,9 +1,10 @@
-use std::ffi::c_void;
+use ash::vk;
 
 use crate::shaders::atlas::DepthTextureShader;
 
-use super::{vertex_description::VertexDescription, ShaderPipelineLayout, TextureHandle};
-use ash::vk;
+use super::vertex_description::VertexDescription;
+use super::TextureHandle;
+use super::{AllocatedUniformBuffers, ShaderPipelineLayout};
 
 #[derive(Debug)]
 pub struct PipelineHandle(usize);
@@ -48,9 +49,7 @@ pub(super) struct RendererPipeline {
     pub index_buffer: vk::Buffer,
     pub index_buffer_memory: vk::DeviceMemory,
 
-    pub uniform_buffers: Vec<vk::Buffer>,
-    pub uniform_buffers_memory: Vec<vk::DeviceMemory>,
-    pub uniform_buffers_mapped: Vec<*mut c_void>,
+    pub all_uniform_buffers: Vec<AllocatedUniformBuffers>,
 
     pub descriptor_pool: vk::DescriptorPool,
     pub descriptor_sets: Vec<vk::DescriptorSet>,

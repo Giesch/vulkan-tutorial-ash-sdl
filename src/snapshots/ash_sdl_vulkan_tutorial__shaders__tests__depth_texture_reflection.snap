@@ -10,7 +10,6 @@ expression: shader.reflection_json
       "parameterName": "depthTexture",
       "elementType": {
         "typeName": "DepthTexture",
-        "uniformSize": 192,
         "fields": [
           {
             "kind": "struct",
@@ -223,13 +222,15 @@ expression: shader.reflection_json
             "binding": 0,
             "descriptorType": "constantBuffer",
             "descriptorCount": 1,
-            "stageFlags": "all"
+            "stageFlags": "all",
+            "size": 192
           },
           {
             "binding": 1,
             "descriptorType": "combinedTextureSampler",
             "descriptorCount": 1,
-            "stageFlags": "all"
+            "stageFlags": "all",
+            "size": 0
           }
         ]
       }

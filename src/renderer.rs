@@ -340,11 +340,11 @@ impl Renderer {
             self.device
                 .destroy_pipeline_layout(pipeline.layout.pipeline_layout, None);
 
-            for i in 0..MAX_FRAMES_IN_FLIGHT {
-                self.device
-                    .destroy_buffer(pipeline.uniform_buffers[i], None);
-                self.device
-                    .free_memory(pipeline.uniform_buffers_memory[i], None);
+            for (uniform_buffers, uniform_buffers_memory, _mapped) in pipeline.all_uniform_buffers {
+                for i in 0..MAX_FRAMES_IN_FLIGHT {
+                    self.device.destroy_buffer(uniform_buffers[i], None);
+                    self.device.free_memory(uniform_buffers_memory[i], None);
+                }
             }
         }
     }
@@ -384,17 +384,17 @@ impl Renderer {
             &config.indices,
         )?;
 
-        let (uniform_buffers, uniform_buffers_memory, uniform_buffers_mapped) =
-            create_uniform_buffers(
-                &self.instance,
-                &self.device,
-                self.physical_device,
-                config.shader.uniform_buffer_size() as u64,
-            )?;
+        let layout_bindings = config.shader.layout_bindings();
+        let uniform_buffer_sizes = config.shader.uniform_buffer_sizes();
+
+        let all_uniform_buffers = create_uniform_buffers(
+            &self.instance,
+            &self.device,
+            self.physical_device,
+            &uniform_buffer_sizes,
+        )?;
 
         let descriptor_pool = create_descriptor_pool(&self.device, &pipeline_layout)?;
-
-        let layout_bindings = config.shader.layout_bindings();
 
         // TODO pass a collection of textures with ids/handles
         // associate those with reflected bindings somehow
@@ -402,7 +402,7 @@ impl Renderer {
             &self.device,
             descriptor_pool,
             &pipeline_layout.descriptor_set_layouts,
-            &uniform_buffers,
+            &all_uniform_buffers,
             texture,
             layout_bindings,
         )?;
@@ -414,9 +414,7 @@ impl Renderer {
             vertex_buffer_memory,
             index_buffer,
             index_buffer_memory,
-            uniform_buffers,
-            uniform_buffers_memory,
-            uniform_buffers_mapped,
+            all_uniform_buffers,
             descriptor_pool,
             descriptor_sets,
             index_count: config.indices.len(),
@@ -553,7 +551,7 @@ impl Renderer {
     pub fn draw_frame(
         &mut self,
         pipeline_handle: &PipelineHandle,
-        update_uniform_buffer: impl FnOnce(*mut c_void) -> anyhow::Result<()>,
+        mut update_uniform_buffer: impl FnMut(*mut c_void) -> anyhow::Result<()>,
     ) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
@@ -581,10 +579,14 @@ impl Renderer {
             }
         };
 
-        let mapped_uniform_buffer = self
-            .renderer_pipeline(pipeline_handle)
-            .uniform_buffers_mapped[self.current_frame];
-        update_uniform_buffer(mapped_uniform_buffer)?;
+        for (_, _, uniform_buffers_mapped) in
+            &self.renderer_pipeline(pipeline_handle).all_uniform_buffers
+        {
+            let mapped_uniform_buffer = uniform_buffers_mapped[self.current_frame];
+            // FIXME this needs a way to map update functions to uniform buffers
+            //   it shouldn't do the same thing to each
+            update_uniform_buffer(mapped_uniform_buffer)?;
+        }
 
         // NOTE only reset fences if we're submitting work
         //   ie, after early returns
@@ -1808,39 +1810,51 @@ fn find_memory_type_index(
     Err(anyhow::anyhow!("failed to find suitable memory type"))
 }
 
+/// one logical uniform buffer and its associated resources,
+/// split by type, with duplicates per frame in flight
+/// (uniform_buffers, device_memories, mapped_memories)
+type AllocatedUniformBuffers = (Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>);
+
 fn create_uniform_buffers(
     instance: &ash::Instance,
     device: &ash::Device,
     physical_device: vk::PhysicalDevice,
-    buffer_size: vk::DeviceSize,
-) -> Result<(Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>), anyhow::Error> {
-    let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
-    let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
-    let mut uniform_buffers_mapped = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+    buffer_sizes: &[vk::DeviceSize],
+) -> anyhow::Result<Vec<AllocatedUniformBuffers>> {
+    let mut all_uniform_buffers = vec![];
+    for &buffer_size in buffer_sizes {
+        let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+        let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+        let mut uniform_buffers_mapped = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
 
-    for _ in 0..MAX_FRAMES_IN_FLIGHT {
-        let (buffer, memory) = create_memory_buffer(
-            instance,
-            device,
-            physical_device,
-            buffer_size,
-            vk::BufferUsageFlags::UNIFORM_BUFFER,
-            vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-        )?;
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            let (buffer, memory) = create_memory_buffer(
+                instance,
+                device,
+                physical_device,
+                buffer_size,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            )?;
 
-        uniform_buffers.push(buffer);
-        uniform_buffers_memory.push(memory);
+            uniform_buffers.push(buffer);
+            uniform_buffers_memory.push(memory);
 
-        let mapped = unsafe { device.map_memory(memory, 0, buffer_size, Default::default())? };
+            let mapped = unsafe { device.map_memory(memory, 0, buffer_size, Default::default())? };
 
-        uniform_buffers_mapped.push(mapped);
+            uniform_buffers_mapped.push(mapped);
+        }
+
+        let allocated_uniform_buffers = (
+            uniform_buffers,
+            uniform_buffers_memory,
+            uniform_buffers_mapped,
+        );
+
+        all_uniform_buffers.push(allocated_uniform_buffers);
     }
 
-    Ok((
-        uniform_buffers,
-        uniform_buffers_memory,
-        uniform_buffers_mapped,
-    ))
+    Ok(all_uniform_buffers)
 }
 
 fn create_descriptor_pool(
@@ -1894,7 +1908,7 @@ fn create_descriptor_sets(
     device: &ash::Device,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layouts: &[vk::DescriptorSetLayout],
-    uniform_buffers: &[vk::Buffer],
+    all_uniform_buffers: &[AllocatedUniformBuffers],
     texture: &Texture,
     layout_bindings: Vec<Vec<LayoutDescription>>,
 ) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
@@ -1917,7 +1931,6 @@ fn create_descriptor_sets(
         .set_layouts(&set_layouts);
     let descriptor_sets = unsafe { device.allocate_descriptor_sets(&alloc_info)? };
 
-    #[expect(clippy::needless_range_loop)]
     for frame in 0..MAX_FRAMES_IN_FLIGHT {
         for layout_offset in 0..descriptor_set_layouts.len() {
             let ds = frame * descriptor_set_layouts.len() + layout_offset;
@@ -1928,6 +1941,9 @@ fn create_descriptor_sets(
             for description in layout_descriptions {
                 match description {
                     LayoutDescription::Uniform(uniform_buffer_description) => {
+                        let allocated_uniform_buffers = &all_uniform_buffers[layout_offset];
+                        let uniform_buffers = &allocated_uniform_buffers.0;
+
                         let buffer_info = vk::DescriptorBufferInfo::default()
                             .offset(0)
                             .buffer(uniform_buffers[frame])

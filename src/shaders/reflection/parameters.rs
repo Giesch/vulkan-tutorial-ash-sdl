@@ -36,14 +36,8 @@ pub fn reflect_entry_points(
                 let element_type_name = element_type_layout.name().unwrap().to_string();
                 let fields = reflect_struct_fields(element_type_layout)?;
 
-                let uniform_size: usize = fields
-                    .iter()
-                    .flat_map(|f| f.binding().and_then(|b| b.uniform_buffer_size()))
-                    .sum();
-
                 ParameterBlockElementType {
                     type_name: element_type_name,
-                    uniform_size,
                     fields,
                 }
             }

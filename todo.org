@@ -1,10 +1,20 @@
 #+title: Todo
 
 * Current
-- [ ] need a plan for more dynamically created descriptor sets
+- [-] handle uniform buffers more dynamically
+  - [X] allow multiple uniform buffers
+  - [-] address FIXMEs to handle multiple uniform buffers correctly
+    - [X] track uniform buffer sizes in pipeline_layouts binding reflection data
+    - [ ] add explicit allocation for uniform buffers (like textures)
+      ie, address the FIXME in Renderer::draw_frame
+
+- [ ] make required resources (eg texture ids) part of ShaderAtlasEntry trait
+  - associated type for required resource ids
+
+- [-] need a plan for more dynamically created descriptor sets
   ie the todo in create_descriptor_sets
-  - [ ] handle textures dynamically
-    need a way to associate the right texture with the right descriptor set
+  - [X] handle textures dynamically
+    - [X] allocate multiple textures
   - [ ] take an enum/struct arg that specifies each descriptor fully
     - DescriptorBuffer
     - DescriptorImageInfo

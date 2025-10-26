@@ -21,8 +21,6 @@ pub struct ParameterBlockGlobalParameter {
 #[serde(rename_all = "camelCase")]
 pub struct ParameterBlockElementType {
     pub type_name: String,
-    /// the size of the automatically-added uniform buffer
-    pub uniform_size: usize,
     pub fields: Vec<StructField>,
 }
 

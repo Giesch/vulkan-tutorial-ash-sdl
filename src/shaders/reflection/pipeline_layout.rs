@@ -170,8 +170,12 @@ impl DescriptorSetLayoutBuilder {
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
     ) {
         // in the cpp header there's a default argument overload for Uniform
-        if element_layout.size(slang::ParameterCategory::Uniform) > 0 {
-            self.add_automatically_introduced_uniform_buffer(pipeline_layout_builder);
+        let default_uniform_buffer_size = element_layout.size(slang::ParameterCategory::Uniform);
+        if default_uniform_buffer_size > 0 {
+            self.add_automatically_introduced_uniform_buffer(
+                pipeline_layout_builder,
+                default_uniform_buffer_size,
+            );
         }
 
         self.add_descriptor_ranges(pipeline_layout_builder, element_layout);
@@ -181,6 +185,7 @@ impl DescriptorSetLayoutBuilder {
     fn add_automatically_introduced_uniform_buffer(
         &mut self,
         pipeline_layout_builder: &mut PipelineLayoutBuilder,
+        size: usize,
     ) {
         // this relies on using no manual binding annotations
         let vk_binding_index = self.binding_ranges.len() as u32;
@@ -190,6 +195,7 @@ impl DescriptorSetLayoutBuilder {
             descriptor_type: ReflectedBindingType::ConstantBuffer,
             descriptor_count: 1,
             stage_flags: pipeline_layout_builder.current_stage_flags,
+            size,
         };
 
         self.binding_ranges.push(binding)
@@ -237,11 +243,13 @@ impl DescriptorSetLayoutBuilder {
         let vk_binding_index = self.binding_ranges.len() as u32;
         let descriptor_type = ReflectedBindingType::from_slang(binding_type);
 
+        let size = type_layout.size(type_layout.parameter_category());
         let descriptor_set_layout_binding = ReflectedDescriptorSetLayoutBinding {
             binding: vk_binding_index,
             descriptor_type,
             descriptor_count: descriptor_count as u32,
             stage_flags: pipeline_layout_builder.current_stage_flags,
+            size,
         };
 
         self.binding_ranges.push(descriptor_set_layout_binding);

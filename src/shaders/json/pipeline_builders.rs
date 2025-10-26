@@ -28,6 +28,7 @@ pub struct ReflectedDescriptorSetLayoutBinding {
     pub descriptor_type: ReflectedBindingType,
     pub descriptor_count: u32,
     pub stage_flags: ReflectedStageFlags,
+    pub size: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

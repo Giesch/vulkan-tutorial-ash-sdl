@@ -32,20 +32,20 @@ impl DepthTextureShader {
         // assertions that static values match shader reflection
         #[cfg(debug_assertions)]
         {
-            use crate::shaders::json::GlobalParameter::ParameterBlock;
+            let const_uniform_buffer_sizes = shader.uniform_buffer_sizes();
 
-            let mut parameter_blocks = shader
-                .reflection_json
-                .global_parameters
+            let layout_bindings = shader.layout_bindings();
+            let reflected_uniform_buffer_sizes: Vec<u64> = layout_bindings
                 .iter()
-                .map(|ParameterBlock(p)| p);
+                .flat_map(|descriptions| {
+                    descriptions.iter().filter_map(|ld| match ld {
+                        LayoutDescription::Uniform(u) => Some(u.size),
+                        _ => None,
+                    })
+                })
+                .collect();
 
-            assert!(parameter_blocks.len() == 1);
-
-            let reflected_uniform_buffer_size =
-                parameter_blocks.next().unwrap().element_type.uniform_size;
-
-            assert!(reflected_uniform_buffer_size == shader.uniform_buffer_size());
+            assert!(reflected_uniform_buffer_sizes == const_uniform_buffer_sizes);
         }
 
         shader
@@ -95,8 +95,8 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
         &self.reflection_json.source_file_name
     }
 
-    fn uniform_buffer_size(&self) -> usize {
-        std::mem::size_of::<MVPMatrices>()
+    fn uniform_buffer_sizes(&self) -> Vec<u64> {
+        vec![std::mem::size_of::<MVPMatrices>() as u64]
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
@@ -120,9 +120,7 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
                     .map(|b| match b.descriptor_type {
                         ReflectedBindingType::ConstantBuffer => {
                             LayoutDescription::Uniform(UniformBufferDescription {
-                                // TODO associate these in the json
-                                // maybe like the top level 'bindings' key in slangc's
-                                size: self.uniform_buffer_size() as u64,
+                                size: b.size as u64,
                                 binding: b.binding,
                                 descriptor_count: 1,
                             })

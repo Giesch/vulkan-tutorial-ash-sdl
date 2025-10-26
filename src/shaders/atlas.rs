@@ -33,7 +33,7 @@ pub trait ShaderAtlasEntry {
 
     // dev and release
 
-    fn uniform_buffer_size(&self) -> usize;
+    fn uniform_buffer_sizes(&self) -> Vec<u64>;
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription>;
     fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription>;
