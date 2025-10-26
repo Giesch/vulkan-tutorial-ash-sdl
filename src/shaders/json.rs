@@ -7,6 +7,7 @@ mod pipeline_builders;
 pub use pipeline_builders::*;
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ReflectionJson {
     pub source_file_name: String,
     pub global_parameters: Vec<GlobalParameter>,
