@@ -7,7 +7,9 @@ use super::TextureHandle;
 use super::{AllocatedUniformBuffers, ShaderPipelineLayout};
 
 #[derive(Debug)]
-pub struct PipelineHandle(usize);
+pub struct PipelineHandle {
+    index: usize,
+}
 
 pub(super) struct PipelineStorage(Vec<Option<RendererPipeline>>);
 
@@ -18,24 +20,25 @@ impl PipelineStorage {
     }
 
     pub fn add(&mut self, pipeline: RendererPipeline) -> PipelineHandle {
-        let handle = PipelineHandle(self.0.len());
+        let index = self.0.len();
+        let handle = PipelineHandle { index };
         self.0.push(Some(pipeline));
 
         handle
     }
 
     pub fn get(&self, handle: &PipelineHandle) -> &RendererPipeline {
-        self.0[handle.0].as_ref().unwrap()
+        self.0[handle.index].as_ref().unwrap()
     }
 
     // used only for hot reload
     #[cfg(debug_assertions)]
     pub fn get_mut(&mut self, handle: &PipelineHandle) -> &mut RendererPipeline {
-        self.0[handle.0].as_mut().unwrap()
+        self.0[handle.index].as_mut().unwrap()
     }
 
     pub fn take(&mut self, handle: PipelineHandle) -> RendererPipeline {
-        self.0[handle.0].take().unwrap()
+        self.0[handle.index].take().unwrap()
     }
 }
 
@@ -64,6 +67,7 @@ pub struct PipelineConfig<'a, V: VertexDescription> {
     pub shader: Box<dyn ShaderAtlasEntry>,
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
-    // TODO make this a vec/iterable
+
+    // TODO this should be the resources type
     pub texture_handle: &'a TextureHandle,
 }
