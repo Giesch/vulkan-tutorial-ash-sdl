@@ -61,4 +61,3 @@ pub struct PrecompiledShader {
     pub entry_point_name: CString,
     pub spv_bytes: Vec<u32>,
 }
-}

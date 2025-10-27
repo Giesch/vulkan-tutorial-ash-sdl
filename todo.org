@@ -10,6 +10,8 @@
 
 - [ ] make required resources (eg texture ids) part of ShaderAtlasEntry trait
   - associated type for required resource ids
+  - how does this work with PipelineStorage?
+    need to be able to erase the generic; keep it only in the handle
 
 - [-] need a plan for more dynamically created descriptor sets
   ie the todo in create_descriptor_sets

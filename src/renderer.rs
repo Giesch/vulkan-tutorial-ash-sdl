@@ -46,7 +46,12 @@ pub struct Renderer {
     #[cfg(debug_assertions)]
     shader_changes: shader_watcher::ShaderChanges,
     #[cfg(debug_assertions)]
-    old_pipelines: Vec<(usize, vk::Pipeline, ShaderPipelineLayout)>,
+    old_pipelines: Vec<(
+        usize,
+        vk::Pipeline,
+        ash::vk::PipelineLayout,
+        Vec<ash::vk::DescriptorSetLayout>,
+    )>,
     #[expect(unused)]
     entry: ash::Entry,
     window: Window,
@@ -752,7 +757,7 @@ impl Renderer {
     ) -> Result<(), anyhow::Error> {
         // drop old graphics reloaded pipelines for frames that are no longer needed
         let mut to_remove = vec![];
-        for (i, (old_frame, old_pipeline, old_pipeline_layout)) in
+        for (i, (old_frame, old_pipeline, old_pipeline_layout, old_descriptor_set_layouts)) in
             self.old_pipelines.iter().enumerate()
         {
             let unused = *old_frame < (self.total_frames - MAX_FRAMES_IN_FLIGHT);
@@ -763,10 +768,10 @@ impl Renderer {
             unsafe {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
-                    .destroy_pipeline_layout(old_pipeline_layout.pipeline_layout, None);
+                    .destroy_pipeline_layout(*old_pipeline_layout, None);
             }
 
-            for &desc_set_layout in &old_pipeline_layout.descriptor_set_layouts {
+            for &desc_set_layout in old_descriptor_set_layouts {
                 unsafe {
                     self.device
                         .destroy_descriptor_set_layout(desc_set_layout, None);
@@ -814,7 +819,8 @@ impl Renderer {
         self.old_pipelines.push((
             self.total_frames,
             render_pipeline_mut.pipeline,
-            tmp_pipeline_layout,
+            tmp_pipeline_layout.pipeline_layout,
+            tmp_pipeline_layout.descriptor_set_layouts,
         ));
 
         render_pipeline_mut.pipeline = create_graphics_pipeline(
@@ -856,12 +862,14 @@ impl Drop for Renderer {
             self.device.free_memory(self.color_image_memory, None);
 
             #[cfg(debug_assertions)]
-            for (_frame, old_pipeline, old_pipeline_layout) in &self.old_pipelines {
+            for (_frame, old_pipeline, old_pipeline_layout, old_descriptor_set_layouts) in
+                &self.old_pipelines
+            {
                 self.device.destroy_pipeline(*old_pipeline, None);
                 self.device
-                    .destroy_pipeline_layout(old_pipeline_layout.pipeline_layout, None);
+                    .destroy_pipeline_layout(*old_pipeline_layout, None);
 
-                for &desc_set_layout in &old_pipeline_layout.descriptor_set_layouts {
+                for &desc_set_layout in old_descriptor_set_layouts {
                     self.device
                         .destroy_descriptor_set_layout(desc_set_layout, None);
                 }
