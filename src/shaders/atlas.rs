@@ -28,7 +28,6 @@ pub trait ShaderAtlasEntry {
     // dev only
 
     // used in hot reload
-    #[cfg_attr(not(debug_assertions), expect(unused))]
     fn source_file_name(&self) -> &str;
 
     // dev and release
@@ -43,20 +42,16 @@ pub trait ShaderAtlasEntry {
 
     // release only
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn precompiled_shaders(&self) -> PrecompiledShaders;
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn pipeline_layout(&self) -> &ReflectedPipelineLayout;
 }
 
-#[cfg_attr(debug_assertions, expect(unused))]
 pub struct PrecompiledShaders {
     pub vert: PrecompiledShader,
     pub frag: PrecompiledShader,
 }
 
-#[cfg_attr(debug_assertions, expect(unused))]
 pub struct PrecompiledShader {
     pub entry_point_name: CString,
     pub spv_bytes: Vec<u32>,

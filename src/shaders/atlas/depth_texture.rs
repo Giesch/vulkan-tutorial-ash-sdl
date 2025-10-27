@@ -53,7 +53,6 @@ impl DepthTextureShader {
 
     // release only
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn vert_entry_point_name(&self) -> CString {
         let entry_point = self
             .reflection_json
@@ -64,14 +63,12 @@ impl DepthTextureShader {
         CString::new(entry_point).unwrap()
     }
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn vert_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!("../../../shaders/compiled/depth_texture.vert.spv");
         let byte_reader = &mut std::io::Cursor::new(bytes);
         ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn frag_entry_point_name(&self) -> CString {
         let entry_point = self
             .reflection_json
@@ -82,7 +79,6 @@ impl DepthTextureShader {
         CString::new(entry_point).unwrap()
     }
 
-    #[cfg_attr(debug_assertions, expect(unused))]
     fn frag_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!("../../../shaders/compiled/depth_texture.frag.spv");
         let byte_reader = &mut std::io::Cursor::new(bytes);

@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::shaders::atlas::DepthTextureShader;
+use crate::shaders::atlas::ShaderAtlasEntry;
 
 use super::vertex_description::VertexDescription;
 use super::TextureHandle;
@@ -56,12 +56,12 @@ pub(super) struct RendererPipeline {
 
     pub index_count: usize,
     #[cfg_attr(not(debug_assertions), expect(unused))]
-    pub shader: DepthTextureShader,
+    pub shader: Box<dyn ShaderAtlasEntry>,
 }
 
 /// arguments for creating a pipeline
 pub struct PipelineConfig<'a, V: VertexDescription> {
-    pub shader: DepthTextureShader,
+    pub shader: Box<dyn ShaderAtlasEntry>,
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
     // TODO make this a vec/iterable

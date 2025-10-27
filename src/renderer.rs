@@ -361,7 +361,7 @@ impl Renderer {
         let texture = self.textures.get(config.texture_handle);
 
         let pipeline_layout =
-            ShaderPipelineLayout::create_from_atlas(&self.device, &config.shader)?;
+            ShaderPipelineLayout::create_from_atlas(&self.device, &*config.shader)?;
         let pipeline = create_graphics_pipeline(
             &self.device,
             self.render_pass,
@@ -803,7 +803,7 @@ impl Renderer {
     ) -> Result<(), anyhow::Error> {
         let mut tmp_pipeline_layout = match ShaderPipelineLayout::create_from_atlas(
             &self.device,
-            &self.renderer_pipeline(pipeline_handle).shader,
+            &*self.renderer_pipeline(pipeline_handle).shader,
         ) {
             Ok(shaders) => shaders,
             Err(e) => {

@@ -108,7 +108,7 @@ impl Game for VikingRoom {
         let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
-        let shader = shader_atlas.depth_texture;
+        let shader = Box::new(shader_atlas.depth_texture);
 
         let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let pipeline_config = PipelineConfig {
@@ -240,7 +240,7 @@ impl Game for DepthTexture {
         let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
-        let shader = shader_atlas.depth_texture;
+        let shader = Box::new(shader_atlas.depth_texture);
 
         let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let pipeline_config = PipelineConfig {
