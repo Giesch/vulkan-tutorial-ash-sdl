@@ -358,7 +358,14 @@ impl Renderer {
         &mut self,
         config: PipelineConfig<V>,
     ) -> anyhow::Result<RendererPipeline> {
-        let texture = self.textures.get(config.texture_handle);
+        let textures = {
+            let mut textures = vec![];
+            for texture_handle in config.texture_handles {
+                let texture = self.textures.get(texture_handle);
+                textures.push(texture);
+            }
+            textures
+        };
 
         let pipeline_layout =
             ShaderPipelineLayout::create_from_atlas(&self.device, &*config.shader)?;
@@ -408,7 +415,7 @@ impl Renderer {
             descriptor_pool,
             &pipeline_layout.descriptor_set_layouts,
             &all_uniform_buffers,
-            texture,
+            &textures,
             layout_bindings,
         )?;
 
@@ -1917,7 +1924,7 @@ fn create_descriptor_sets(
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layouts: &[vk::DescriptorSetLayout],
     all_uniform_buffers: &[AllocatedUniformBuffers],
-    texture: &Texture,
+    textures: &[&Texture],
     layout_bindings: Vec<Vec<LayoutDescription>>,
 ) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
     // this vec and the resulting vec of descriptor sets are arranged like this:
@@ -1970,6 +1977,8 @@ fn create_descriptor_sets(
                     }
 
                     LayoutDescription::Texture(texture_description) => {
+                        let texture = textures[layout_offset];
+
                         let image_info = vk::DescriptorImageInfo::default()
                             .image_layout(texture_description.layout)
                             .image_view(texture.image_view)

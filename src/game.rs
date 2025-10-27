@@ -111,11 +111,12 @@ impl Game for VikingRoom {
         let shader = Box::new(shader_atlas.depth_texture);
 
         let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let texture_handles = &[&texture_handle];
         let pipeline_config = PipelineConfig {
             shader,
             vertices,
             indices,
-            texture_handle: &texture_handle,
+            texture_handles,
         };
         let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
 
@@ -243,11 +244,12 @@ impl Game for DepthTexture {
         let shader = Box::new(shader_atlas.depth_texture);
 
         let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let texture_handles = &[&texture_handle];
         let pipeline_config = PipelineConfig {
             shader,
             vertices,
             indices,
-            texture_handle: &texture_handle,
+            texture_handles,
         };
         let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
 

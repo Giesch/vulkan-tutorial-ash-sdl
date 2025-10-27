@@ -68,6 +68,6 @@ pub struct PipelineConfig<'a, V: VertexDescription> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
 
-    // TODO this should be the resources type
-    pub texture_handle: &'a TextureHandle,
+    // TODO replace this with the resources type
+    pub texture_handles: &'a [&'a TextureHandle],
 }

@@ -1,6 +1,18 @@
 #+title: Todo
 
 * Current
+- [X] need a plan for more dynamically created descriptor sets
+  ie the todo in create_descriptor_sets
+  - [X] take an enum/struct arg that specifies each descriptor fully
+    - DescriptorBuffer
+    - DescriptorImageInfo
+  - [X] handle textures dynamically
+    - [X] allocate multiple textures
+    - [X] change PipelineConfig to use a vec of textures
+      - [X] change create_descriptor_sets to use a slice of textures
+      arrange textures by descriptor set layout, like uniform buffers
+      - [X] change init_pipeline to handle any number of textures
+
 - [-] handle uniform buffers more dynamically
   - [X] allow multiple uniform buffers
   - [-] address FIXMEs to handle multiple uniform buffers correctly
@@ -12,14 +24,6 @@
   - associated type for required resource ids
   - how does this work with PipelineStorage?
     need to be able to erase the generic; keep it only in the handle
-
-- [-] need a plan for more dynamically created descriptor sets
-  ie the todo in create_descriptor_sets
-  - [X] handle textures dynamically
-    - [X] allocate multiple textures
-  - [ ] take an enum/struct arg that specifies each descriptor fully
-    - DescriptorBuffer
-    - DescriptorImageInfo
 
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
