@@ -4,8 +4,8 @@ use std::time::Instant;
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
 
-use crate::renderer::{PipelineConfig, PipelineHandle, Renderer, TextureHandle};
-use crate::shaders::atlas::{MVPMatrices, ShaderAtlas, Vertex};
+use crate::renderer::{PipelineHandle, Renderer, TextureHandle};
+use crate::shaders::atlas::{DepthTextureResources, MVPMatrices, ShaderAtlas, Vertex};
 use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
@@ -41,8 +41,8 @@ pub struct VikingRoom {
     start_time: Instant,
     aspect_ratio: f32,
     renderer: Renderer,
-    pipeline_handle: PipelineHandle,
-    texture_handle: TextureHandle,
+    pipeline: PipelineHandle,
+    texture: TextureHandle,
 }
 
 impl VikingRoom {
@@ -108,17 +108,16 @@ impl Game for VikingRoom {
         let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
-        let shader = Box::new(shader_atlas.depth_texture);
+        let shader = shader_atlas.depth_texture;
 
-        let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let texture_handles = &[&texture_handle];
-        let pipeline_config = PipelineConfig {
-            shader,
+        let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let resources = DepthTextureResources {
             vertices,
             indices,
-            texture_handles,
+            texture: &texture,
         };
-        let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
+        let pipeline_config = shader.pipeline_config(resources);
+        let pipeline = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();
@@ -128,14 +127,14 @@ impl Game for VikingRoom {
             start_time,
             aspect_ratio,
             renderer,
-            pipeline_handle,
-            texture_handle,
+            pipeline,
+            texture,
         })
     }
 
     fn draw_frame(&mut self) -> anyhow::Result<()> {
         self.renderer
-            .draw_frame(&self.pipeline_handle, |mapped_uniform_buffer| {
+            .draw_frame(&self.pipeline, |mapped_uniform_buffer| {
                 update_mvp_uniform_buffer(
                     self.start_time,
                     self.aspect_ratio,
@@ -155,19 +154,20 @@ impl Game for VikingRoom {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
-        self.renderer.drop_texture(self.texture_handle);
-        self.renderer.drop_pipeline(self.pipeline_handle);
+        self.renderer.drop_texture(self.texture);
+        self.renderer.drop_pipeline(self.pipeline);
 
         Ok(())
     }
 }
+
 #[allow(unused)]
 pub struct DepthTexture {
     start_time: Instant,
     aspect_ratio: f32,
     renderer: Renderer,
-    pipeline_handle: PipelineHandle,
-    texture_handle: TextureHandle,
+    pipeline: PipelineHandle,
+    texture: TextureHandle,
 }
 
 #[allow(unused)]
@@ -241,17 +241,16 @@ impl Game for DepthTexture {
         let image = load_image(IMAGE_FILE_NAME)?;
 
         let shader_atlas = ShaderAtlas::init();
-        let shader = Box::new(shader_atlas.depth_texture);
+        let shader = shader_atlas.depth_texture;
 
-        let texture_handle = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let texture_handles = &[&texture_handle];
-        let pipeline_config = PipelineConfig {
-            shader,
+        let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let resources = DepthTextureResources {
             vertices,
             indices,
-            texture_handles,
+            texture: &texture,
         };
-        let pipeline_handle = renderer.create_pipeline(pipeline_config)?;
+        let pipeline_config = shader.pipeline_config(resources);
+        let pipeline = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
         let window_desc = Self::window_description();
@@ -261,14 +260,14 @@ impl Game for DepthTexture {
             start_time,
             aspect_ratio,
             renderer,
-            pipeline_handle,
-            texture_handle,
+            pipeline,
+            texture,
         })
     }
 
     fn draw_frame(&mut self) -> anyhow::Result<()> {
         self.renderer
-            .draw_frame(&self.pipeline_handle, |mapped_uniform_buffer| {
+            .draw_frame(&self.pipeline, |mapped_uniform_buffer| {
                 update_mvp_uniform_buffer(
                     self.start_time,
                     self.aspect_ratio,
@@ -288,8 +287,8 @@ impl Game for DepthTexture {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
-        self.renderer.drop_texture(self.texture_handle);
-        self.renderer.drop_pipeline(self.pipeline_handle);
+        self.renderer.drop_texture(self.texture);
+        self.renderer.drop_pipeline(self.pipeline);
 
         Ok(())
     }

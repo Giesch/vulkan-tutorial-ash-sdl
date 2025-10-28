@@ -3,7 +3,9 @@ use std::ffi::CString;
 use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
-use crate::renderer::{LayoutDescription, TextureDescription, UniformBufferDescription};
+use crate::renderer::{
+    LayoutDescription, PipelineConfig, TextureDescription, TextureHandle, UniformBufferDescription,
+};
 use crate::shaders::json::ReflectedPipelineLayout;
 use crate::shaders::ReflectionJson;
 
@@ -18,6 +20,13 @@ pub use vertex::*;
 
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
+}
+
+/// additional resoources necessary to construct a pipeline with this shader
+pub struct DepthTextureResources<'t> {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub texture: &'t TextureHandle,
 }
 
 impl DepthTextureShader {
@@ -49,6 +58,18 @@ impl DepthTextureShader {
         }
 
         shader
+    }
+
+    pub fn pipeline_config(
+        self,
+        resources: DepthTextureResources<'_>,
+    ) -> PipelineConfig<'_, Vertex> {
+        PipelineConfig {
+            shader: Box::new(self),
+            vertices: resources.vertices,
+            indices: resources.indices,
+            texture_handles: vec![resources.texture],
+        }
     }
 
     // release only

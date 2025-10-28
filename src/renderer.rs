@@ -358,15 +358,6 @@ impl Renderer {
         &mut self,
         config: PipelineConfig<V>,
     ) -> anyhow::Result<RendererPipeline> {
-        let textures = {
-            let mut textures = vec![];
-            for texture_handle in config.texture_handles {
-                let texture = self.textures.get(texture_handle);
-                textures.push(texture);
-            }
-            textures
-        };
-
         let pipeline_layout =
             ShaderPipelineLayout::create_from_atlas(&self.device, &*config.shader)?;
         let pipeline = create_graphics_pipeline(
@@ -408,8 +399,14 @@ impl Renderer {
 
         let descriptor_pool = create_descriptor_pool(&self.device, &pipeline_layout)?;
 
-        // TODO pass a collection of textures with ids/handles
-        // associate those with reflected bindings somehow
+        let textures = {
+            let mut textures = vec![];
+            for texture_handle in config.texture_handles {
+                let texture = self.textures.get(texture_handle);
+                textures.push(texture);
+            }
+            textures
+        };
         let descriptor_sets = create_descriptor_sets(
             &self.device,
             descriptor_pool,

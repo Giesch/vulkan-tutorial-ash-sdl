@@ -62,12 +62,10 @@ pub(super) struct RendererPipeline {
     pub shader: Box<dyn ShaderAtlasEntry>,
 }
 
-/// arguments for creating a pipeline
-pub struct PipelineConfig<'a, V: VertexDescription> {
+/// the generic arguments for creating a pipeline
+pub struct PipelineConfig<'t, V: VertexDescription> {
     pub shader: Box<dyn ShaderAtlasEntry>,
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
-
-    // TODO replace this with the resources type
-    pub texture_handles: &'a [&'a TextureHandle],
+    pub texture_handles: Vec<&'t TextureHandle>,
 }
