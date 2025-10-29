@@ -2098,7 +2098,7 @@ fn create_texture_image(
         command_pool,
         graphics_queue,
         vk_image,
-        vk::Format::R8G8B8A8_SRGB,
+        TEXTURE_IMAGE_FORMAT,
         vk::ImageLayout::UNDEFINED,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         mip_levels,
@@ -2122,7 +2122,7 @@ fn create_texture_image(
         mip_levels,
         instance,
         physical_device,
-        vk::Format::R8G8B8A8_SRGB,
+        TEXTURE_IMAGE_FORMAT
     )?;
 
     unsafe {
