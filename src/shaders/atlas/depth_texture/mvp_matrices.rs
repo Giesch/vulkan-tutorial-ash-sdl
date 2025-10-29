@@ -1,6 +1,8 @@
+use serde::Serialize;
+
 use crate::renderer::gpu_write::GPUWrite;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
 pub struct MVPMatrices {
     pub model: glam::Mat4,

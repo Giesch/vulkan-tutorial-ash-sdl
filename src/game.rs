@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use image::{DynamicImage, ImageReader};
@@ -309,11 +309,21 @@ fn update_mvp_uniform_buffer(
     aspect_ratio: f32,
     mapped_uniform_buffer: *mut MVPMatrices,
 ) -> Result<(), anyhow::Error> {
+    let elapsed = Instant::now() - start_time;
+    let mvp = make_mvp_matrices(elapsed, aspect_ratio, COLUMN_MAJOR);
+
+    unsafe {
+        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
+    }
+
+    Ok(())
+}
+
+fn make_mvp_matrices(elapsed: Duration, aspect_ratio: f32, column_major: bool) -> MVPMatrices {
     const TURN_DEGREES_PER_SECOND: f32 = 5.0;
     const STARTING_ANGLE_DEGREES: f32 = 45.0;
 
-    let elapsed_seconds = (Instant::now() - start_time).as_secs_f32();
-    let turn_radians = elapsed_seconds * TURN_DEGREES_PER_SECOND.to_radians();
+    let turn_radians = elapsed.as_secs_f32() * TURN_DEGREES_PER_SECOND.to_radians();
 
     let model = glam::Mat4::from_rotation_z(turn_radians);
     let view = glam::Mat4::look_at_rh(
@@ -338,7 +348,7 @@ fn update_mvp_uniform_buffer(
     // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
     mvp.projection.y_axis.y *= -1.0;
 
-    if !COLUMN_MAJOR {
+    if !column_major {
         // it's also possible to avoid this by reversing the mul() calls in shaders
         // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
         mvp.model = mvp.model.transpose();
@@ -346,9 +356,26 @@ fn update_mvp_uniform_buffer(
         mvp.projection = mvp.projection.transpose();
     }
 
-    unsafe {
-        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
+    mvp
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn make_mvp_matrices_col_major() {
+        let elapsed = Duration::from_secs(2);
+        let aspect_ratio = 800.0 / 600.0;
+        let mvp = make_mvp_matrices(elapsed, aspect_ratio, true);
+        insta::assert_json_snapshot!(mvp);
     }
 
-    Ok(())
+    #[test]
+    fn make_mvp_matrices_row_major() {
+        let elapsed = Duration::from_secs(2);
+        let aspect_ratio = 800.0 / 600.0;
+        let mvp = make_mvp_matrices(elapsed, aspect_ratio, false);
+        insta::assert_json_snapshot!(mvp);
+    }
 }
