@@ -4,7 +4,8 @@ use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
 use crate::renderer::{
-    LayoutDescription, PipelineConfig, TextureDescription, TextureHandle, UniformBufferDescription,
+    LayoutDescription, PipelineConfig, RawUniformBufferHandle, TextureDescription, TextureHandle,
+    UniformBufferDescription, UniformBufferHandle,
 };
 use crate::shaders::json::ReflectedPipelineLayout;
 use crate::shaders::ReflectionJson;
@@ -27,6 +28,7 @@ pub struct DepthTextureResources<'t> {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub texture: &'t TextureHandle,
+    pub mvp_buffer: &'t UniformBufferHandle<MVPMatrices>,
 }
 
 impl DepthTextureShader {
@@ -64,11 +66,17 @@ impl DepthTextureShader {
         self,
         resources: DepthTextureResources<'_>,
     ) -> PipelineConfig<'_, Vertex> {
+        let uniform_buffer_handle = RawUniformBufferHandle::from_typed(resources.mvp_buffer);
+
         PipelineConfig {
             shader: Box::new(self),
             vertices: resources.vertices,
             indices: resources.indices,
+            // NOTE if there are multipe textures or multipe buffers,
+            // these must match the order of ['pipelineLayout']['descriptorSetLayouts'] in the reflection json
+            // codegen will need to handle this ordering
             texture_handles: vec![resources.texture],
+            uniform_buffer_handles: vec![uniform_buffer_handle],
         }
     }
 

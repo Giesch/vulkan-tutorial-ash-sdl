@@ -2,9 +2,10 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
+use glam::{Mat4, Vec2, Vec3};
 use image::{DynamicImage, ImageReader};
 
-use crate::renderer::{PipelineHandle, Renderer, TextureHandle};
+use crate::renderer::{PipelineHandle, Renderer, TextureHandle, UniformBufferHandle};
 use crate::shaders::atlas::{DepthTextureResources, MVPMatrices, ShaderAtlas, Vertex};
 use crate::util::manifest_path;
 
@@ -43,6 +44,7 @@ pub struct VikingRoom {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
+    mvp_buffer: UniformBufferHandle<MVPMatrices>,
 }
 
 impl VikingRoom {
@@ -64,7 +66,7 @@ impl VikingRoom {
         for i in 0..vertices_count {
             let position = {
                 let offset = i * 3;
-                glam::Vec3::new(
+                Vec3::new(
                     mesh.positions[offset],
                     mesh.positions[offset + 1],
                     mesh.positions[offset + 2],
@@ -77,12 +79,12 @@ impl VikingRoom {
                 // in obj, 0 is the bottom, in vulkan, 0 is the top
                 // (for texture coordinates)
                 let v = 1.0 - mesh.texcoords[offset + 1];
-                glam::Vec2::new(u, v)
+                Vec2::new(u, v)
             };
 
             let vertex = Vertex {
                 position,
-                color: glam::Vec3::splat(1.0),
+                color: Vec3::splat(1.0),
                 tex_coord,
             };
 
@@ -111,10 +113,12 @@ impl Game for VikingRoom {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let mvp_buffer = renderer.create_uniform_buffer::<MVPMatrices>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
             texture: &texture,
+            mvp_buffer: &mvp_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
@@ -129,18 +133,16 @@ impl Game for VikingRoom {
             renderer,
             pipeline,
             texture,
+            mvp_buffer,
         })
     }
 
     fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.renderer
-            .draw_frame(&self.pipeline, |mapped_uniform_buffer| {
-                update_mvp_uniform_buffer(
-                    self.start_time,
-                    self.aspect_ratio,
-                    mapped_uniform_buffer as *mut MVPMatrices,
-                )
-            })
+        self.renderer.draw_frame(&self.pipeline, |gpu| {
+            let elapsed = Instant::now() - self.start_time;
+            let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
+            *mvp_buffer = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+        })
     }
 
     fn on_resize(&mut self) -> anyhow::Result<()> {
@@ -155,6 +157,7 @@ impl Game for VikingRoom {
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
         self.renderer.drop_texture(self.texture);
+        self.renderer.drop_uniform_buffer(self.mvp_buffer);
         self.renderer.drop_pipeline(self.pipeline);
 
         Ok(())
@@ -168,6 +171,7 @@ pub struct DepthTexture {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
+    mvp_buffer: UniformBufferHandle<MVPMatrices>,
 }
 
 #[allow(unused)]
@@ -175,44 +179,44 @@ impl DepthTexture {
     fn load_vertices() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
         let vertices = vec![
             Vertex {
-                position: glam::Vec3::new(-0.5, -0.5, 0.0),
-                color: glam::Vec3::new(1.0, 0.0, 0.0),
-                tex_coord: glam::Vec2::new(1.0, 0.0),
+                position: Vec3::new(-0.5, -0.5, 0.0),
+                color: Vec3::new(1.0, 0.0, 0.0),
+                tex_coord: Vec2::new(1.0, 0.0),
             },
             Vertex {
-                position: glam::Vec3::new(0.5, -0.5, 0.0),
-                color: glam::Vec3::new(0.0, 1.0, 0.0),
-                tex_coord: glam::Vec2::new(0.0, 0.0),
+                position: Vec3::new(0.5, -0.5, 0.0),
+                color: Vec3::new(0.0, 1.0, 0.0),
+                tex_coord: Vec2::new(0.0, 0.0),
             },
             Vertex {
-                position: glam::Vec3::new(0.5, 0.5, 0.0),
-                color: glam::Vec3::new(0.0, 0.0, 1.0),
-                tex_coord: glam::Vec2::new(0.0, 1.0),
+                position: Vec3::new(0.5, 0.5, 0.0),
+                color: Vec3::new(0.0, 0.0, 1.0),
+                tex_coord: Vec2::new(0.0, 1.0),
             },
             Vertex {
-                position: glam::Vec3::new(-0.5, 0.5, 0.0),
-                color: glam::Vec3::new(1.0, 1.0, 1.0),
-                tex_coord: glam::Vec2::new(1.0, 1.0),
+                position: Vec3::new(-0.5, 0.5, 0.0),
+                color: Vec3::new(1.0, 1.0, 1.0),
+                tex_coord: Vec2::new(1.0, 1.0),
             },
             Vertex {
-                position: glam::Vec3::new(-0.5, -0.5, -0.5),
-                color: glam::Vec3::new(1.0, 0.0, 0.0),
-                tex_coord: glam::Vec2::new(1.0, 0.0),
+                position: Vec3::new(-0.5, -0.5, -0.5),
+                color: Vec3::new(1.0, 0.0, 0.0),
+                tex_coord: Vec2::new(1.0, 0.0),
             },
             Vertex {
-                position: glam::Vec3::new(0.5, -0.5, -0.5),
-                color: glam::Vec3::new(0.0, 1.0, 0.0),
-                tex_coord: glam::Vec2::new(0.0, 0.0),
+                position: Vec3::new(0.5, -0.5, -0.5),
+                color: Vec3::new(0.0, 1.0, 0.0),
+                tex_coord: Vec2::new(0.0, 0.0),
             },
             Vertex {
-                position: glam::Vec3::new(0.5, 0.5, -0.5),
-                color: glam::Vec3::new(0.0, 0.0, 1.0),
-                tex_coord: glam::Vec2::new(0.0, 1.0),
+                position: Vec3::new(0.5, 0.5, -0.5),
+                color: Vec3::new(0.0, 0.0, 1.0),
+                tex_coord: Vec2::new(0.0, 1.0),
             },
             Vertex {
-                position: glam::Vec3::new(-0.5, 0.5, -0.5),
-                color: glam::Vec3::new(1.0, 1.0, 1.0),
-                tex_coord: glam::Vec2::new(1.0, 1.0),
+                position: Vec3::new(-0.5, 0.5, -0.5),
+                color: Vec3::new(1.0, 1.0, 1.0),
+                tex_coord: Vec2::new(1.0, 1.0),
             },
         ];
 
@@ -244,10 +248,12 @@ impl Game for DepthTexture {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
+        let mvp_buffer = renderer.create_uniform_buffer::<MVPMatrices>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
             texture: &texture,
+            mvp_buffer: &mvp_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
@@ -262,18 +268,16 @@ impl Game for DepthTexture {
             renderer,
             pipeline,
             texture,
+            mvp_buffer,
         })
     }
 
     fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.renderer
-            .draw_frame(&self.pipeline, |mapped_uniform_buffer| {
-                update_mvp_uniform_buffer(
-                    self.start_time,
-                    self.aspect_ratio,
-                    mapped_uniform_buffer as *mut MVPMatrices,
-                )
-            })
+        self.renderer.draw_frame(&self.pipeline, |gpu| {
+            let elapsed = Instant::now() - self.start_time;
+            let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
+            *mvp_buffer = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+        })
     }
 
     fn on_resize(&mut self) -> anyhow::Result<()> {
@@ -288,6 +292,7 @@ impl Game for DepthTexture {
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
         self.renderer.drop_texture(self.texture);
+        self.renderer.drop_uniform_buffer(self.mvp_buffer);
         self.renderer.drop_pipeline(self.pipeline);
 
         Ok(())
@@ -304,35 +309,16 @@ fn load_image(file_name: &str) -> anyhow::Result<DynamicImage> {
     Ok(image)
 }
 
-fn update_mvp_uniform_buffer(
-    start_time: Instant,
-    aspect_ratio: f32,
-    mapped_uniform_buffer: *mut MVPMatrices,
-) -> Result<(), anyhow::Error> {
-    let elapsed = Instant::now() - start_time;
-    let mvp = make_mvp_matrices(elapsed, aspect_ratio, COLUMN_MAJOR);
-
-    unsafe {
-        std::ptr::copy_nonoverlapping(&mvp, mapped_uniform_buffer, 1);
-    }
-
-    Ok(())
-}
-
 fn make_mvp_matrices(elapsed: Duration, aspect_ratio: f32, column_major: bool) -> MVPMatrices {
     const TURN_DEGREES_PER_SECOND: f32 = 5.0;
     const STARTING_ANGLE_DEGREES: f32 = 45.0;
 
     let turn_radians = elapsed.as_secs_f32() * TURN_DEGREES_PER_SECOND.to_radians();
 
-    let model = glam::Mat4::from_rotation_z(turn_radians);
-    let view = glam::Mat4::look_at_rh(
-        glam::Vec3::splat(2.0),
-        glam::Vec3::splat(0.0),
-        glam::Vec3::new(0.0, 0.0, 1.0),
-    );
+    let model = Mat4::from_rotation_z(turn_radians);
+    let view = Mat4::look_at_rh(Vec3::splat(2.0), Vec3::ZERO, Vec3::Z);
     let projection =
-        glam::Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
+        Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
 
     let mut mvp = MVPMatrices {
         model,

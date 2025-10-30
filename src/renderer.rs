@@ -1,7 +1,7 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use std::collections::BTreeSet;
-use std::ffi::{c_char, c_void, CStr, CString};
+use std::ffi::{c_char, CStr, CString};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -29,6 +29,9 @@ pub mod vertex_description;
 
 pub mod texture;
 pub use texture::*;
+
+pub mod uniform_buffer;
+pub use uniform_buffer::*;
 
 pub mod pipeline;
 pub use pipeline::*;
@@ -96,6 +99,7 @@ pub struct Renderer {
 
     pipelines: PipelineStorage,
     textures: TextureStorage,
+    uniform_buffers: UniformBufferStorage,
 }
 
 impl Renderer {
@@ -228,6 +232,7 @@ impl Renderer {
 
         let pipelines = PipelineStorage::new();
         let textures = TextureStorage::new();
+        let uniform_buffers = UniformBufferStorage::new();
 
         Ok(Self {
             total_frames: 0,
@@ -272,6 +277,7 @@ impl Renderer {
 
             pipelines,
             textures,
+            uniform_buffers,
         })
     }
 
@@ -302,12 +308,62 @@ impl Renderer {
 
     pub fn drop_texture(&mut self, texture_handle: TextureHandle) {
         let texture = self.textures.take(texture_handle);
+        self.destroy_texture(texture);
+    }
 
+    fn destroy_texture(&mut self, texture: Texture) {
         unsafe {
             self.device.destroy_sampler(texture.sampler, None);
             self.device.destroy_image_view(texture.image_view, None);
             self.device.destroy_image(texture.image, None);
             self.device.free_memory(texture.image_memory, None);
+        }
+    }
+
+    pub fn create_uniform_buffer<T: GPUWrite>(&mut self) -> anyhow::Result<UniformBufferHandle<T>> {
+        let buffer_size = std::mem::size_of::<T>() as u64;
+
+        let mut buffers_per_frame = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
+        for _ in 0..MAX_FRAMES_IN_FLIGHT {
+            let (buffer, device_mem) = create_memory_buffer(
+                &self.instance,
+                &self.device,
+                self.physical_device,
+                buffer_size,
+                vk::BufferUsageFlags::UNIFORM_BUFFER,
+                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
+            )?;
+
+            let mapped_mem = unsafe {
+                self.device
+                    .map_memory(device_mem, 0, buffer_size, Default::default())?
+            };
+
+            let raw_uniform_buffer = RawUniformBuffer {
+                buffer,
+                device_mem,
+                mapped_mem,
+            };
+
+            buffers_per_frame.push(raw_uniform_buffer);
+        }
+
+        let handle = self.uniform_buffers.add(buffers_per_frame);
+
+        Ok(handle)
+    }
+
+    pub fn drop_uniform_buffer<T>(&mut self, uniform_buffer: UniformBufferHandle<T>) {
+        let buffers_per_frame = self.uniform_buffers.take(uniform_buffer);
+        for raw_uniform_buffer in buffers_per_frame {
+            self.destroy_uniform_buffer(raw_uniform_buffer);
+        }
+    }
+
+    fn destroy_uniform_buffer(&mut self, uniform_buffer: RawUniformBuffer) {
+        unsafe {
+            self.device.destroy_buffer(uniform_buffer.buffer, None);
+            self.device.free_memory(uniform_buffer.device_mem, None);
         }
     }
 
@@ -324,7 +380,10 @@ impl Renderer {
     /// NOTE call this after draining gpu commands
     pub fn drop_pipeline(&mut self, pipeline_handle: PipelineHandle) {
         let pipeline = self.pipelines.take(pipeline_handle);
+        self.destroy_pipeline(pipeline);
+    }
 
+    fn destroy_pipeline(&mut self, pipeline: RendererPipeline) {
         unsafe {
             // this also destroys the sets from the pool
             self.device
@@ -344,13 +403,6 @@ impl Renderer {
             self.device.destroy_pipeline(pipeline.pipeline, None);
             self.device
                 .destroy_pipeline_layout(pipeline.layout.pipeline_layout, None);
-
-            for (uniform_buffers, uniform_buffers_memory, _mapped) in pipeline.all_uniform_buffers {
-                for i in 0..MAX_FRAMES_IN_FLIGHT {
-                    self.device.destroy_buffer(uniform_buffers[i], None);
-                    self.device.free_memory(uniform_buffers_memory[i], None);
-                }
-            }
         }
     }
 
@@ -388,14 +440,6 @@ impl Renderer {
         )?;
 
         let layout_bindings = config.shader.layout_bindings();
-        let uniform_buffer_sizes = config.shader.uniform_buffer_sizes();
-
-        let all_uniform_buffers = create_uniform_buffers(
-            &self.instance,
-            &self.device,
-            self.physical_device,
-            &uniform_buffer_sizes,
-        )?;
 
         let descriptor_pool = create_descriptor_pool(&self.device, &pipeline_layout)?;
 
@@ -407,11 +451,18 @@ impl Renderer {
             }
             textures
         };
+
+        let uniform_buffers_in_layout_frame_order: Vec<&[RawUniformBuffer]> = config
+            .uniform_buffer_handles
+            .iter()
+            .map(|raw_handle| self.uniform_buffers.get_raw(raw_handle))
+            .collect();
+
         let descriptor_sets = create_descriptor_sets(
             &self.device,
             descriptor_pool,
             &pipeline_layout.descriptor_set_layouts,
-            &all_uniform_buffers,
+            &uniform_buffers_in_layout_frame_order,
             &textures,
             layout_bindings,
         )?;
@@ -423,7 +474,6 @@ impl Renderer {
             vertex_buffer_memory,
             index_buffer,
             index_buffer_memory,
-            all_uniform_buffers,
             descriptor_pool,
             descriptor_sets,
             index_count: config.indices.len(),
@@ -560,7 +610,7 @@ impl Renderer {
     pub fn draw_frame(
         &mut self,
         pipeline_handle: &PipelineHandle,
-        mut update_uniform_buffer: impl FnMut(*mut c_void) -> anyhow::Result<()>,
+        gpu_update: impl FnOnce(&mut Gpu),
     ) -> Result<(), anyhow::Error> {
         self.total_frames += 1;
         #[cfg(debug_assertions)]
@@ -588,14 +638,11 @@ impl Renderer {
             }
         };
 
-        for (_, _, uniform_buffers_mapped) in
-            &self.renderer_pipeline(pipeline_handle).all_uniform_buffers
-        {
-            let mapped_uniform_buffer = uniform_buffers_mapped[self.current_frame];
-            // FIXME this needs a way to map update functions to uniform buffers
-            //   it shouldn't do the same thing to each
-            update_uniform_buffer(mapped_uniform_buffer)?;
-        }
+        let mut gpu = Gpu {
+            current_frame: self.current_frame,
+            uniform_buffers: &mut self.uniform_buffers,
+        };
+        gpu_update(&mut gpu);
 
         // NOTE only reset fences if we're submitting work
         //   ie, after early returns
@@ -883,6 +930,20 @@ impl Drop for Renderer {
 
             self.cleanup_swapchain();
 
+            // NOTE the game 'should' clean these up,
+            // but we try to be good gpu citizens
+            for texture in self.textures.take_all() {
+                self.destroy_texture(texture);
+            }
+            for pipeline in self.pipelines.take_all() {
+                self.destroy_pipeline(pipeline);
+            }
+            for buffers_per_frame in self.uniform_buffers.take_all() {
+                for uniform_buffer in buffers_per_frame {
+                    self.destroy_uniform_buffer(uniform_buffer);
+                }
+            }
+
             self.device.destroy_device(None);
 
             // NOTE This must be called before dropping the sdl window,
@@ -1032,14 +1093,11 @@ fn choose_physical_device(
     instance: &ash::Instance,
     surface_ext: &ash::khr::surface::Instance,
     surface: vk::SurfaceKHR,
-) -> Result<
-    (
-        vk::PhysicalDevice,
-        QueueFamilyIndices,
-        vk::PhysicalDeviceProperties,
-    ),
-    anyhow::Error,
-> {
+) -> anyhow::Result<(
+    vk::PhysicalDevice,
+    QueueFamilyIndices,
+    vk::PhysicalDeviceProperties,
+)> {
     let physical_devices: Vec<vk::PhysicalDevice> =
         unsafe { instance.enumerate_physical_devices()? };
 
@@ -1090,7 +1148,25 @@ fn choose_physical_device(
         anyhow::bail!("no graphics device availble");
     };
 
+    #[cfg(debug_assertions)]
+    {
+        let chosen_device_name = device_name_as_string(chosen_device.2);
+        log::trace!("using device: {chosen_device_name}");
+    }
+
     Ok(chosen_device)
+}
+
+#[cfg(debug_assertions)]
+fn device_name_as_string(props: vk::PhysicalDeviceProperties) -> String {
+    let device_name_bytes: Vec<u8> = props
+        .device_name
+        .into_iter()
+        .filter(|&i| i != 0)
+        .map(|i| i as u8)
+        .collect();
+
+    String::from_utf8_lossy(&device_name_bytes).to_string()
 }
 
 const PREFERRED_SURFACE_FORMAT: vk::SurfaceFormatKHR = vk::SurfaceFormatKHR {
@@ -1822,53 +1898,6 @@ fn find_memory_type_index(
     Err(anyhow::anyhow!("failed to find suitable memory type"))
 }
 
-/// one logical uniform buffer and its associated resources,
-/// split by type, with duplicates per frame in flight
-/// (uniform_buffers, device_memories, mapped_memories)
-type AllocatedUniformBuffers = (Vec<vk::Buffer>, Vec<vk::DeviceMemory>, Vec<*mut c_void>);
-
-fn create_uniform_buffers(
-    instance: &ash::Instance,
-    device: &ash::Device,
-    physical_device: vk::PhysicalDevice,
-    buffer_sizes: &[vk::DeviceSize],
-) -> anyhow::Result<Vec<AllocatedUniformBuffers>> {
-    let mut all_uniform_buffers = vec![];
-    for &buffer_size in buffer_sizes {
-        let mut uniform_buffers = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
-        let mut uniform_buffers_memory = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
-        let mut uniform_buffers_mapped = Vec::with_capacity(MAX_FRAMES_IN_FLIGHT);
-
-        for _ in 0..MAX_FRAMES_IN_FLIGHT {
-            let (buffer, memory) = create_memory_buffer(
-                instance,
-                device,
-                physical_device,
-                buffer_size,
-                vk::BufferUsageFlags::UNIFORM_BUFFER,
-                vk::MemoryPropertyFlags::HOST_VISIBLE | vk::MemoryPropertyFlags::HOST_COHERENT,
-            )?;
-
-            uniform_buffers.push(buffer);
-            uniform_buffers_memory.push(memory);
-
-            let mapped = unsafe { device.map_memory(memory, 0, buffer_size, Default::default())? };
-
-            uniform_buffers_mapped.push(mapped);
-        }
-
-        let allocated_uniform_buffers = (
-            uniform_buffers,
-            uniform_buffers_memory,
-            uniform_buffers_mapped,
-        );
-
-        all_uniform_buffers.push(allocated_uniform_buffers);
-    }
-
-    Ok(all_uniform_buffers)
-}
-
 fn create_descriptor_pool(
     device: &ash::Device,
     pipeline_layout: &ShaderPipelineLayout,
@@ -1920,7 +1949,7 @@ fn create_descriptor_sets(
     device: &ash::Device,
     descriptor_pool: vk::DescriptorPool,
     descriptor_set_layouts: &[vk::DescriptorSetLayout],
-    all_uniform_buffers: &[AllocatedUniformBuffers],
+    uniform_buffers_in_layout_frame_order: &[&[RawUniformBuffer]],
     textures: &[&Texture],
     layout_bindings: Vec<Vec<LayoutDescription>>,
 ) -> Result<Vec<vk::DescriptorSet>, anyhow::Error> {
@@ -1953,12 +1982,13 @@ fn create_descriptor_sets(
             for description in layout_descriptions {
                 match description {
                     LayoutDescription::Uniform(uniform_buffer_description) => {
-                        let allocated_uniform_buffers = &all_uniform_buffers[layout_offset];
-                        let uniform_buffers = &allocated_uniform_buffers.0;
+                        let raw_uniform_buffers_by_frame =
+                            uniform_buffers_in_layout_frame_order[layout_offset];
+                        let uniform_buffer = raw_uniform_buffers_by_frame[frame].buffer;
 
                         let buffer_info = vk::DescriptorBufferInfo::default()
                             .offset(0)
-                            .buffer(uniform_buffers[frame])
+                            .buffer(uniform_buffer)
                             .range(uniform_buffer_description.size);
                         let buffer_info = [buffer_info];
                         let uniform_buffer_write = vk::WriteDescriptorSet::default()
@@ -2122,7 +2152,7 @@ fn create_texture_image(
         mip_levels,
         instance,
         physical_device,
-        TEXTURE_IMAGE_FORMAT
+        TEXTURE_IMAGE_FORMAT,
     )?;
 
     unsafe {
@@ -2866,5 +2896,20 @@ impl shaders::json::ReflectedStageFlags {
             Self::All => vk::ShaderStageFlags::ALL,
             Self::Empty => vk::ShaderStageFlags::empty(),
         }
+    }
+}
+
+pub struct Gpu<'frame> {
+    current_frame: usize,
+    uniform_buffers: &'frame mut UniformBufferStorage,
+}
+
+impl<'frame> Gpu<'frame> {
+    pub fn get_uniform_buffer_mut<T: GPUWrite>(
+        &mut self,
+        uniform_buffer: &mut UniformBufferHandle<T>,
+    ) -> &mut T {
+        self.uniform_buffers
+            .get_mapped_mem_for_frame(uniform_buffer, self.current_frame)
     }
 }

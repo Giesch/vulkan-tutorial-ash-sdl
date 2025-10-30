@@ -17,11 +17,10 @@ impl TextureStorage {
     }
 
     pub fn add(&mut self, texture: Texture) -> TextureHandle {
-        let index = self.0.len();
         let handle = TextureHandle {
             #[cfg(debug_assertions)]
             source_file_name: texture.source_file_name.clone(),
-            index,
+            index: self.0.len(),
         };
         self.0.push(Some(texture));
 
@@ -34,6 +33,13 @@ impl TextureStorage {
 
     pub fn take(&mut self, handle: TextureHandle) -> Texture {
         self.0[handle.index].take().unwrap()
+    }
+
+    pub fn take_all(&mut self) -> Vec<Texture> {
+        self.0
+            .iter_mut()
+            .filter_map(|option| option.take())
+            .collect()
     }
 }
 

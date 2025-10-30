@@ -42,6 +42,7 @@ pub trait Game {
         DEFAULT_FRAME_DELAY
     }
 
+    // TODO can some setup be moved before creating a window?
     fn run() -> anyhow::Result<()>
     where
         Self: Sized + 'static,

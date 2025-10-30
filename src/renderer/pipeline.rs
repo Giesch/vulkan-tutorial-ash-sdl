@@ -3,8 +3,8 @@ use ash::vk;
 use crate::shaders::atlas::ShaderAtlasEntry;
 
 use super::vertex_description::VertexDescription;
-use super::TextureHandle;
-use super::{AllocatedUniformBuffers, ShaderPipelineLayout};
+use super::ShaderPipelineLayout;
+use super::{RawUniformBufferHandle, TextureHandle};
 
 #[derive(Debug)]
 pub struct PipelineHandle {
@@ -40,6 +40,13 @@ impl PipelineStorage {
     pub fn take(&mut self, handle: PipelineHandle) -> RendererPipeline {
         self.0[handle.index].take().unwrap()
     }
+
+    pub fn take_all(&mut self) -> Vec<RendererPipeline> {
+        self.0
+            .iter_mut()
+            .filter_map(|option| option.take())
+            .collect()
+    }
 }
 
 pub(super) struct RendererPipeline {
@@ -51,8 +58,6 @@ pub(super) struct RendererPipeline {
 
     pub index_buffer: vk::Buffer,
     pub index_buffer_memory: vk::DeviceMemory,
-
-    pub all_uniform_buffers: Vec<AllocatedUniformBuffers>,
 
     pub descriptor_pool: vk::DescriptorPool,
     pub descriptor_sets: Vec<vk::DescriptorSet>,
@@ -68,4 +73,5 @@ pub struct PipelineConfig<'t, V: VertexDescription> {
     pub vertices: Vec<V>,
     pub indices: Vec<u32>,
     pub texture_handles: Vec<&'t TextureHandle>,
+    pub uniform_buffer_handles: Vec<RawUniformBufferHandle>,
 }
