@@ -14,29 +14,6 @@ use super::shaders::COLUMN_MAJOR;
 pub mod traits;
 pub use traits::{Game, WindowDescription};
 
-// TODO
-// we want a more zoomed-out api than this
-//
-// like, Game should say,
-// 'I want these GPU resources: a uniform buffer of size x, ...', etc
-//
-// then the renderer returns typed indirect handles that persist through hot reload
-//   so the game can keep those handles in its own struct
-//   someday maybe give them a 'scene' lifetime? not worth it?
-//
-// then, in an 'update' callback on game, called by app
-//   game calls renderer with the handles to get access to pointers for the frame
-//   or renderer has higher-level methods that take a handle
-//
-// game makes some kind of create pipeline request to the renderer
-//   gets a pipeline object handle back, or a struct w/a set of handles?
-//   or the renderer has an internal 'pipeline description' type created that it uses
-// can we get that whole request/description from reflection?
-//   not entirely; need to be able to load textures and such
-//   so a combination of the reflected shader-atlas entry and other resources
-// how can we map the create request struct into the created resources struct?
-//   need a macro
-
 #[allow(unused)]
 pub struct VikingRoom {
     start_time: Instant,

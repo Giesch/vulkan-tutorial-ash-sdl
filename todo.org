@@ -1,23 +1,10 @@
 #+title: Todo
 
 * Current
-- [X] handle uniform buffers more dynamically
-  - [X] allow multiple uniform buffers
-  - [X] address FIXMEs to handle multiple uniform buffers correctly
-    - [X] track uniform buffer sizes in pipeline_layouts binding reflection data
-    - [X] add explicit allocation for uniform buffers (like textures)
-      ie, address the FIXME in Renderer::draw_frame
-      - [X] figure out how to handle uniform buffer descriptor sets
-        this will be a codegen problem; leave the note in handwritten version
-      - [X] remove the non-dynamic all_uniform_buffers
+- [ ] begin generating rust source files from reflection json
 
 - [ ] clean up TODOs and FIXMEs in code
   move them  here
-
-- [ ] make required resources (eg texture ids) part of ShaderAtlasEntry trait
-  - associated type for required resource ids
-  - how does this work with PipelineStorage?
-    need to be able to erase the generic; keep it only in the handle
 
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
@@ -29,24 +16,6 @@
     associated type on a Shader trait?
   - [ ] required resources (ie one texture)
     what's a nice way to handle this? use the same struct as create_descriptor_sets?
-
-- [-] change renderer to allow dynamic graphics resources
-  - [-] move game methods to renderer constructor args
-    ie, passed in from Game struct/module
-    - [X] compiled shaders
-      pre-compiled owned by game; ultimately passed to create pipeline
-    - [-] uniform buffer
-      renderer should have a vec of vecs for these
-      basically an allocator
-        how is dealloc handled? tied to a 'scene'?
-        just leak for now
-    - [X] load texture
-      game loads asset; calls renderer to allocate vk::Image & vk::DeviceMemory
-    - [X] create pipeline
-      also make an allocator for these? when do you have multiple pipelines?
-      maybe just one for now?
-      how is the pipeline handle used?
-  - [X] split constructor args out into separate method calls
 
 - [-] generate rust modules from reflection
   - [ ] generate structs (template not macro) from reflection json
