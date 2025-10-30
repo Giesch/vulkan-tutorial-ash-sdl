@@ -156,10 +156,6 @@ impl Game for VikingRoom {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
-        self.renderer.drop_texture(self.texture);
-        self.renderer.drop_uniform_buffer(self.mvp_buffer);
-        self.renderer.drop_pipeline(self.pipeline);
-
         Ok(())
     }
 }
@@ -291,10 +287,6 @@ impl Game for DepthTexture {
 
     fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
         self.renderer.drain_gpu()?;
-        self.renderer.drop_texture(self.texture);
-        self.renderer.drop_uniform_buffer(self.mvp_buffer);
-        self.renderer.drop_pipeline(self.pipeline);
-
         Ok(())
     }
 }
