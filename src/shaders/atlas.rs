@@ -21,9 +21,6 @@ impl ShaderAtlas {
     }
 }
 
-// TODO need to allow optional vert/frag entrypoints
-// how does that work with vertex descriptions?
-
 pub trait ShaderAtlasEntry {
     // dev only
 

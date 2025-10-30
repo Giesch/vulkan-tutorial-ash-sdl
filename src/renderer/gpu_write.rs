@@ -1,7 +1,5 @@
 use ash::vk;
 
-// TODO make a derive macro
-
 /// A marker for someday-generated types that get written to GPU memory
 ///
 /// An implementing struct must be repr(C, align(16))

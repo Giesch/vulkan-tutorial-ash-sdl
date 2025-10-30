@@ -42,9 +42,6 @@ pub fn reflect_entry_points(
                 }
             }
 
-            // TODO is it fine to require a struct here?
-            //   ie, no ParameterBlock<Matrix4x4> or whatever
-            // at least document it and give a better error
             k => unimplemented!("type kind reflection not implemented: {k:?}"),
         };
 
@@ -216,7 +213,7 @@ fn reflect_struct_fields(
 
                 StructField::Matrix(MatrixStructField {
                     field_name,
-                    binding: binding.unwrap(),
+                    binding: binding.expect("matrix field without binding"),
                     row_count,
                     column_count,
                     element_type,
@@ -229,7 +226,7 @@ fn reflect_struct_fields(
 
                 StructField::Struct(StructStructField {
                     field_name,
-                    binding: binding.unwrap(),
+                    binding: binding.expect("struct field without binding"),
                     struct_type: StructFieldType {
                         type_name: field_type_name,
                         fields: field_fields,
@@ -265,7 +262,7 @@ fn reflect_struct_fields(
 
                 StructField::Resource(ResourceStructField {
                     field_name,
-                    binding: binding.unwrap(),
+                    binding: binding.expect("resource struct field without binding"),
                     resource_shape,
                     result_type,
                 })

@@ -10,7 +10,6 @@ pub struct TextureHandle {
 
 pub(super) struct TextureStorage(Vec<Option<Texture>>);
 
-// TODO docs w/ panics sections
 impl TextureStorage {
     pub fn new() -> Self {
         Self(Default::default())

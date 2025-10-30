@@ -1978,7 +1978,6 @@ fn create_descriptor_sets(
             let dst_set = descriptor_sets[ds];
             let layout_descriptions = &layout_bindings[layout_offset];
 
-            // TODO find a way to batch these writes again
             for description in layout_descriptions {
                 match description {
                     LayoutDescription::Uniform(uniform_buffer_description) => {
@@ -2030,15 +2029,6 @@ fn create_descriptor_sets(
     Ok(descriptor_sets)
 }
 
-// TODO what is the correct way to determine this?
-// is it an os difference or a graphics card difference?
-#[cfg_attr(not(target_os = "windows"), expect(unused))]
-#[cfg(target_os = "windows")]
-const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_UNORM;
-#[cfg_attr(not(target_os = "linux"), expect(unused))]
-#[cfg(target_os = "linux")]
-const TEXTURE_IMAGE_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;
-
 fn create_texture(
     source_file_name: String,
     input_image: &image::DynamicImage,
@@ -2061,7 +2051,7 @@ fn create_texture(
     let texture_image_view = create_image_view(
         device,
         texture_image,
-        TEXTURE_IMAGE_FORMAT,
+        platform::TEXTURE_IMAGE_FORMAT,
         vk::ImageAspectFlags::COLOR,
         mip_levels,
     )?;
@@ -2111,7 +2101,7 @@ fn create_texture_image(
         .height(image.height());
     let image_options = ImageOptions {
         extent,
-        format: TEXTURE_IMAGE_FORMAT,
+        format: platform::TEXTURE_IMAGE_FORMAT,
         tiling: vk::ImageTiling::OPTIMAL,
         usage: vk::ImageUsageFlags::TRANSFER_DST
             | vk::ImageUsageFlags::SAMPLED
@@ -2128,7 +2118,7 @@ fn create_texture_image(
         command_pool,
         graphics_queue,
         vk_image,
-        TEXTURE_IMAGE_FORMAT,
+        platform::TEXTURE_IMAGE_FORMAT,
         vk::ImageLayout::UNDEFINED,
         vk::ImageLayout::TRANSFER_DST_OPTIMAL,
         mip_levels,
@@ -2152,7 +2142,7 @@ fn create_texture_image(
         mip_levels,
         instance,
         physical_device,
-        TEXTURE_IMAGE_FORMAT,
+        platform::TEXTURE_IMAGE_FORMAT,
     )?;
 
     unsafe {
@@ -2905,7 +2895,7 @@ pub struct Gpu<'frame> {
 }
 
 impl<'frame> Gpu<'frame> {
-    pub fn get_uniform_buffer_mut<T: GPUWrite>(
+    pub fn get_uniform_buffer_mut<T>(
         &mut self,
         uniform_buffer: &mut UniformBufferHandle<T>,
     ) -> &mut T {

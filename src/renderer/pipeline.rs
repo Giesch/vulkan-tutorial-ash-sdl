@@ -13,7 +13,6 @@ pub struct PipelineHandle {
 
 pub(super) struct PipelineStorage(Vec<Option<RendererPipeline>>);
 
-// TODO docs w/ panics sections
 impl PipelineStorage {
     pub fn new() -> Self {
         Self(Default::default())

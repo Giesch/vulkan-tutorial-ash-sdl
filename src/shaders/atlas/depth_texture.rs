@@ -140,6 +140,8 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
             .map(|dsl| {
                 use crate::shaders::json::ReflectedBindingType;
 
+                // NOTE this depends on the order from 'pipeline_config'
+                // exactly matching the order of layout descriptions
                 dsl.binding_ranges
                     .iter()
                     .map(|b| match b.descriptor_type {
@@ -151,12 +153,6 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
                             })
                         }
 
-                        // TODO how do we associate the texture with this?
-                        // expecially when there's more than one texture
-                        //
-                        // need one method on here that takes a texture id / struct of one,
-                        // and returns all the binding info
-                        // that resources struct could be a generated associated type on the trait
                         ReflectedBindingType::CombinedTextureSampler => {
                             LayoutDescription::Texture(TextureDescription {
                                 layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,

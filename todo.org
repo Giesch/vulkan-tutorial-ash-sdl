@@ -3,19 +3,10 @@
 * Current
 - [ ] begin generating rust source files from reflection json
 
-- [ ] clean up TODOs and FIXMEs in code
-  move them  here
-
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
 
 - [ ] get vertex attribute & binding descriptions via reflection
-
-- [ ] make the shader atlas entry type carry more generics
-  - [ ] vertex type
-    associated type on a Shader trait?
-  - [ ] required resources (ie one texture)
-    what's a nice way to handle this? use the same struct as create_descriptor_sets?
 
 - [-] generate rust modules from reflection
   - [ ] generate structs (template not macro) from reflection json
@@ -30,29 +21,12 @@
     - [X] get parameter block buffer size
     - [ ] unit test this from the level of shader source code
 
-  - [ ] switch to a macro from string template
+  - [ ] switch to a macro from string template?
     look at different options for this
     - is a plain replacement macro possible?
     - libraries for proc macros
 
   - [ ] how would this all work with bindless / buffer device addresses?
-
-
-- [-] move example-specific code out of the renderer
-  ie, make the renderer more generic across examples
-  - [X] uniform buffer handling
-  - [X] vertex/index buffer handling
-    ie loading assets
-  - [X] asset (really verticies/indicies) loading
-  - [ ] dynamic resources (ie, unknown number of uniform buffers)
-    avoid needing unsafe write to uniform buffer outside renderer
-
-    renderer provides functions for creating graphics resources
-    game fills itself in during init
-    - [ ] first use void pointers to mapped memory
-    - [ ] then switch to handles or wrapped typed pointers
-      - [ ] for vertex buffers
-      - [ ] also for uniform buffer contents
 
 - [ ] generate vertex attributes?
   - discord links
@@ -87,11 +61,16 @@
       formats can be though; have standard map of formats for glam
         and then use struct user annotations for special/odd encoding
 
-  - [ ] get rid of load_vertices
-    keep Vertex type out of Game callback signatures
+  - [ ] Figure out Windows HDR / SRGB bug
+    why does TEXTURE_IMAGE_FORMAT need to be unorm on windows?
+    is it my monitor or graphics card, or the OS?
+    is there a 'proper' way to detect what it should be at runtime?
 
 * Next
 - [ ] add input/gobal type info to reflection data & shader atlas
+
+- [ ] change ShaderAtlasEntry to allow optional vert/frag entry points
+  how does that work with vertex descriptions
 
 - [ ] have the 'framework' do more before calling Game::setup
   ie, make an empty renderer, pass in other runtime config (cli flags/env vars)
@@ -158,6 +137,10 @@
   - [ ] vkguide?
 
 - [ ] go through 'learn opengl' with this renderer
+
+- [ ] docs with panics sections for 'Storage' types
+  - unwraps rely on the handles being unique and consumable
+  - generics enforced by renderer module
 
 - [ ] rewrite renderer in a new repo
   how much of this could be done gradually in this one?
@@ -239,6 +222,9 @@
   see SLANG_UNBOUNDED_SIZE
   https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/source/slang/slang-reflection-json.cpp#L124
   https://github.com/shader-slang/slang/blob/04093bcbaea9784cdffe55f3931f50db7ad9f808/include/slang.h#L2167
+
+- [ ] document that ParameterBlock element must always be a struct
+  ie Platform<Matrix4x4> is not supported; there must be a wrapper
 
 * Roc Questions
 - [ ] are ref-counted platform resource heaps still going to be a thing?
