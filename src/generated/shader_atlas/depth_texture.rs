@@ -3,6 +3,7 @@
 use serde::Serialize;
 
 use crate::renderer::gpu_write::GPUWrite;
+use crate::renderer::vertex_description::VertexDescription;
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
@@ -32,3 +33,33 @@ pub struct Vertex {
 
 impl GPUWrite for Vertex {}
 
+impl VertexDescription for Vertex {
+    fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
+        let binding_description = ash::vk::VertexInputBindingDescription::default()
+            .binding(0)
+            .stride(std::mem::size_of::<Self>() as u32)
+            .input_rate(ash::vk::VertexInputRate::VERTEX);
+
+        vec![binding_description]
+    }
+
+    fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
+        vec![
+            ash::vk::VertexInputAttributeDescription::default()
+                .offset(std::mem::offset_of!(Vertex, position) as u32)
+                .format(ash::vk::Format::R32G32B32_SFLOAT)
+                .binding(0)
+                .location(0),
+            ash::vk::VertexInputAttributeDescription::default()
+                .offset(std::mem::offset_of!(Vertex, color) as u32)
+                .format(ash::vk::Format::R32G32B32_SFLOAT)
+                .binding(0)
+                .location(1),
+            ash::vk::VertexInputAttributeDescription::default()
+                .offset(std::mem::offset_of!(Vertex, tex_coord) as u32)
+                .format(ash::vk::Format::R32G32_SFLOAT)
+                .binding(0)
+                .location(2),
+        ]
+    }
+}

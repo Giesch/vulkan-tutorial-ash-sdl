@@ -5,16 +5,15 @@
   using string format templates
   - [X] MVPMatrices
   - [X] snapshot tests
-  - [-] Vertex
+  - [X] Vertex
     - [X] just the struct
-    - [ ] VertexDescription impl
-      need to use an annotation to know which struct is vertex?
-        will need exactly one for ShaderAtlasEntry impl
+    - [X] VertexDescription impl
   - [ ] assert struct fields are ordered correctly
     before source gen (leave the game runnable)
     assertions in generation or generated unit tests?
     unit tests from shader examples? ie testing generator, not generated code
   - [ ] DepthTextureShader
+    need to use an annotation to know which struct is vertex?
     - [ ] write spv bytes adjacent
   - [ ] full ShaderAtlas
   - [ ] generated docs
