@@ -13,8 +13,7 @@ use crate::shaders::ReflectionJson;
 #[cfg_attr(not(debug_assertions), expect(unused))]
 use super::ShaderAtlasEntry;
 
-mod mvp_matrices;
-pub use mvp_matrices::*;
+pub use crate::generated::shader_atlas::depth_texture::*;
 
 mod vertex;
 pub use vertex::*;
@@ -28,7 +27,7 @@ pub struct DepthTextureResources<'t> {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub texture: &'t TextureHandle,
-    pub mvp_buffer: &'t UniformBufferHandle<MVPMatrices>,
+    pub mvp_buffer: &'t UniformBufferHandle<DepthTexture>,
 }
 
 impl DepthTextureShader {
@@ -121,7 +120,7 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
     }
 
     fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<MVPMatrices>() as u64]
+        vec![std::mem::size_of::<DepthTexture>() as u64]
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {

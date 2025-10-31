@@ -1,0 +1,5 @@
+---
+source: src/shaders/build_tasks.rs
+description: src/generated.rs
+---
+pub mod shader_atlas;

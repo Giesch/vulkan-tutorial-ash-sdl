@@ -206,7 +206,7 @@ pub struct ScalarVectorElementType {
     pub scalar_type: ScalarType,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
 pub enum ScalarType {
     Float32,

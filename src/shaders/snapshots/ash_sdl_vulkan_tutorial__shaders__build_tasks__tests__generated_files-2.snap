@@ -1,0 +1,5 @@
+---
+source: src/shaders/build_tasks.rs
+description: src/generated/shader_atlas.rs
+---
+pub mod depth_texture;

@@ -1,5 +1,6 @@
 mod app;
 mod game;
+mod generated;
 mod renderer;
 mod shaders;
 mod util;

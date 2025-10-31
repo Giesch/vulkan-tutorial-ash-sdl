@@ -1,4 +1,5 @@
-use crate::renderer::{gpu_write::GPUWrite, vertex_description::VertexDescription};
+use crate::renderer::gpu_write::GPUWrite;
+use crate::renderer::vertex_description::VertexDescription;
 
 #[derive(Debug, Clone)]
 #[repr(C, align(16))]

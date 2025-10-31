@@ -6,7 +6,9 @@ use glam::{Mat4, Vec2, Vec3};
 use image::{DynamicImage, ImageReader};
 
 use crate::renderer::{PipelineHandle, Renderer, TextureHandle, UniformBufferHandle};
-use crate::shaders::atlas::{DepthTextureResources, MVPMatrices, ShaderAtlas, Vertex};
+use crate::shaders::atlas::{
+    DepthTexture, DepthTextureResources, MVPMatrices, ShaderAtlas, Vertex,
+};
 use crate::util::manifest_path;
 
 use super::shaders::COLUMN_MAJOR;
@@ -21,7 +23,7 @@ pub struct VikingRoom {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
-    mvp_buffer: UniformBufferHandle<MVPMatrices>,
+    mvp_buffer: UniformBufferHandle<DepthTexture>,
 }
 
 impl VikingRoom {
@@ -90,7 +92,7 @@ impl Game for VikingRoom {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let mvp_buffer = renderer.create_uniform_buffer::<MVPMatrices>()?;
+        let mvp_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
@@ -118,7 +120,8 @@ impl Game for VikingRoom {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
             let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
-            *mvp_buffer = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            *mvp_buffer = DepthTexture { mvp };
         })
     }
 
@@ -138,17 +141,17 @@ impl Game for VikingRoom {
 }
 
 #[allow(unused)]
-pub struct DepthTexture {
+pub struct DepthTextureGame {
     start_time: Instant,
     aspect_ratio: f32,
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
-    mvp_buffer: UniformBufferHandle<MVPMatrices>,
+    mvp_buffer: UniformBufferHandle<DepthTexture>,
 }
 
 #[allow(unused)]
-impl DepthTexture {
+impl DepthTextureGame {
     fn load_vertices() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
         let vertices = vec![
             Vertex {
@@ -203,7 +206,7 @@ impl DepthTexture {
     }
 }
 
-impl Game for DepthTexture {
+impl Game for DepthTextureGame {
     fn window_title() -> &'static str {
         "Depth Texture"
     }
@@ -221,7 +224,7 @@ impl Game for DepthTexture {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let mvp_buffer = renderer.create_uniform_buffer::<MVPMatrices>()?;
+        let mvp_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
@@ -249,7 +252,8 @@ impl Game for DepthTexture {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
             let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
-            *mvp_buffer = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            *mvp_buffer = DepthTexture { mvp };
         })
     }
 
@@ -286,14 +290,9 @@ fn make_mvp_matrices(elapsed: Duration, aspect_ratio: f32, column_major: bool) -
 
     let model = Mat4::from_rotation_z(turn_radians);
     let view = Mat4::look_at_rh(Vec3::splat(2.0), Vec3::ZERO, Vec3::Z);
-    let projection =
-        Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
+    let proj = Mat4::perspective_rh(STARTING_ANGLE_DEGREES.to_radians(), aspect_ratio, 0.1, 10.0);
 
-    let mut mvp = MVPMatrices {
-        model,
-        view,
-        projection,
-    };
+    let mut mvp = MVPMatrices { model, view, proj };
 
     // "GLM was originally designed for OpenGL,
     // where the Y coordinate of the clip coordinates is inverted.
@@ -301,14 +300,14 @@ fn make_mvp_matrices(elapsed: Duration, aspect_ratio: f32, column_major: bool) -
     // on the scaling factor of the Y axis in the projection matrix.
     // If you don’t do this, then the image will be rendered upside down."
     // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
-    mvp.projection.y_axis.y *= -1.0;
+    mvp.proj.y_axis.y *= -1.0;
 
     if !column_major {
         // it's also possible to avoid this by reversing the mul() calls in shaders
         // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
         mvp.model = mvp.model.transpose();
         mvp.view = mvp.view.transpose();
-        mvp.projection = mvp.projection.transpose();
+        mvp.proj = mvp.proj.transpose();
     }
 
     mvp

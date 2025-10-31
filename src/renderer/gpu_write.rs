@@ -6,8 +6,8 @@ use ash::vk;
 /// and have its fields in descending size/alignment order
 pub trait GPUWrite {}
 
-impl GPUWrite for u8 {}
-impl GPUWrite for u32 {}
+impl GPUWrite for u8 {} // image bytes
+impl GPUWrite for u32 {} // index buffer
 
 pub(super) unsafe fn write_to_gpu_buffer<T: GPUWrite>(
     device: &ash::Device,

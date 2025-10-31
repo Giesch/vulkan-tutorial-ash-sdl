@@ -1,6 +1,8 @@
+use std::path::PathBuf;
+
 use crate::util::*;
 
-use super::{prepare_reflected_shader, ReflectedShader};
+use super::{json::*, prepare_reflected_shader, ReflectedShader};
 
 pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     let shaders_source_dir = manifest_path(["shaders", "source"]);
@@ -22,6 +24,12 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
             reflection_json,
         } = prepare_reflected_shader(slang_file_name)?;
 
+        let generated_files = build_generated_source_files(&reflection_json);
+        for source_file in &generated_files {
+            std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
+            std::fs::write(&source_file.file_path, &source_file.content)?;
+        }
+
         let source_file_name = &reflection_json.source_file_name;
 
         let compiled_shaders_dir = manifest_path(["shaders", "compiled"]);
@@ -42,4 +50,200 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<GeneratedFile> {
+    let mut generated_files = vec![];
+    let mut modules = vec![];
+    for GlobalParameter::ParameterBlock(parameter_block) in &reflection_json.global_parameters {
+        let module_name = reflection_json.source_file_name.replace(".slang", "");
+        modules.push(module_name);
+
+        let type_name = &parameter_block.element_type.type_name;
+
+        let mut struct_defs = vec![];
+
+        let mut param_block_fields = vec![];
+        for field in &parameter_block.element_type.fields {
+            let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) else {
+                continue;
+            };
+            param_block_fields.push(generated_field);
+        }
+
+        let param_block_struct = GeneratedStructDefinition {
+            type_name: type_name.to_string(),
+            fields: param_block_fields,
+        };
+        struct_defs.push(param_block_struct);
+
+        let mut out = String::new();
+        out.push_str(HEADER);
+        for def in struct_defs.iter().rev() {
+            def.write_to_source(&mut out);
+            out.push('\n');
+        }
+
+        let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
+        let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
+        let generated_file = GeneratedFile {
+            file_path,
+            content: out,
+        };
+
+        generated_files.push(generated_file);
+    }
+
+    let shader_atlas_module = GeneratedFile {
+        file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
+        content: modules.iter().map(|m| format!("pub mod {m};\n")).collect(),
+    };
+    let top_generated_module = GeneratedFile {
+        file_path: manifest_path(["src", "generated.rs"]),
+        content: "pub mod shader_atlas;".to_string(),
+    };
+    generated_files.push(shader_atlas_module);
+    generated_files.push(top_generated_module);
+
+    generated_files
+}
+
+fn gather_struct_defs(
+    field: &StructField,
+    struct_defs: &mut Vec<GeneratedStructDefinition>,
+) -> Option<GeneratedStructFieldDefinition> {
+    match field {
+        // TODO is this right / the best way?
+        StructField::Resource(_) => None,
+
+        StructField::Vector(VectorStructField::Semantic(_)) => None,
+        StructField::Vector(VectorStructField::Bound(vector)) => {
+            let VectorElementType::Scalar(element_type) = &vector.element_type;
+            let field_type = match (element_type.scalar_type, vector.element_count) {
+                (ScalarType::Float32, 3) => "glam::Vec3",
+                (ScalarType::Float32, 2) => "glam::Vec2",
+                (t, c) => panic!("vector not supported: type: {t:?}, count: {c}"),
+            };
+
+            Some(GeneratedStructFieldDefinition {
+                field_name: vector.field_name.to_string(),
+                type_name: field_type.to_string(),
+            })
+        }
+
+        StructField::Struct(struct_field) => {
+            // TODO register struct type?
+            // pass in mutable vec to push to, or separate pass?
+
+            let type_name = struct_field.struct_type.type_name.to_string();
+            let mut generated_sub_fields = vec![];
+            for sub_field in &struct_field.struct_type.fields {
+                let Some(field_def) = gather_struct_defs(sub_field, struct_defs) else {
+                    continue;
+                };
+                generated_sub_fields.push(field_def);
+            }
+            let sub_struct_def = GeneratedStructDefinition {
+                type_name: type_name.clone(),
+                fields: generated_sub_fields,
+            };
+            struct_defs.push(sub_struct_def);
+
+            Some(GeneratedStructFieldDefinition {
+                field_name: struct_field.field_name.to_string(),
+                type_name,
+            })
+        }
+
+        StructField::Matrix(matrix) => {
+            let VectorElementType::Scalar(scalar) = &matrix.element_type;
+
+            let field_name = &matrix.field_name;
+            let field_type = match (scalar.scalar_type, matrix.row_count, matrix.column_count) {
+                (ScalarType::Float32, 4, 4) => "glam::Mat4",
+                (s, r, c) => {
+                    panic!("matrix not supported: scalar_type: {s:?}, rows: {r}, cols: {c}")
+                }
+            };
+
+            Some(GeneratedStructFieldDefinition {
+                field_name: field_name.to_string(),
+                type_name: field_type.to_string(),
+            })
+        }
+    }
+}
+
+#[derive(Debug)]
+struct GeneratedStructDefinition {
+    type_name: String,
+    fields: Vec<GeneratedStructFieldDefinition>,
+}
+
+#[derive(Debug)]
+struct GeneratedStructFieldDefinition {
+    field_name: String,
+    type_name: String,
+}
+
+impl GeneratedStructDefinition {
+    fn write_to_source(&self, out: &mut String) {
+        let type_name = &self.type_name;
+
+        out.push_str("#[derive(Debug, Clone, Serialize)]\n");
+        out.push_str("#[repr(C, align(16))]\n");
+        out.push_str(&format!("pub struct {type_name} {{\n"));
+
+        for field in &self.fields {
+            let field_name = &field.field_name;
+            let field_type = &field.type_name;
+            out.push_str(&format!("    pub {field_name}: {field_type},\n"));
+        }
+
+        out.push_str("}\n");
+        out.push('\n');
+        out.push_str(&format!("impl GPUWrite for {type_name} {{}}\n"));
+    }
+}
+
+const HEADER: &str = r#"// GENERATED FILE (do not edit directly)
+
+//! TODO: docs
+
+use serde::Serialize;
+
+use crate::renderer::gpu_write::GPUWrite;
+
+"#;
+
+struct GeneratedFile {
+    file_path: PathBuf,
+    content: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_files() {
+        let shader = prepare_reflected_shader("depth_texture.slang").unwrap();
+        let mut generated_files = build_generated_source_files(&shader.reflection_json);
+
+        for source_file in &mut generated_files {
+            source_file.file_path = source_file
+                .file_path
+                .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+                .unwrap()
+                .to_owned();
+
+            let info = serde_json::json!({
+                "file_path": &source_file.file_path
+            });
+
+            insta::with_settings!({ info => &info, omit_expression => true }, {
+                insta::assert_snapshot!(source_file.content);
+            });
+        }
+    }
 }

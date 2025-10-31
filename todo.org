@@ -1,12 +1,28 @@
 #+title: Todo
 
 * Current
-- [ ] begin generating rust source files from reflection json
+- [-] begin generating rust source files from reflection json
+  using string format templates
+  - [X] MVPMatrices
+  - [X] snapshot tests
+  - [ ] Vertex
+    - [ ] just the struct
+    - [ ] VertexDescription impl
+      generate based on being a vert entry point arg?
+  - [ ] assert struct fields are ordered correctly
+    before source gen (leave the game runnable)
+  - [ ] DepthTextureShader
+    - [ ] write spv bytes adjacent
+  - [ ] full ShaderAtlas
+  - [ ] generated docs
+    - [ ] module doc w/source file name
+    - [ ] struct docs w/source param name for ParameterBlock element
+
 
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
 
-- [ ] get vertex attribute & binding descriptions via reflection
+- [ ] add sprite batch example from sdl gpu
 
 - [-] generate rust modules from reflection
   - [ ] generate structs (template not macro) from reflection json
@@ -146,6 +162,7 @@
   how much of this could be done gradually in this one?
   - use a cargo workspace
     make it easy to keep multiple working examples
+    allow running codegen for a game crate that doesn't compile
   - group one-time initialized fields into a sub-struct w/methods
   - group sync primitive arrays with their resources in some way
     ie make it clear what's per-swapchain-image vs per-in-flight-frame
