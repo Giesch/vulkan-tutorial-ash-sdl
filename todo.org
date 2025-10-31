@@ -102,6 +102,8 @@
   why does TEXTURE_IMAGE_FORMAT need to be unorm on windows?
   is it my monitor or graphics card, or the OS?
   is there a 'proper' way to detect what it should be at runtime?
+  - could be similar to this wgpu bug?
+    https://github.com/gfx-rs/wgpu/issues/4842#issuecomment-1858018132
 
 
 
