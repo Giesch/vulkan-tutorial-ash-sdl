@@ -53,15 +53,33 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
 }
 
 fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<GeneratedFile> {
-    let mut generated_files = vec![];
-    let mut modules = vec![];
+    let mut struct_defs = vec![];
+
+    for vert_param in &reflection_json.vertex_entry_point.parameters {
+        match vert_param {
+            EntryPointParameter::Scalar(ScalarEntryPointParameter::Semantic(_)) => {}
+            EntryPointParameter::Scalar(ScalarEntryPointParameter::Bound(_)) => todo!(),
+
+            EntryPointParameter::Struct(struct_param) => {
+                let mut generated_fields = vec![];
+                for field in &struct_param.fields {
+                    let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) else {
+                        continue;
+                    };
+                    generated_fields.push(generated_field);
+                }
+
+                let def = GeneratedStructDefinition {
+                    type_name: struct_param.type_name.to_string(),
+                    fields: generated_fields,
+                };
+                struct_defs.push(def);
+            }
+        }
+    }
+
     for GlobalParameter::ParameterBlock(parameter_block) in &reflection_json.global_parameters {
-        let module_name = reflection_json.source_file_name.replace(".slang", "");
-        modules.push(module_name);
-
         let type_name = &parameter_block.element_type.type_name;
-
-        let mut struct_defs = vec![];
 
         let mut param_block_fields = vec![];
         for field in &parameter_block.element_type.fields {
@@ -76,36 +94,39 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
             fields: param_block_fields,
         };
         struct_defs.push(param_block_struct);
-
-        let mut out = String::new();
-        out.push_str(HEADER);
-        for def in struct_defs.iter().rev() {
-            def.write_to_source(&mut out);
-            out.push('\n');
-        }
-
-        let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
-        let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
-        let generated_file = GeneratedFile {
-            file_path,
-            content: out,
-        };
-
-        generated_files.push(generated_file);
     }
 
+    let mut out = String::new();
+    out.push_str(HEADER);
+    for def in struct_defs.iter().rev() {
+        def.write_to_source(&mut out);
+        out.push('\n');
+    }
+
+    let shader_name = reflection_json.source_file_name.replace(".slang", "");
+    let shader_names = [shader_name];
+    let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
+    let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
+    let shader_structs_file = GeneratedFile {
+        file_path,
+        content: out,
+    };
+
+    let pub_mod = |name| format!("pub mod {name};\n");
     let shader_atlas_module = GeneratedFile {
         file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
-        content: modules.iter().map(|m| format!("pub mod {m};\n")).collect(),
+        content: shader_names.iter().map(pub_mod).collect(),
     };
     let top_generated_module = GeneratedFile {
         file_path: manifest_path(["src", "generated.rs"]),
         content: "pub mod shader_atlas;".to_string(),
     };
-    generated_files.push(shader_atlas_module);
-    generated_files.push(top_generated_module);
 
-    generated_files
+    vec![
+        shader_structs_file,
+        shader_atlas_module,
+        top_generated_module,
+    ]
 }
 
 fn gather_struct_defs(
@@ -113,7 +134,6 @@ fn gather_struct_defs(
     struct_defs: &mut Vec<GeneratedStructDefinition>,
 ) -> Option<GeneratedStructFieldDefinition> {
     match field {
-        // TODO is this right / the best way?
         StructField::Resource(_) => None,
 
         StructField::Vector(VectorStructField::Semantic(_)) => None,
@@ -132,9 +152,6 @@ fn gather_struct_defs(
         }
 
         StructField::Struct(struct_field) => {
-            // TODO register struct type?
-            // pass in mutable vec to push to, or separate pass?
-
             let type_name = struct_field.struct_type.type_name.to_string();
             let mut generated_sub_fields = vec![];
             for sub_field in &struct_field.struct_type.fields {
@@ -195,7 +212,9 @@ impl GeneratedStructDefinition {
         out.push_str(&format!("pub struct {type_name} {{\n"));
 
         for field in &self.fields {
-            let field_name = &field.field_name;
+            use heck::ToSnakeCase;
+
+            let field_name = &field.field_name.to_snake_case();
             let field_type = &field.type_name;
             out.push_str(&format!("    pub {field_name}: {field_type},\n"));
         }
@@ -207,8 +226,6 @@ impl GeneratedStructDefinition {
 }
 
 const HEADER: &str = r#"// GENERATED FILE (do not edit directly)
-
-//! TODO: docs
 
 use serde::Serialize;
 

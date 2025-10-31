@@ -1,15 +1,6 @@
-use crate::renderer::gpu_write::GPUWrite;
 use crate::renderer::vertex_description::VertexDescription;
 
-#[derive(Debug, Clone)]
-#[repr(C, align(16))]
-pub struct Vertex {
-    pub position: glam::Vec3,
-    pub color: glam::Vec3,
-    pub tex_coord: glam::Vec2,
-}
-
-impl GPUWrite for Vertex {}
+pub use crate::generated::shader_atlas::depth_texture::Vertex;
 
 impl VertexDescription for Vertex {
     fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {

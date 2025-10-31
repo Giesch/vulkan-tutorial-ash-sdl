@@ -1,7 +1,5 @@
 // GENERATED FILE (do not edit directly)
 
-//! TODO: docs
-
 use serde::Serialize;
 
 use crate::renderer::gpu_write::GPUWrite;
@@ -23,4 +21,14 @@ pub struct MVPMatrices {
 }
 
 impl GPUWrite for MVPMatrices {}
+
+#[derive(Debug, Clone, Serialize)]
+#[repr(C, align(16))]
+pub struct Vertex {
+    pub position: glam::Vec3,
+    pub color: glam::Vec3,
+    pub tex_coord: glam::Vec2,
+}
+
+impl GPUWrite for Vertex {}
 

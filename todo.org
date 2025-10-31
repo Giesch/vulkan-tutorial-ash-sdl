@@ -5,12 +5,15 @@
   using string format templates
   - [X] MVPMatrices
   - [X] snapshot tests
-  - [ ] Vertex
-    - [ ] just the struct
+  - [-] Vertex
+    - [X] just the struct
     - [ ] VertexDescription impl
-      generate based on being a vert entry point arg?
+      need to use an annotation to know which struct is vertex?
+        will need exactly one for ShaderAtlasEntry impl
   - [ ] assert struct fields are ordered correctly
     before source gen (leave the game runnable)
+    assertions in generation or generated unit tests?
+    unit tests from shader examples? ie testing generator, not generated code
   - [ ] DepthTextureShader
     - [ ] write spv bytes adjacent
   - [ ] full ShaderAtlas
@@ -18,31 +21,8 @@
     - [ ] module doc w/source file name
     - [ ] struct docs w/source param name for ParameterBlock element
 
-
-- [ ] do the official vulkan compute shader tutorial
-  make it one of the examples here
-
-- [ ] add sprite batch example from sdl gpu
-
-- [-] generate rust modules from reflection
-  - [ ] generate structs (template not macro) from reflection json
-    - put generated code in the shader atlas entry?
-      or generate the shader atlas entry too
-      - replacement macro for what we have now
-    - [ ] snapshot tests
-      - repr(C, align(16))
-    - [ ] generate tests that sizes & offsets match
-
-  - [-] assert that slang struct fields are in descending size order
-    - [X] get parameter block buffer size
-    - [ ] unit test this from the level of shader source code
-
-  - [ ] switch to a macro from string template?
-    look at different options for this
-    - is a plain replacement macro possible?
-    - libraries for proc macros
-
-  - [ ] how would this all work with bindless / buffer device addresses?
+- [ ] nicer codegen templates?
+  glam uses tera
 
 - [ ] generate vertex attributes?
   - discord links
@@ -71,43 +51,25 @@
       entryPoints[arg_i]['type']['fields'][field_i]['binding']['index']
     - formats from slang user attributes
       unnecessary for now; hardcode glam vecs/matrices and primitives
-    - [ ] can these be more directly generated from the type?
-      field order in slang could be an issue
-      generator could just validate the order?
-      formats can be though; have standard map of formats for glam
-        and then use struct user annotations for special/odd encoding
-
-  - [ ] Figure out Windows HDR / SRGB bug
-    why does TEXTURE_IMAGE_FORMAT need to be unorm on windows?
-    is it my monitor or graphics card, or the OS?
-    is there a 'proper' way to detect what it should be at runtime?
 
 * Next
-- [ ] add input/gobal type info to reflection data & shader atlas
+- [ ] signed distance fields / animated rick example
+  [[https://danielchasehooper.com/posts/code-animated-rick]]
+- [ ] do the official vulkan compute shader tutorial
+  make it one of the examples here
+- [ ] add sprite batch example from SDL_gpu
 
 - [ ] change ShaderAtlasEntry to allow optional vert/frag entry points
   how does that work with vertex descriptions
 
-- [ ] have the 'framework' do more before calling Game::setup
-  ie, make an empty renderer, pass in other runtime config (cli flags/env vars)
-  precompiled stuff? no reason to pass it as an argument
-
 - [ ] handle shaders with different entry points in reflection
   ie, only compute, only fragment, etc
 
-- [ ] generate the shader atlas?
-  it's worth delaying this until the handwritten one is more complete
-    ie, until it's pluggable into the renderer,
-    and the renderer has no hardcoded pieces left
-
-- [ ] signed distance fields / animated rick
-  [[https://danielchasehooper.com/posts/code-animated-rick]]
-
-- [ ] add feature flags
+- [ ] add cargo feature flags
   - [ ] build-from-source-static for sdl3 on windows
   - [ ] shader hot reload for notify & shader_slang
     - [ ] figure out if slang precompile needs to be a workspace crate or something
-- [ ] use a config module or cli params for stuff like COLUMN_MAJOR
+- [ ] use a config module or cli params for stuff like COLUMN_MAJOR?
 
 - [ ] handle nested ParameterBlocks
   - [ ] should add_descriptor_range also skip ParameterBlock like PushConstant?
@@ -127,9 +89,6 @@
     - need to hold on to reflected data in shader module, merge with updates?
     - other resource-related things (ie, the image)
       will have to be handled by generated rust methods
-  - [ ] generate Rust structs for shader globals/entrypoint args from field info?
-    just use align 16 for now
-    later, use const assertions like thread in slang discord
   - [ ] generate shader cursor interface?
     https://docs.shader-slang.org/en/latest/shader-cursors.html
     this is a lot
@@ -140,11 +99,11 @@
       need some way to ensure hot reload of the rust happens first
       use hash of input shader source in output dir for dependency tracking?
 
-- [ ] viking room colors are darker on windows?
-  it looks like a gamma correction problem,
-    but it is correctly using SRGB, as far as I can tell
-    and I don't know why that would be platform-specific
-    but it does get 'fixed' by doing a sqrt() on the sampled color
+- [ ] Figure out Windows HDR / SRGB bug
+  why does TEXTURE_IMAGE_FORMAT need to be unorm on windows?
+  is it my monitor or graphics card, or the OS?
+  is there a 'proper' way to detect what it should be at runtime?
+
 
 
 * Future
@@ -157,6 +116,8 @@
 - [ ] docs with panics sections for 'Storage' types
   - unwraps rely on the handles being unique and consumable
   - generics enforced by renderer module
+
+- [ ] look into reflection-basedd codegen for bindless shaders
 
 - [ ] rewrite renderer in a new repo
   how much of this could be done gradually in this one?

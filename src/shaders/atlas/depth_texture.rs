@@ -16,7 +16,6 @@ use super::ShaderAtlasEntry;
 pub use crate::generated::shader_atlas::depth_texture::*;
 
 mod vertex;
-pub use vertex::*;
 
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
