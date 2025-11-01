@@ -12,7 +12,7 @@ use sdl3::video::Window;
 use vertex_description::VertexDescription;
 
 use crate::shaders;
-use crate::shaders::atlas::ShaderAtlasEntry;
+use crate::shaders::atlas::{PrecompiledShader, ShaderAtlasEntry};
 
 #[cfg(debug_assertions)]
 use crate::shader_watcher;
@@ -1553,8 +1553,8 @@ fn create_graphics_pipeline(
     vertex_binding_descriptions: &[vk::VertexInputBindingDescription],
     vertex_attribute_descriptions: &[vk::VertexInputAttributeDescription],
 ) -> Result<vk::Pipeline, anyhow::Error> {
-    let vert_shader_spv = &pipeline_layout.vertex_shader.shader_bytecode;
-    let frag_shader_spv = &pipeline_layout.fragment_shader.shader_bytecode;
+    let vert_shader_spv = &pipeline_layout.vertex_shader.spv_bytes;
+    let frag_shader_spv = &pipeline_layout.fragment_shader.spv_bytes;
 
     let vert_create_info = vk::ShaderModuleCreateInfo::default().code(vert_shader_spv);
     let frag_create_info = vk::ShaderModuleCreateInfo::default().code(frag_shader_spv);
@@ -2731,18 +2731,13 @@ fn create_color_image(
 }
 
 struct ShaderPipelineLayout {
-    vertex_shader: CompiledShaderEntryPoint,
-    fragment_shader: CompiledShaderEntryPoint,
+    vertex_shader: PrecompiledShader,
+    fragment_shader: PrecompiledShader,
 
     // NOTE the renderer is expected to clean up these fields correctly
     // they need special handling during hot reload
     pipeline_layout: ash::vk::PipelineLayout,
     descriptor_set_layouts: Vec<ash::vk::DescriptorSetLayout>,
-}
-
-struct CompiledShaderEntryPoint {
-    entry_point_name: CString,
-    shader_bytecode: Vec<u32>,
 }
 
 impl ShaderPipelineLayout {
@@ -2751,24 +2746,24 @@ impl ShaderPipelineLayout {
         device: &ash::Device,
         shader: &dyn ShaderAtlasEntry,
     ) -> Result<Self, anyhow::Error> {
-        let reflected_shader = shaders::dev_compile_slang_shaders(shader.source_file_name())?;
+        let shaders::ReflectedShader {
+            vertex_shader,
+            fragment_shader,
+            reflection_json,
+        } = shaders::dev_compile_slang_shaders(shader.source_file_name())?;
 
-        let vertex_shader = CompiledShaderEntryPoint {
-            shader_bytecode: reflected_shader.vertex_shader.spv_bytes()?,
-            entry_point_name: reflected_shader.vertex_shader.entry_point_name,
+        let vertex_shader = PrecompiledShader {
+            spv_bytes: vertex_shader.spv_bytes()?,
+            entry_point_name: vertex_shader.entry_point_name,
         };
 
-        let fragment_shader = CompiledShaderEntryPoint {
-            shader_bytecode: reflected_shader.fragment_shader.spv_bytes()?,
-            entry_point_name: reflected_shader.fragment_shader.entry_point_name,
+        let fragment_shader = PrecompiledShader {
+            spv_bytes: fragment_shader.spv_bytes()?,
+            entry_point_name: fragment_shader.entry_point_name,
         };
 
-        let (pipeline_layout, descriptor_set_layouts) = unsafe {
-            reflected_shader
-                .reflection_json
-                .pipeline_layout
-                .vk_create(device)?
-        };
+        let (pipeline_layout, descriptor_set_layouts) =
+            unsafe { reflection_json.pipeline_layout.vk_create(device)? };
 
         Ok(ShaderPipelineLayout {
             vertex_shader,
@@ -2785,22 +2780,12 @@ impl ShaderPipelineLayout {
     ) -> Result<Self, anyhow::Error> {
         let precompiled = shader.precompiled_shaders();
 
-        let vertex_shader = CompiledShaderEntryPoint {
-            entry_point_name: precompiled.vert.entry_point_name,
-            shader_bytecode: precompiled.vert.spv_bytes,
-        };
-
-        let fragment_shader = CompiledShaderEntryPoint {
-            entry_point_name: precompiled.frag.entry_point_name,
-            shader_bytecode: precompiled.frag.spv_bytes,
-        };
-
         let (pipeline_layout, descriptor_set_layouts) =
             unsafe { shader.pipeline_layout().vk_create(device)? };
 
         Ok(ShaderPipelineLayout {
-            vertex_shader,
-            fragment_shader,
+            vertex_shader: precompiled.vert,
+            fragment_shader: precompiled.frag,
             pipeline_layout,
             descriptor_set_layouts,
         })
