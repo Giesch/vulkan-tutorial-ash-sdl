@@ -4,8 +4,8 @@ use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
 use crate::renderer::{
-    LayoutDescription, PipelineConfig, RawUniformBufferHandle, TextureDescription, TextureHandle,
-    UniformBufferDescription, UniformBufferHandle,
+    LayoutDescription, PipelineConfig, RawUniformBufferHandle, TextureDescription,
+    UniformBufferDescription,
 };
 use crate::shaders::ReflectionJson;
 use crate::shaders::json::ReflectedPipelineLayout;
@@ -13,18 +13,12 @@ use crate::shaders::json::ReflectedPipelineLayout;
 #[cfg_attr(not(debug_assertions), expect(unused))]
 use super::ShaderAtlasEntry;
 
-pub use crate::generated::shader_atlas::depth_texture::{DepthTexture, MVPMatrices, Vertex};
+pub use crate::generated::shader_atlas::depth_texture::{
+    DepthTexture, DepthTextureResources, MVPMatrices, Vertex,
+};
 
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
-}
-
-/// additional resoources necessary to construct a pipeline with this shader
-pub struct DepthTextureResources<'t> {
-    pub vertices: Vec<Vertex>,
-    pub indices: Vec<u32>,
-    pub texture: &'t TextureHandle,
-    pub mvp_buffer: &'t UniformBufferHandle<DepthTexture>,
 }
 
 impl DepthTextureShader {
@@ -62,7 +56,7 @@ impl DepthTextureShader {
         self,
         resources: DepthTextureResources<'_>,
     ) -> PipelineConfig<'_, Vertex> {
-        let uniform_buffer_handle = RawUniformBufferHandle::from_typed(resources.mvp_buffer);
+        let uniform_buffer_handle = RawUniformBufferHandle::from_typed(resources.depth_texture);
 
         PipelineConfig {
             shader: Box::new(self),

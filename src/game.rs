@@ -23,7 +23,7 @@ pub struct VikingRoom {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
-    mvp_buffer: UniformBufferHandle<DepthTexture>,
+    depth_texture: UniformBufferHandle<DepthTexture>,
 }
 
 impl VikingRoom {
@@ -97,7 +97,7 @@ impl Game for VikingRoom {
             vertices,
             indices,
             texture: &texture,
-            mvp_buffer: &mvp_buffer,
+            depth_texture: &mvp_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
@@ -112,7 +112,7 @@ impl Game for VikingRoom {
             renderer,
             pipeline,
             texture,
-            mvp_buffer,
+            depth_texture: mvp_buffer,
         })
     }
 
@@ -120,7 +120,7 @@ impl Game for VikingRoom {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
             let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
-            gpu.write_uniform(&mut self.mvp_buffer, DepthTexture { mvp });
+            gpu.write_uniform(&mut self.depth_texture, DepthTexture { mvp });
         })
     }
 
@@ -228,7 +228,7 @@ impl Game for DepthTextureGame {
             vertices,
             indices,
             texture: &texture,
-            mvp_buffer: &mvp_buffer,
+            depth_texture: &mvp_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use askama::Template;
-use heck::ToSnakeCase;
+use heck::{ToPascalCase, ToSnakeCase};
 
 use crate::util::*;
 
@@ -60,6 +60,16 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> Result<(), anyho
 fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<GeneratedFile> {
     let mut struct_defs = vec![];
     let mut vertex_impl_blocks = vec![];
+    let mut required_resources = vec![
+        RequiredResource {
+            field_name: "vertices".to_string(),
+            resource_type: RequiredResourceType::VertexBuffer,
+        },
+        RequiredResource {
+            field_name: "indices".to_string(),
+            resource_type: RequiredResourceType::IndexBuffer,
+        },
+    ];
 
     for vert_param in &reflection_json.vertex_entry_point.parameters {
         match vert_param {
@@ -77,6 +87,8 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
                 let def = GeneratedStructDefinition {
                     type_name: struct_param.type_name.to_string(),
                     fields: generated_fields,
+                    gpu_write: true,
+                    trait_derives: vec!["Debug", "Clone", "Serialize"],
                 };
 
                 let mut attribute_descriptions = vec![];
@@ -115,16 +127,59 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
             if let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) {
                 param_block_fields.push(generated_field);
             };
+
+            if let Some(req) = required_resource(field) {
+                required_resources.push(req);
+            }
         }
 
-        let param_block_struct = GeneratedStructDefinition {
+        struct_defs.push(GeneratedStructDefinition {
             type_name: type_name.to_string(),
             fields: param_block_fields,
-        };
-        struct_defs.push(param_block_struct);
+            gpu_write: true,
+            trait_derives: vec!["Debug", "Clone", "Serialize"],
+        });
+
+        // the default-added parameter block uniform buffer
+        required_resources.push(RequiredResource {
+            field_name: parameter_block.parameter_name.to_snake_case(),
+            resource_type: RequiredResourceType::UniformBuffer,
+        })
     }
 
     struct_defs.reverse();
+
+    let shader_prefix = reflection_json
+        .source_file_name
+        .replace(".slang", "")
+        .to_pascal_case();
+    let resources_fields = required_resources
+        .into_iter()
+        .map(|r| {
+            let type_name = match r.resource_type {
+                // FIXME where to get vertex type name?
+                RequiredResourceType::VertexBuffer => "Vec<Vertex>".to_string(),
+                RequiredResourceType::IndexBuffer => "Vec<u32>".to_string(),
+                RequiredResourceType::Texture => "&'a TextureHandle".to_string(),
+                RequiredResourceType::UniformBuffer => {
+                    format!("&'a UniformBufferHandle<{shader_prefix}>")
+                }
+            };
+
+            GeneratedStructFieldDefinition {
+                field_name: r.field_name,
+                type_name,
+            }
+        })
+        .collect();
+
+    let resources_struct = GeneratedStructDefinition {
+        type_name: format!("{shader_prefix}Resources<'a>"),
+        fields: resources_fields,
+        gpu_write: false,
+        trait_derives: vec![],
+    };
+    struct_defs.push(resources_struct);
 
     let shader_name = reflection_json.source_file_name.replace(".slang", "");
     let shader_names = [shader_name];
@@ -159,13 +214,13 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
 }
 
 #[derive(Template)]
-#[template(path = "shader_atlas.rs.askama")]
+#[template(path = "shader_atlas.rs.askama", escape = "none")]
 struct ShaderAtlasModule {
     module_names: Vec<String>,
 }
 
 #[derive(Template)]
-#[template(path = "shader_atlas_entry_structs.rs.askama")]
+#[template(path = "shader_atlas_entry_structs.rs.askama", escape = "none")]
 struct ShaderAtlasEntryStructsModule {
     struct_defs: Vec<GeneratedStructDefinition>,
     vertex_impl_blocks: Vec<VertexImplBlock>,
@@ -204,6 +259,8 @@ fn gather_struct_defs(
             let sub_struct_def = GeneratedStructDefinition {
                 type_name: type_name.clone(),
                 fields: generated_sub_fields,
+                gpu_write: true,
+                trait_derives: vec!["Debug", "Clone", "Serialize"],
             };
             struct_defs.push(sub_struct_def);
 
@@ -231,10 +288,37 @@ fn gather_struct_defs(
     }
 }
 
+fn required_resource(field: &StructField) -> Option<RequiredResource> {
+    match field {
+        StructField::Resource(res) => match res.resource_shape {
+            ResourceShape::Texture2D => Some(RequiredResource {
+                field_name: res.field_name.to_snake_case(),
+                resource_type: RequiredResourceType::Texture,
+            }),
+        },
+
+        _ => None,
+    }
+}
+
 #[derive(Debug)]
 struct GeneratedStructDefinition {
     type_name: String,
     fields: Vec<GeneratedStructFieldDefinition>,
+    gpu_write: bool,
+    trait_derives: Vec<&'static str>,
+}
+
+impl GeneratedStructDefinition {
+    fn trait_derive_line(&self) -> Option<String> {
+        if self.trait_derives.is_empty() {
+            return None;
+        }
+
+        let trait_list = self.trait_derives.join(", ");
+
+        Some(format!("#[derive({trait_list})]"))
+    }
 }
 
 #[derive(Debug)]
@@ -257,6 +341,18 @@ struct VertexAttributeDescription {
     field_name: String,
     format: String,
     location: usize,
+}
+
+struct RequiredResource {
+    field_name: String,
+    resource_type: RequiredResourceType,
+}
+
+enum RequiredResourceType {
+    VertexBuffer,
+    IndexBuffer,
+    Texture,
+    UniformBuffer,
 }
 
 #[cfg(test)]

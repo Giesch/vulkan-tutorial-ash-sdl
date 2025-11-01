@@ -4,15 +4,24 @@ use serde::Serialize;
 
 use crate::renderer::gpu_write::GPUWrite;
 use crate::renderer::vertex_description::VertexDescription;
+use crate::renderer::*;
 {% for def in struct_defs %}
-#[derive(Debug, Clone, Serialize)]
+{%~ match def.trait_derive_line() -%}
+{%- when Some with (derive_line) -%}
+{{derive_line}}
+{%- when None -%}
+{%- endmatch %}
+{%~ if def.gpu_write -%}
 #[repr(C, align(16))]
+{%~ endif -%}
 pub struct {{ def.type_name }} {
-{% for field in def.fields %}    pub {{ field.field_name }}: {{ field.type_name }},
+{%~ for field in def.fields +%}    pub {{ field.field_name }}: {{ field.type_name }},
 {% endfor -%}
 }
+{%- if def.gpu_write +%}
 
 impl GPUWrite for {{ def.type_name }} {}
+{%- endif %}
 {% endfor %}
 {% for block in vertex_impl_blocks -%}
 impl VertexDescription for {{ block.type_name }} {

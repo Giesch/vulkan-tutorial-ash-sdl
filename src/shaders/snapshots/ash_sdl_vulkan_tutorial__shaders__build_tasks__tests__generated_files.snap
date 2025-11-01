@@ -9,6 +9,7 @@ use serde::Serialize;
 
 use crate::renderer::gpu_write::GPUWrite;
 use crate::renderer::vertex_description::VertexDescription;
+use crate::renderer::*;
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
@@ -37,6 +38,14 @@ pub struct Vertex {
 }
 
 impl GPUWrite for Vertex {}
+
+
+pub struct DepthTextureResources<'a> {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+    pub texture: &'a TextureHandle,
+    pub depth_texture: &'a UniformBufferHandle<DepthTexture>,
+}
 
 impl VertexDescription for Vertex {
     fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {

@@ -36,21 +36,6 @@
       https://github.com/shader-slang/slang/blob/2491ac5f42d78d082d4afa6416906fad9b32ea80/source/slang/slang-syntax.h#L379
       there's also struct and param, but not field
 
-  - [ ] look at slangc reflection json implementation
-    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp
-    https://github.com/shader-slang/slang/blob/master/source/slang/slang-reflection-json.cpp#L1100
-    - bindings
-      this isn't defined by the shader,
-        but by the index in the buffer passed in the vk bind command
-      it should be part of the graphics pipeline/resource creation,
-        when game calls into renderer to set up a scene/pipeline
-        then how do we handle the method on the Vertex type?
-          for now it can always use 0
-          but later, it'll have to be a separate 'BoundVertex' wrapper or something
-    - offsets/locations
-      entryPoints[arg_i]['type']['fields'][field_i]['binding']['index']
-    - formats from slang user attributes
-      unnecessary for now; hardcode glam vecs/matrices and primitives
 
 * Next
 - [ ] signed distance fields / animated rick example
