@@ -2895,11 +2895,11 @@ pub struct Gpu<'frame> {
 }
 
 impl<'frame> Gpu<'frame> {
-    pub fn get_uniform_buffer_mut<T>(
-        &mut self,
-        uniform_buffer: &mut UniformBufferHandle<T>,
-    ) -> &mut T {
-        self.uniform_buffers
-            .get_mapped_mem_for_frame(uniform_buffer, self.current_frame)
+    pub fn write_uniform<T>(&mut self, uniform_buffer: &mut UniformBufferHandle<T>, data: T) {
+        let gpu_ref = self
+            .uniform_buffers
+            .get_mapped_mem_for_frame(uniform_buffer, self.current_frame);
+
+        *gpu_ref = data;
     }
 }

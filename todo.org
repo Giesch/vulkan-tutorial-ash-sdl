@@ -8,20 +8,19 @@
   - [X] Vertex
     - [X] just the struct
     - [X] VertexDescription impl
-  - [ ] assert struct fields are ordered correctly
-    before source gen (leave the game runnable)
-    assertions in generation or generated unit tests?
-    unit tests from shader examples? ie testing generator, not generated code
+  - [ ] nicer codegen templates?
+    glam uses tera
   - [ ] DepthTextureShader
     need to use an annotation to know which struct is vertex?
-    - [ ] write spv bytes adjacent
   - [ ] full ShaderAtlas
   - [ ] generated docs
     - [ ] module doc w/source file name
     - [ ] struct docs w/source param name for ParameterBlock element
+  - [ ] assert struct fields are ordered correctly
+    before source gen (leave the game runnable)
+    assertions in generation or generated unit tests?
+    unit tests from shader examples? ie testing generator, not generated code
 
-- [ ] nicer codegen templates?
-  glam uses tera
 
 - [ ] generate vertex attributes?
   - discord links
@@ -60,6 +59,15 @@
 
 - [ ] change ShaderAtlasEntry to allow optional vert/frag entry points
   how does that work with vertex descriptions
+
+- [ ] split GPUWrite into different traits
+  create_uniform_buffer should only take types declared in uniform buffers
+  in the shader; not Vertex or bytes or whatever
+  - [ ] add the trait
+  - [ ] generate impl for the trait conditionally
+  - [ ] update create_uniform_buffer restriction
+  - [ ] consider similar situations
+    is there value in having the restriction within the renderer?
 
 - [ ] handle shaders with different entry points in reflection
   ie, only compute, only fragment, etc

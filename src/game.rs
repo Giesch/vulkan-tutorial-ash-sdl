@@ -119,9 +119,8 @@ impl Game for VikingRoom {
     fn draw_frame(&mut self) -> anyhow::Result<()> {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
-            let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
             let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
-            *mvp_buffer = DepthTexture { mvp };
+            gpu.write_uniform(&mut self.mvp_buffer, DepthTexture { mvp });
         })
     }
 
@@ -251,9 +250,8 @@ impl Game for DepthTextureGame {
     fn draw_frame(&mut self) -> anyhow::Result<()> {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
-            let mvp_buffer = gpu.get_uniform_buffer_mut(&mut self.mvp_buffer);
             let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
-            *mvp_buffer = DepthTexture { mvp };
+            gpu.write_uniform(&mut self.mvp_buffer, DepthTexture { mvp });
         })
     }
 
@@ -302,9 +300,10 @@ fn make_mvp_matrices(elapsed: Duration, aspect_ratio: f32, column_major: bool) -
     // https://docs.vulkan.org/tutorial/latest/05_Uniform_buffers/00_Descriptor_set_layout_and_buffer.html
     mvp.proj.y_axis.y *= -1.0;
 
+    // GLM & glam use column-major matrices, but D3D12 and Slang use row-major by default
+    // it's also possible to avoid the transpose by reversing the mul() calls in shaders
+    // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
     if !column_major {
-        // it's also possible to avoid this by reversing the mul() calls in shaders
-        // https://discord.com/channels/1303735196696445038/1395879559827816458/1396913440584634499
         mvp.model = mvp.model.transpose();
         mvp.view = mvp.view.transpose();
         mvp.proj = mvp.proj.transpose();
