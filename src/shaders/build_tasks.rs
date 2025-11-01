@@ -7,7 +7,7 @@ use crate::util::*;
 
 use super::{ReflectedShader, json::*, prepare_reflected_shader};
 
-pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
+pub fn write_precompiled_shaders(generate_rust_source: bool) -> Result<(), anyhow::Error> {
     let shaders_source_dir = manifest_path(["shaders", "source"]);
     let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
         .filter_map(|entry_res| entry_res.ok())
@@ -27,10 +27,12 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
             reflection_json,
         } = prepare_reflected_shader(slang_file_name)?;
 
-        let generated_files = build_generated_source_files(&reflection_json);
-        for source_file in &generated_files {
-            std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
-            std::fs::write(&source_file.file_path, &source_file.content)?;
+        if generate_rust_source {
+            let generated_files = build_generated_source_files(&reflection_json);
+            for source_file in &generated_files {
+                std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
+                std::fs::write(&source_file.file_path, &source_file.content)?;
+            }
         }
 
         let source_file_name = &reflection_json.source_file_name;

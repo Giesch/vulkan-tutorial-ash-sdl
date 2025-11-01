@@ -34,10 +34,13 @@ alias r := release
 
 # write precompiled shader bytecode & json metadata to disk
 shaders:
-    cargo run --bin prepare_shaders
-    cargo fmt
+    GENERATE_RUST_SOURCE=false cargo run --bin prepare_shaders
 alias s := shaders
 
+# write shader metadata and generated rust code to disk
+shader-gen:
+    GENERATE_RUST_SOURCE=true cargo run --bin prepare_shaders
+    cargo fmt
 
 # run all unit tests
 test:
@@ -64,5 +67,5 @@ setup:
     chmod +x .git/hooks/pre-commit
 
 # lint and test for git pre-commit hook
-pre-commit: shaders && lint test
+pre-commit: shader-gen && lint test
     git add shaders/compiled
