@@ -25,7 +25,10 @@ impl DepthTextureShader {
     // dev and release
 
     pub fn init() -> Self {
-        let json_str = include_str!("../../../shaders/compiled/depth_texture.json");
+        let json_str = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/compiled/depth_texture.json"
+        ));
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
 
         let shader = Self { reflection_json };
@@ -83,7 +86,10 @@ impl DepthTextureShader {
     }
 
     fn vert_spv(&self) -> Vec<u32> {
-        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.vert.spv");
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/compiled/depth_texture.vert.spv"
+        ));
         let byte_reader = &mut std::io::Cursor::new(bytes);
         ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
@@ -99,7 +105,10 @@ impl DepthTextureShader {
     }
 
     fn frag_spv(&self) -> Vec<u32> {
-        let bytes = include_bytes!("../../../shaders/compiled/depth_texture.frag.spv");
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/compiled/depth_texture.frag.spv"
+        ));
         let byte_reader = &mut std::io::Cursor::new(bytes);
         ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
