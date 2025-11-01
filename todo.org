@@ -8,10 +8,13 @@
   - [X] Vertex
     - [X] just the struct
     - [X] VertexDescription impl
-  - [X] nicer codegen templates?
-    glam uses tera
+  - [X] nicer codegen templates
   - [ ] DepthTextureShader
     need to use an annotation to know which struct is vertex?
+    - [ ] how to generate DepthTextureResources?
+      - assume vertices and indices are required
+      - add texture based on Sampler2D
+      - how to handle uniform buffers?
   - [ ] full ShaderAtlas
   - [ ] generated docs
     - [ ] module doc w/source file name
@@ -20,9 +23,6 @@
     before source gen (leave the game runnable)
     assertions in generation or generated unit tests?
     unit tests from shader examples? ie testing generator, not generated code
-
-- [X] update rustfmt.toml
-  make sure that justfile cargo fmt doesn't change anything
 
 - [ ] generate vertex attributes?
   - discord links

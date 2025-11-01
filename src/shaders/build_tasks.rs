@@ -69,10 +69,9 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
             EntryPointParameter::Struct(struct_param) => {
                 let mut generated_fields = vec![];
                 for field in &struct_param.fields {
-                    let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) else {
-                        continue;
+                    if let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) {
+                        generated_fields.push(generated_field);
                     };
-                    generated_fields.push(generated_field);
                 }
 
                 let def = GeneratedStructDefinition {
@@ -113,10 +112,9 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
 
         let mut param_block_fields = vec![];
         for field in &parameter_block.element_type.fields {
-            let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) else {
-                continue;
+            if let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) {
+                param_block_fields.push(generated_field);
             };
-            param_block_fields.push(generated_field);
         }
 
         let param_block_struct = GeneratedStructDefinition {
@@ -199,10 +197,9 @@ fn gather_struct_defs(
             let type_name = struct_field.struct_type.type_name.to_string();
             let mut generated_sub_fields = vec![];
             for sub_field in &struct_field.struct_type.fields {
-                let Some(field_def) = gather_struct_defs(sub_field, struct_defs) else {
-                    continue;
+                if let Some(field_def) = gather_struct_defs(sub_field, struct_defs) {
+                    generated_sub_fields.push(field_def);
                 };
-                generated_sub_fields.push(field_def);
             }
             let sub_struct_def = GeneratedStructDefinition {
                 type_name: type_name.clone(),

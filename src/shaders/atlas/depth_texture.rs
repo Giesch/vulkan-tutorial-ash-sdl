@@ -13,7 +13,7 @@ use crate::shaders::json::ReflectedPipelineLayout;
 #[cfg_attr(not(debug_assertions), expect(unused))]
 use super::ShaderAtlasEntry;
 
-pub use crate::generated::shader_atlas::depth_texture::*;
+pub use crate::generated::shader_atlas::depth_texture::{DepthTexture, MVPMatrices, Vertex};
 
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
