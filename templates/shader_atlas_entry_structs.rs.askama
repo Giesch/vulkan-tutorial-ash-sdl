@@ -1,0 +1,40 @@
+// GENERATED FILE (do not edit directly)
+
+use serde::Serialize;
+
+use crate::renderer::gpu_write::GPUWrite;
+use crate::renderer::vertex_description::VertexDescription;
+{% for def in struct_defs %}
+#[derive(Debug, Clone, Serialize)]
+#[repr(C, align(16))]
+pub struct {{ def.type_name }} {
+{% for field in def.fields %}    pub {{ field.field_name }}: {{ field.type_name }},
+{% endfor -%}
+}
+
+impl GPUWrite for {{ def.type_name }} {}
+{% endfor %}
+{% for block in vertex_impl_blocks -%}
+impl VertexDescription for {{ block.type_name }} {
+    fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
+        let binding_description = ash::vk::VertexInputBindingDescription::default()
+            .binding(0)
+            .stride(std::mem::size_of::<Self>() as u32)
+            .input_rate(ash::vk::VertexInputRate::VERTEX);
+
+        vec![binding_description]
+    }
+
+    fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
+        vec![
+{%- for attr in block.attribute_descriptions %}
+            ash::vk::VertexInputAttributeDescription::default()
+                .offset(std::mem::offset_of!({{ block.type_name }}, {{ attr.field_name }}) as u32)
+                .format({{ attr.format }})
+                .binding(0)
+                .location({{ attr.location }}),
+{%- endfor %}
+        ]
+    }
+}
+{%- endfor -%}

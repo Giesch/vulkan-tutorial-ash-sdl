@@ -2,8 +2,8 @@ use ash::vk;
 
 use crate::shaders::atlas::ShaderAtlasEntry;
 
-use super::vertex_description::VertexDescription;
 use super::ShaderPipelineLayout;
+use super::vertex_description::VertexDescription;
 use super::{RawUniformBufferHandle, TextureHandle};
 
 #[derive(Debug)]

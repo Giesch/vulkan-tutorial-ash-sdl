@@ -126,7 +126,11 @@
   - unwraps rely on the handles being unique and consumable
   - generics enforced by renderer module
 
-- [ ] look into reflection-basedd codegen for bindless shaders
+- [ ] look into reflection-based codegen for bindless shaders
+  https://discord.com/channels/1303735196696445038/1427662446579024013/1427662446579024013
+
+- [ ] global param usage by entry point
+  https://discord.com/channels/1303735196696445038/1428804639523868794/1428919601688871075
 
 - [ ] rewrite renderer in a new repo
   how much of this could be done gradually in this one?

@@ -7,8 +7,8 @@ use crate::renderer::{
     LayoutDescription, PipelineConfig, RawUniformBufferHandle, TextureDescription, TextureHandle,
     UniformBufferDescription, UniformBufferHandle,
 };
-use crate::shaders::json::ReflectedPipelineLayout;
 use crate::shaders::ReflectionJson;
+use crate::shaders::json::ReflectedPipelineLayout;
 
 #[cfg_attr(not(debug_assertions), expect(unused))]
 use super::ShaderAtlasEntry;

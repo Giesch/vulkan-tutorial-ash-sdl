@@ -26,7 +26,9 @@ pub fn reflect_entry_points(
         let parameter_name = global_param.name().unwrap().to_string();
 
         if global_param.type_layout().kind() != slang::TypeKind::ParameterBlock {
-            anyhow::bail!("non-ParameterBlock global: {parameter_name}; only ParameterBlock globals are supported")
+            anyhow::bail!(
+                "non-ParameterBlock global: {parameter_name}; only ParameterBlock globals are supported"
+            )
         }
 
         let element_type_layout = global_param.type_layout().element_type_layout();

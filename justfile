@@ -35,6 +35,7 @@ alias r := release
 # write precompiled shader bytecode & json metadata to disk
 shaders:
     cargo run --bin prepare_shaders
+    cargo fmt
 alias s := shaders
 
 

@@ -1,7 +1,7 @@
+use sdl3::EventPump;
 use sdl3::event::{Event, WindowEvent};
 use sdl3::keyboard::Keycode;
 use sdl3::sys::timer::SDL_DelayPrecise;
-use sdl3::EventPump;
 
 use crate::game::traits::RuntimeGame;
 

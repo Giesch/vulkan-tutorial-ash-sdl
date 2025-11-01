@@ -1,7 +1,7 @@
 #![allow(clippy::type_complexity, clippy::too_many_arguments)]
 
 use std::collections::BTreeSet;
-use std::ffi::{c_char, CStr, CString};
+use std::ffi::{CStr, CString, c_char};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::PathBuf;
@@ -23,7 +23,7 @@ pub mod debug;
 mod platform;
 
 pub mod gpu_write;
-use gpu_write::{write_to_gpu_buffer, GPUWrite};
+use gpu_write::{GPUWrite, write_to_gpu_buffer};
 
 pub mod vertex_description;
 

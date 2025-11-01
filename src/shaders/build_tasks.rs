@@ -1,5 +1,8 @@
 use std::path::PathBuf;
 
+use askama::Template;
+use heck::ToSnakeCase;
+
 use crate::util::*;
 
 use super::{json::*, prepare_reflected_shader, ReflectedShader};
@@ -54,7 +57,7 @@ pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
 
 fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<GeneratedFile> {
     let mut struct_defs = vec![];
-    let mut impl_blocks = vec![];
+    let mut vertex_impl_blocks = vec![];
 
     for vert_param in &reflection_json.vertex_entry_point.parameters {
         match vert_param {
@@ -75,8 +78,28 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
                     fields: generated_fields,
                 };
 
-                let vert_impl = vertex_description_impl(&def);
-                impl_blocks.push(vert_impl);
+                let mut attribute_descriptions = vec![];
+                for (location, field) in def.fields.iter().enumerate() {
+                    let format = match field.type_name.as_str() {
+                        // TODO use an enum for supported glam types
+                        "glam::Vec3" => "ash::vk::Format::R32G32B32_SFLOAT",
+                        "glam::Vec2" => "ash::vk::Format::R32G32_SFLOAT",
+                        _ => todo!(),
+                    };
+
+                    let attr = VertexAttributeDescription {
+                        field_name: field.field_name.to_snake_case(),
+                        format: format.to_string(),
+                        location,
+                    };
+
+                    attribute_descriptions.push(attr);
+                }
+                let vert_block = VertexImplBlock {
+                    type_name: def.type_name.clone(),
+                    attribute_descriptions,
+                };
+                vertex_impl_blocks.push(vert_block);
 
                 struct_defs.push(def);
             }
@@ -101,15 +124,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         struct_defs.push(param_block_struct);
     }
 
-    let mut out = String::new();
-    out.push_str(HEADER);
-    for def in struct_defs.iter().rev() {
-        def.write_to_source(&mut out);
-        out.push('\n');
-    }
-    for impl_block in &impl_blocks {
-        out.push_str(impl_block);
-    }
+    struct_defs.reverse();
 
     let shader_name = reflection_json.source_file_name.replace(".slang", "");
     let shader_names = [shader_name];
@@ -117,14 +132,20 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
     let shader_structs_file = GeneratedFile {
         file_path,
-        content: out,
+        content: ShaderAtlasEntryStructsModule {
+            struct_defs,
+            vertex_impl_blocks,
+        }
+        .render()
+        .unwrap(),
     };
 
-    let pub_mod = |name| format!("pub mod {name};\n");
+    let module_names = shader_names.iter().map(|s| s.to_string()).collect();
     let shader_atlas_module = GeneratedFile {
         file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
-        content: shader_names.iter().map(pub_mod).collect(),
+        content: ShaderAtlasModule { module_names }.render().unwrap(),
     };
+
     let top_generated_module = GeneratedFile {
         file_path: manifest_path(["src", "generated.rs"]),
         content: "pub mod shader_atlas;".to_string(),
@@ -135,6 +156,19 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         shader_atlas_module,
         top_generated_module,
     ]
+}
+
+#[derive(Template)]
+#[template(path = "shader_atlas.rs.askama")]
+struct ShaderAtlasModule {
+    module_names: Vec<String>,
+}
+
+#[derive(Template)]
+#[template(path = "shader_atlas_entry_structs.rs.askama")]
+struct ShaderAtlasEntryStructsModule {
+    struct_defs: Vec<GeneratedStructDefinition>,
+    vertex_impl_blocks: Vec<VertexImplBlock>,
 }
 
 fn gather_struct_defs(
@@ -154,7 +188,7 @@ fn gather_struct_defs(
             };
 
             Some(GeneratedStructFieldDefinition {
-                field_name: vector.field_name.to_string(),
+                field_name: vector.field_name.to_snake_case(),
                 type_name: field_type.to_string(),
             })
         }
@@ -175,7 +209,7 @@ fn gather_struct_defs(
             struct_defs.push(sub_struct_def);
 
             Some(GeneratedStructFieldDefinition {
-                field_name: struct_field.field_name.to_string(),
+                field_name: struct_field.field_name.to_snake_case(),
                 type_name,
             })
         }
@@ -183,7 +217,6 @@ fn gather_struct_defs(
         StructField::Matrix(matrix) => {
             let VectorElementType::Scalar(scalar) = &matrix.element_type;
 
-            let field_name = &matrix.field_name;
             let field_type = match (scalar.scalar_type, matrix.row_count, matrix.column_count) {
                 (ScalarType::Float32, 4, 4) => "glam::Mat4",
                 (s, r, c) => {
@@ -192,7 +225,7 @@ fn gather_struct_defs(
             };
 
             Some(GeneratedStructFieldDefinition {
-                field_name: field_name.to_string(),
+                field_name: matrix.field_name.to_snake_case(),
                 type_name: field_type.to_string(),
             })
         }
@@ -211,135 +244,20 @@ struct GeneratedStructFieldDefinition {
     type_name: String,
 }
 
-impl GeneratedStructDefinition {
-    fn write_to_source(&self, out: &mut String) {
-        let type_name = &self.type_name;
-
-        out.push_str("#[derive(Debug, Clone, Serialize)]\n");
-        out.push_str("#[repr(C, align(16))]\n");
-        out.push_str(&format!("pub struct {type_name} {{\n"));
-
-        for field in &self.fields {
-            use heck::ToSnakeCase;
-
-            let field_name = &field.field_name.to_snake_case();
-            let field_type = &field.type_name;
-            out.push_str(&format!("    pub {field_name}: {field_type},\n"));
-        }
-
-        out.push_str("}\n");
-        out.push('\n');
-        out.push_str(&format!("impl GPUWrite for {type_name} {{}}\n"));
-    }
-}
-
-const HEADER: &str = r#"// GENERATED FILE (do not edit directly)
-
-use serde::Serialize;
-
-use crate::renderer::gpu_write::GPUWrite;
-use crate::renderer::vertex_description::VertexDescription;
-
-"#;
-
 struct GeneratedFile {
     file_path: PathBuf,
     content: String,
 }
 
-fn vertex_description_impl(def: &GeneratedStructDefinition) -> String {
-    const GLAM_VEC3_FORMAT: &str = "ash::vk::Format::R32G32B32_SFLOAT";
-    const GLAM_VEC2_FORMAT: &str = "ash::vk::Format::R32G32_SFLOAT";
+struct VertexImplBlock {
+    type_name: String,
+    attribute_descriptions: Vec<VertexAttributeDescription>,
+}
 
-    let mut out = String::new();
-
-    const INDENT: &str = "    ";
-    let mut indent = 0;
-
-    let mut push_line = |text: &str, i: usize| {
-        if text.is_empty() {
-            out.push('\n');
-            return;
-        }
-
-        for _ in 0..i {
-            out.push_str(INDENT);
-        }
-
-        out.push_str(&format!("{text}\n"));
-    };
-
-    push_line("impl VertexDescription for Vertex {", indent);
-    indent += 1;
-
-    push_line(
-        "fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {",
-        indent,
-    );
-    indent += 1;
-
-    push_line(
-        "let binding_description = ash::vk::VertexInputBindingDescription::default()",
-        indent,
-    );
-    indent += 1;
-    push_line(".binding(0)", indent);
-    push_line(".stride(std::mem::size_of::<Self>() as u32)", indent);
-    push_line(".input_rate(ash::vk::VertexInputRate::VERTEX);", indent);
-    indent -= 1;
-
-    push_line("", indent);
-    push_line("vec![binding_description]", indent);
-
-    indent -= 1;
-    push_line("}", indent);
-    push_line("", indent);
-
-    push_line(
-        "fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {",
-        indent,
-    );
-    indent += 1;
-
-    push_line("vec![", indent);
-    indent += 1;
-
-    for (i, field) in def.fields.iter().enumerate() {
-        use heck::ToSnakeCase;
-
-        let field_name = field.field_name.to_snake_case();
-        let format = match field.type_name.as_str() {
-            // TODO use an enum for supported glam types
-            "glam::Vec3" => GLAM_VEC3_FORMAT,
-            "glam::Vec2" => GLAM_VEC2_FORMAT,
-            _ => todo!(),
-        };
-
-        push_line(
-            "ash::vk::VertexInputAttributeDescription::default()",
-            indent,
-        );
-        indent += 1;
-        push_line(
-            &format!(".offset(std::mem::offset_of!(Vertex, {field_name}) as u32)",),
-            indent,
-        );
-        push_line(&format!(".format({format})"), indent);
-        push_line(".binding(0)", indent);
-        push_line(&format!(".location({i}),"), indent);
-        indent -= 1;
-    }
-
-    indent -= 1;
-    push_line("]", indent);
-
-    indent -= 1;
-    push_line("}", indent);
-
-    indent -= 1;
-    push_line("}", indent);
-
-    out
+struct VertexAttributeDescription {
+    field_name: String,
+    format: String,
+    location: usize,
 }
 
 #[cfg(test)]
