@@ -5,7 +5,7 @@ use heck::ToSnakeCase;
 
 use crate::util::*;
 
-use super::{json::*, prepare_reflected_shader, ReflectedShader};
+use super::{ReflectedShader, json::*, prepare_reflected_shader};
 
 pub fn write_precompiled_shaders() -> Result<(), anyhow::Error> {
     let shaders_source_dir = manifest_path(["shaders", "source"]);

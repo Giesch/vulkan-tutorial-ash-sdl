@@ -8,7 +8,7 @@
   - [X] Vertex
     - [X] just the struct
     - [X] VertexDescription impl
-  - [ ] nicer codegen templates?
+  - [X] nicer codegen templates?
     glam uses tera
   - [ ] DepthTextureShader
     need to use an annotation to know which struct is vertex?
@@ -21,6 +21,8 @@
     assertions in generation or generated unit tests?
     unit tests from shader examples? ie testing generator, not generated code
 
+- [X] update rustfmt.toml
+  make sure that justfile cargo fmt doesn't change anything
 
 - [ ] generate vertex attributes?
   - discord links
