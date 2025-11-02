@@ -2,8 +2,7 @@ use std::ffi::CString;
 
 use ash::vk;
 
-mod depth_texture;
-pub use depth_texture::*;
+pub use crate::generated::shader_atlas::depth_texture::*;
 
 use crate::renderer::LayoutDescription;
 
