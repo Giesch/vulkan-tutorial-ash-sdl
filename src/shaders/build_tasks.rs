@@ -188,9 +188,9 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     let shader_names = [shader_name];
     let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
     let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
-    let shader_structs_file = GeneratedFile {
+    let shader_atlas_entry_file = GeneratedFile {
         file_path,
-        content: ShaderAtlasEntryStructsModule {
+        content: ShaderAtlasEntryModule {
             struct_defs,
             vertex_impl_blocks,
         }
@@ -210,7 +210,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     };
 
     vec![
-        shader_structs_file,
+        shader_atlas_entry_file,
         shader_atlas_module,
         top_generated_module,
     ]
@@ -223,8 +223,8 @@ struct ShaderAtlasModule {
 }
 
 #[derive(Template)]
-#[template(path = "shader_atlas_entry_structs.rs.askama", escape = "none")]
-struct ShaderAtlasEntryStructsModule {
+#[template(path = "shader_atlas_entry.rs.askama", escape = "none")]
+struct ShaderAtlasEntryModule {
     struct_defs: Vec<GeneratedStructDefinition>,
     vertex_impl_blocks: Vec<VertexImplBlock>,
 }
