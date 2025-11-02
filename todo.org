@@ -16,7 +16,17 @@
       - [X] add texture based on Sampler2D
       - [X] get Vertex type based on entry point param struct
     - [ ] generate methods
+      - pipeline_layout
+        either requires the json or inlining the data from it
+      - precompiled_shaders
+        can be completely inlined/hardcoded
+      - layout_bindings
+        this needs a smarter solution; maybe a trait?
+        some way for the impl code to live outside a template
+        maybe methods on ReflectionJson?
+      - [ ] split up release & debug impls
   - [ ] full ShaderAtlas
+    one entry per slang file
   - [ ] generated docs
     - [ ] module doc w/source file name
     - [ ] struct docs w/source param name for ParameterBlock element

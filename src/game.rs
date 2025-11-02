@@ -23,7 +23,7 @@ pub struct VikingRoom {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
-    depth_texture: UniformBufferHandle<DepthTexture>,
+    depth_texture_buffer: UniformBufferHandle<DepthTexture>,
 }
 
 impl VikingRoom {
@@ -92,12 +92,12 @@ impl Game for VikingRoom {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let mvp_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
+        let depth_texture_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
             texture: &texture,
-            depth_texture: &mvp_buffer,
+            depth_texture_buffer: &depth_texture_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
@@ -112,7 +112,7 @@ impl Game for VikingRoom {
             renderer,
             pipeline,
             texture,
-            depth_texture: mvp_buffer,
+            depth_texture_buffer,
         })
     }
 
@@ -120,7 +120,7 @@ impl Game for VikingRoom {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
             let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
-            gpu.write_uniform(&mut self.depth_texture, DepthTexture { mvp });
+            gpu.write_uniform(&mut self.depth_texture_buffer, DepthTexture { mvp });
         })
     }
 
@@ -146,7 +146,7 @@ pub struct DepthTextureGame {
     renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
-    mvp_buffer: UniformBufferHandle<DepthTexture>,
+    depth_texture_buffer: UniformBufferHandle<DepthTexture>,
 }
 
 #[allow(unused)]
@@ -223,12 +223,12 @@ impl Game for DepthTextureGame {
         let shader = shader_atlas.depth_texture;
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let mvp_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
+        let depth_texture_buffer = renderer.create_uniform_buffer::<DepthTexture>()?;
         let resources = DepthTextureResources {
             vertices,
             indices,
             texture: &texture,
-            depth_texture: &mvp_buffer,
+            depth_texture_buffer: &depth_texture_buffer,
         };
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
@@ -243,7 +243,7 @@ impl Game for DepthTextureGame {
             renderer,
             pipeline,
             texture,
-            mvp_buffer,
+            depth_texture_buffer,
         })
     }
 
@@ -251,7 +251,7 @@ impl Game for DepthTextureGame {
         self.renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
             let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
-            gpu.write_uniform(&mut self.mvp_buffer, DepthTexture { mvp });
+            gpu.write_uniform(&mut self.depth_texture_buffer, DepthTexture { mvp });
         })
     }
 

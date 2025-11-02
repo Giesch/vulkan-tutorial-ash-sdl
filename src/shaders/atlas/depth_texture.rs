@@ -59,7 +59,8 @@ impl DepthTextureShader {
         self,
         resources: DepthTextureResources<'_>,
     ) -> PipelineConfig<'_, Vertex> {
-        let uniform_buffer_handle = RawUniformBufferHandle::from_typed(resources.depth_texture);
+        let uniform_buffer_handle =
+            RawUniformBufferHandle::from_typed(resources.depth_texture_buffer);
 
         PipelineConfig {
             shader: Box::new(self),

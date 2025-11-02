@@ -1927,13 +1927,11 @@ pub enum LayoutDescription {
     Texture(TextureDescription),
 }
 
-impl LayoutDescription {}
-
 #[derive(Debug)]
 pub struct UniformBufferDescription {
     pub size: u64,
     pub binding: u32,
-    // the number of descriptors in the descriptor set?
+    // the number of descriptors in the descriptor set
     pub descriptor_count: u32,
 }
 
@@ -1941,7 +1939,7 @@ pub struct UniformBufferDescription {
 pub struct TextureDescription {
     pub layout: vk::ImageLayout,
     pub binding: u32,
-    // the number of descriptors in the descriptor set?
+    // the number of descriptors in the descriptor set
     pub descriptor_count: u32,
 }
 

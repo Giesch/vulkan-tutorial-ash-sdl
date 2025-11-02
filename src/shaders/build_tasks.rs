@@ -123,8 +123,6 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     }
 
     for GlobalParameter::ParameterBlock(parameter_block) in &reflection_json.global_parameters {
-        let type_name = &parameter_block.element_type.type_name;
-
         let mut param_block_fields = vec![];
         for field in &parameter_block.element_type.fields {
             if let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) {
@@ -136,6 +134,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
             }
         }
 
+        let type_name = &parameter_block.element_type.type_name;
         struct_defs.push(GeneratedStructDefinition {
             type_name: type_name.to_string(),
             fields: param_block_fields,
@@ -144,8 +143,9 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         });
 
         // the default-added parameter block uniform buffer
+        let param_name = parameter_block.parameter_name.to_snake_case();
         required_resources.push(RequiredResource {
-            field_name: parameter_block.parameter_name.to_snake_case(),
+            field_name: format!("{param_name}_buffer"),
             resource_type: RequiredResourceType::UniformBuffer,
         })
     }

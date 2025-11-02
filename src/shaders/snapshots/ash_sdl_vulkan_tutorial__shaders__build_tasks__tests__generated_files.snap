@@ -44,7 +44,7 @@ pub struct DepthTextureResources<'a> {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub texture: &'a TextureHandle,
-    pub depth_texture: &'a UniformBufferHandle<DepthTexture>,
+    pub depth_texture_buffer: &'a UniformBufferHandle<DepthTexture>,
 }
 
 impl VertexDescription for Vertex {
