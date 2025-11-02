@@ -9,13 +9,13 @@
     - [X] just the struct
     - [X] VertexDescription impl
   - [X] nicer codegen templates
-  - [-] DepthTextureShader
+  - [X] DepthTextureShader
     need to use an annotation to know which struct is vertex?
     - [X] generate DepthTextureResources
       - [X] assume vertices and indices are required
       - [X] add texture based on Sampler2D
       - [X] get Vertex type based on entry point param struct
-    - [ ] generate methods
+    - [X] generate methods
       - pipeline_layout
         either requires the json or inlining the data from it
       - precompiled_shaders
@@ -24,7 +24,6 @@
         this needs a smarter solution; maybe a trait?
         some way for the impl code to live outside a template
         maybe methods on ReflectionJson?
-      - [ ] split up release & debug impls
   - [ ] full ShaderAtlas
     one entry per slang file
   - [ ] generated docs

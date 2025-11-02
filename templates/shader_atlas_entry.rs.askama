@@ -55,15 +55,15 @@ impl VertexDescription for {{ block.type_name }} {
 }
 {%- endfor %}
 
-pub struct DepthTextureShader {
+pub struct {{ shader_impl.shader_type_name }} {
     pub reflection_json: ReflectionJson,
 }
 
-impl DepthTextureShader {
+impl {{ shader_impl.shader_type_name }} {
     pub fn init() -> Self {
         let json_str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.json"
+            "/shaders/compiled/{{ shader_impl.shader_name }}.json"
         ));
 
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
@@ -73,18 +73,22 @@ impl DepthTextureShader {
 
     pub fn pipeline_config(
         self,
-        resources: DepthTextureResources<'_>,
-    ) -> PipelineConfig<'_, Vertex> {
+        resources: {{ shader_impl.shader_type_prefix }}Resources<'_>,
+    ) -> PipelineConfig<'_, {{ shader_impl.vertex_type_name }}> {
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let texture_handles = vec![
-            resources.texture,
+{%- for texture_field in shader_impl.resources_texture_fields +%}
+            resources.{{ texture_field }},
+{%- endfor +%}
         ];
 
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let uniform_buffer_handles = vec![
-            RawUniformBufferHandle::from_typed(resources.depth_texture_buffer),
+{%- for buffer_field in shader_impl.resources_uniform_buffer_fields +%}
+            RawUniformBufferHandle::from_typed(resources.{{ buffer_field }}),
+{%- endfor +%}
         ];
 
         PipelineConfig {
@@ -119,7 +123,7 @@ impl DepthTextureShader {
     fn vert_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.vert.spv"
+            "/shaders/compiled/{{ shader_impl.shader_name }}.vert.spv"
         ));
         let byte_reader = &mut Cursor::new(bytes);
         read_spv(byte_reader).expect("failed to convert spv byte layout")
@@ -128,28 +132,28 @@ impl DepthTextureShader {
     fn frag_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.frag.spv"
+            "/shaders/compiled/{{ shader_impl.shader_name }}.frag.spv"
         ));
         let byte_reader = &mut Cursor::new(bytes);
         read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 }
 
-impl ShaderAtlasEntry for DepthTextureShader {
+impl ShaderAtlasEntry for {{ shader_impl.shader_type_name }} {
     fn source_file_name(&self) -> &str {
         &self.reflection_json.source_file_name
     }
 
     fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<DepthTexture>() as u64]
+        vec![std::mem::size_of::<{{ shader_impl.uniform_buffer_type_name }}>() as u64]
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
-        Vertex::binding_descriptions()
+        {{ shader_impl.vertex_type_name }}::binding_descriptions()
     }
 
     fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions()
+        {{ shader_impl.vertex_type_name }}::attribute_descriptions()
     }
 
     fn layout_bindings(&self) -> Vec<Vec<LayoutDescription>> {

@@ -158,7 +158,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         .replace(".slang", "")
         .to_pascal_case();
     let resources_fields = required_resources
-        .into_iter()
+        .iter()
         .map(|r| {
             let type_name = match r.resource_type {
                 RequiredResourceType::VertexBuffer => format!("Vec<{vertex_type_name}>"),
@@ -170,7 +170,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
             };
 
             GeneratedStructFieldDefinition {
-                field_name: r.field_name,
+                field_name: r.field_name.clone(),
                 type_name,
             }
         })
@@ -185,19 +185,42 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     struct_defs.push(resources_struct);
 
     let shader_name = reflection_json.source_file_name.replace(".slang", "");
-    let shader_names = [shader_name];
     let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
     let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
+
+    // NOTE these must be in descriptor set layout order in the reflection json
+    let resources_texture_fields: Vec<String> = required_resources
+        .iter()
+        .filter(|r| matches!(r.resource_type, RequiredResourceType::Texture))
+        .map(|r| r.field_name.clone())
+        .collect();
+    let resources_uniform_buffer_fields: Vec<String> = required_resources
+        .iter()
+        .filter(|r| matches!(r.resource_type, RequiredResourceType::UniformBuffer))
+        .map(|r| r.field_name.clone())
+        .collect();
+
+    let shader_impl = GeneratedShaderImpl {
+        shader_name: shader_name.clone(),
+        shader_type_name: format!("{}Shader", shader_name.to_pascal_case()),
+        vertex_type_name,
+        uniform_buffer_type_name: shader_name.to_pascal_case(),
+        shader_type_prefix: shader_prefix,
+        resources_texture_fields,
+        resources_uniform_buffer_fields,
+    };
     let shader_atlas_entry_file = GeneratedFile {
         file_path,
         content: ShaderAtlasEntryModule {
             struct_defs,
             vertex_impl_blocks,
+            shader_impl,
         }
         .render()
         .unwrap(),
     };
 
+    let shader_names = [shader_name];
     let module_names = shader_names.iter().map(|s| s.to_string()).collect();
     let shader_atlas_module = GeneratedFile {
         file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
@@ -227,6 +250,17 @@ struct ShaderAtlasModule {
 struct ShaderAtlasEntryModule {
     struct_defs: Vec<GeneratedStructDefinition>,
     vertex_impl_blocks: Vec<VertexImplBlock>,
+    shader_impl: GeneratedShaderImpl,
+}
+
+struct GeneratedShaderImpl {
+    shader_name: String,
+    shader_type_name: String,
+    vertex_type_name: String,
+    uniform_buffer_type_name: String,
+    shader_type_prefix: String,
+    resources_texture_fields: Vec<String>,
+    resources_uniform_buffer_fields: Vec<String>,
 }
 
 fn gather_struct_defs(
