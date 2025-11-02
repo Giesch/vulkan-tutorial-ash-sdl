@@ -1,17 +1,13 @@
 use std::ffi::CString;
+use std::io::Cursor;
 
+use ash::util::read_spv;
 use ash::vk;
 
 use crate::renderer::vertex_description::VertexDescription;
-use crate::renderer::{
-    LayoutDescription, PipelineConfig, RawUniformBufferHandle, TextureDescription,
-    UniformBufferDescription,
-};
+use crate::renderer::{LayoutDescription, PipelineConfig, RawUniformBufferHandle};
 use crate::shaders::ReflectionJson;
 use crate::shaders::json::ReflectedPipelineLayout;
-
-#[cfg_attr(not(debug_assertions), expect(unused))]
-use super::ShaderAtlasEntry;
 
 pub use crate::generated::shader_atlas::depth_texture::{
     DepthTexture, DepthTextureResources, MVPMatrices, Vertex,
@@ -22,59 +18,41 @@ pub struct DepthTextureShader {
 }
 
 impl DepthTextureShader {
-    // dev and release
-
     pub fn init() -> Self {
         let json_str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/shaders/compiled/depth_texture.json"
         ));
+
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
 
-        let shader = Self { reflection_json };
-
-        // assertions that static values match shader reflection
-        #[cfg(debug_assertions)]
-        {
-            let const_uniform_buffer_sizes = shader.uniform_buffer_sizes();
-
-            let layout_bindings = shader.layout_bindings();
-            let reflected_uniform_buffer_sizes: Vec<u64> = layout_bindings
-                .iter()
-                .flat_map(|descriptions| {
-                    descriptions.iter().filter_map(|ld| match ld {
-                        LayoutDescription::Uniform(u) => Some(u.size),
-                        _ => None,
-                    })
-                })
-                .collect();
-
-            assert!(reflected_uniform_buffer_sizes == const_uniform_buffer_sizes);
-        }
-
-        shader
+        Self { reflection_json }
     }
 
     pub fn pipeline_config(
         self,
         resources: DepthTextureResources<'_>,
     ) -> PipelineConfig<'_, Vertex> {
-        let uniform_buffer_handle =
-            RawUniformBufferHandle::from_typed(resources.depth_texture_buffer);
+        // NOTE this must be in descriptor set layout order in the reflection json
+        #[rustfmt::skip]
+        let texture_handles = vec![
+            resources.texture,
+        ];
+
+        // NOTE this must be in descriptor set layout order in the reflection json
+        #[rustfmt::skip]
+        let uniform_buffer_handles = vec![
+            RawUniformBufferHandle::from_typed(resources.depth_texture_buffer),
+        ];
 
         PipelineConfig {
             shader: Box::new(self),
             vertices: resources.vertices,
             indices: resources.indices,
-            // NOTE if there are multipe textures or multipe buffers,
-            // these must match the order of ['pipelineLayout']['descriptorSetLayouts'] in the reflection json
-            // codegen will need to handle this ordering
-            texture_handles: vec![resources.texture],
-            uniform_buffer_handles: vec![uniform_buffer_handle],
+            texture_handles,
+            uniform_buffer_handles,
         }
     }
-
-    // release only
 
     fn vert_entry_point_name(&self) -> CString {
         let entry_point = self
@@ -84,15 +62,6 @@ impl DepthTextureShader {
             .clone();
 
         CString::new(entry_point).unwrap()
-    }
-
-    fn vert_spv(&self) -> Vec<u32> {
-        let bytes = include_bytes!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.vert.spv"
-        ));
-        let byte_reader = &mut std::io::Cursor::new(bytes);
-        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 
     fn frag_entry_point_name(&self) -> CString {
@@ -105,13 +74,22 @@ impl DepthTextureShader {
         CString::new(entry_point).unwrap()
     }
 
+    fn vert_spv(&self) -> Vec<u32> {
+        let bytes = include_bytes!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/shaders/compiled/depth_texture.vert.spv"
+        ));
+        let byte_reader = &mut Cursor::new(bytes);
+        read_spv(byte_reader).expect("failed to convert spv byte layout")
+    }
+
     fn frag_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/shaders/compiled/depth_texture.frag.spv"
         ));
-        let byte_reader = &mut std::io::Cursor::new(bytes);
-        ash::util::read_spv(byte_reader).expect("failed to convert spv byte layout")
+        let byte_reader = &mut Cursor::new(bytes);
+        read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 }
 
@@ -133,39 +111,7 @@ impl super::ShaderAtlasEntry for DepthTextureShader {
     }
 
     fn layout_bindings(&self) -> Vec<Vec<LayoutDescription>> {
-        self.reflection_json
-            .pipeline_layout
-            .descriptor_set_layouts
-            .iter()
-            .map(|dsl| {
-                use crate::shaders::json::ReflectedBindingType;
-
-                // NOTE this depends on the order from 'pipeline_config'
-                // exactly matching the order of layout descriptions
-                dsl.binding_ranges
-                    .iter()
-                    .map(|b| match b.descriptor_type {
-                        ReflectedBindingType::ConstantBuffer => {
-                            LayoutDescription::Uniform(UniformBufferDescription {
-                                size: b.size as u64,
-                                binding: b.binding,
-                                descriptor_count: 1,
-                            })
-                        }
-
-                        ReflectedBindingType::CombinedTextureSampler => {
-                            LayoutDescription::Texture(TextureDescription {
-                                layout: vk::ImageLayout::SHADER_READ_ONLY_OPTIMAL,
-                                binding: b.binding,
-                                descriptor_count: 1,
-                            })
-                        }
-
-                        b => todo!("unhandled binding type: {b:?}"),
-                    })
-                    .collect()
-            })
-            .collect()
+        self.reflection_json.layout_bindings()
     }
 
     fn precompiled_shaders(&self) -> super::PrecompiledShaders {
