@@ -1,10 +1,17 @@
 // GENERATED FILE (do not edit directly)
 
+use std::ffi::CString;
+use std::io::Cursor;
+
+use ash::util::read_spv;
+use ash::vk;
 use serde::Serialize;
 
 use crate::renderer::gpu_write::GPUWrite;
 use crate::renderer::vertex_description::VertexDescription;
 use crate::renderer::*;
+use crate::shaders::atlas::{PrecompiledShader, PrecompiledShaders, ShaderAtlasEntry};
+use crate::shaders::json::{ReflectedPipelineLayout, ReflectionJson};
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
@@ -71,15 +78,6 @@ impl VertexDescription for Vertex {
         ]
     }
 }
-use std::ffi::CString;
-use std::io::Cursor;
-
-use ash::util::read_spv;
-use ash::vk;
-
-use crate::renderer::{LayoutDescription, PipelineConfig, RawUniformBufferHandle};
-use crate::shaders::atlas::{PrecompiledShader, PrecompiledShaders, ShaderAtlasEntry};
-use crate::shaders::json::{ReflectedPipelineLayout, ReflectionJson};
 
 pub struct DepthTextureShader {
     pub reflection_json: ReflectionJson,
