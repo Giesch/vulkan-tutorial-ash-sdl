@@ -1,38 +1,10 @@
 #+title: Todo
 
 * Current
-- [-] begin generating rust source files from reflection json
-  using string format templates
-  - [X] MVPMatrices
-  - [X] snapshot tests
-  - [X] Vertex
-    - [X] just the struct
-    - [X] VertexDescription impl
-  - [X] nicer codegen templates
-  - [X] DepthTextureShader
-    need to use an annotation to know which struct is vertex?
-    - [X] generate DepthTextureResources
-      - [X] assume vertices and indices are required
-      - [X] add texture based on Sampler2D
-      - [X] get Vertex type based on entry point param struct
-    - [X] generate methods
-      - pipeline_layout
-        either requires the json or inlining the data from it
-      - precompiled_shaders
-        can be completely inlined/hardcoded
-      - layout_bindings
-        this needs a smarter solution; maybe a trait?
-        some way for the impl code to live outside a template
-        maybe methods on ReflectionJson?
-  - [X] full ShaderAtlas
-    one entry per slang file
-  - [ ] generated docs
-    - [ ] module doc w/source file name
-    - [ ] struct docs w/source param name for ParameterBlock element
-  - [ ] assert struct fields are ordered correctly
-    before source gen (leave the game runnable)
-    assertions in generation or generated unit tests?
-    unit tests from shader examples? ie testing generator, not generated code
+- [ ] add tests/assertions that generated struct fields are ordered correctly
+  assert before source gen (leave the game runnable)
+  assertions before codegen or generated unit tests?
+  unit tests from shader examples? ie testing generator, not generated code
 
 
 * Next

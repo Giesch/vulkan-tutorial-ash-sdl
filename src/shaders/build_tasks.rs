@@ -212,6 +212,10 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
     let shader_atlas_entry_file = GeneratedFile {
         file_path,
         content: ShaderAtlasEntryModule {
+            module_doc_lines: vec![format!(
+                "generated from slang shader: {}",
+                reflection_json.source_file_name
+            )],
             struct_defs,
             vertex_impl_blocks,
             shader_impl,
@@ -259,6 +263,7 @@ struct ShaderAtlasModule {
 #[derive(Template)]
 #[template(path = "shader_atlas_entry.rs.askama", escape = "none")]
 struct ShaderAtlasEntryModule {
+    module_doc_lines: Vec<String>,
     struct_defs: Vec<GeneratedStructDefinition>,
     vertex_impl_blocks: Vec<VertexImplBlock>,
     shader_impl: GeneratedShaderImpl,

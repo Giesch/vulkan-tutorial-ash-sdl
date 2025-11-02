@@ -1,5 +1,9 @@
 // GENERATED FILE (do not edit directly)
 
+{% for line in module_doc_lines -%}
+//! {{ line }}
+{%- endfor %}
+
 use std::ffi::CString;
 use std::io::Cursor;
 
