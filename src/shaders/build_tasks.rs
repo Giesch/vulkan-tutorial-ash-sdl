@@ -71,12 +71,15 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         },
     ];
 
+    let mut vertex_type_name = None;
     for vert_param in &reflection_json.vertex_entry_point.parameters {
         match vert_param {
             EntryPointParameter::Scalar(ScalarEntryPointParameter::Semantic(_)) => {}
             EntryPointParameter::Scalar(ScalarEntryPointParameter::Bound(_)) => todo!(),
 
             EntryPointParameter::Struct(struct_param) => {
+                vertex_type_name = Some(struct_param.type_name.to_string());
+
                 let mut generated_fields = vec![];
                 for field in &struct_param.fields {
                     if let Some(generated_field) = gather_struct_defs(field, &mut struct_defs) {
@@ -149,6 +152,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
 
     struct_defs.reverse();
 
+    let vertex_type_name = vertex_type_name.expect("no struct parameter for vertex entry point");
     let shader_prefix = reflection_json
         .source_file_name
         .replace(".slang", "")
@@ -157,8 +161,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         .into_iter()
         .map(|r| {
             let type_name = match r.resource_type {
-                // FIXME where to get vertex type name?
-                RequiredResourceType::VertexBuffer => "Vec<Vertex>".to_string(),
+                RequiredResourceType::VertexBuffer => format!("Vec<{vertex_type_name}>"),
                 RequiredResourceType::IndexBuffer => "Vec<u32>".to_string(),
                 RequiredResourceType::Texture => "&'a TextureHandle".to_string(),
                 RequiredResourceType::UniformBuffer => {

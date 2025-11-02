@@ -9,12 +9,13 @@
     - [X] just the struct
     - [X] VertexDescription impl
   - [X] nicer codegen templates
-  - [ ] DepthTextureShader
+  - [-] DepthTextureShader
     need to use an annotation to know which struct is vertex?
-    - [ ] how to generate DepthTextureResources?
-      - assume vertices and indices are required
-      - add texture based on Sampler2D
-      - how to handle uniform buffers?
+    - [X] generate DepthTextureResources
+      - [X] assume vertices and indices are required
+      - [X] add texture based on Sampler2D
+      - [X] get Vertex type based on entry point param struct
+    - [ ] generate methods
   - [ ] full ShaderAtlas
   - [ ] generated docs
     - [ ] module doc w/source file name
@@ -23,18 +24,6 @@
     before source gen (leave the game runnable)
     assertions in generation or generated unit tests?
     unit tests from shader examples? ie testing generator, not generated code
-
-- [ ] generate vertex attributes?
-  - discord links
-    https://discord.com/channels/1303735196696445038/1387610899787022438/1387610899787022438
-    https://discord.com/channels/1303735196696445038/1419640000609386496/1420377508683186258
-    https://discord.com/channels/1303735196696445038/1305995870046650368/1410741801467510867
-  - playground user attributes example
-    - https://github.com/shader-slang/slang-playground/blob/1b97fa8bdf2a6cb2b18ca2d8e8d5e4b54b6eba51/public/demos/image-from-url.slang
-    - https://github.com/shader-slang/slang-playground/blob/main/engine/slang-compilation-engine/src/slang/playground.slang
-    - this has examples of Var and Function attribute targets; what about fields?
-      https://github.com/shader-slang/slang/blob/2491ac5f42d78d082d4afa6416906fad9b32ea80/source/slang/slang-syntax.h#L379
-      there's also struct and param, but not field
 
 
 * Next
@@ -203,6 +192,15 @@
 
 - [ ] document that ParameterBlock element must always be a struct
   ie Platform<Matrix4x4> is not supported; there must be a wrapper
+
+- [ ] user attributes
+  https://discord.com/channels/1303735196696445038/1387610899787022438/1387610899787022438
+  https://discord.com/channels/1303735196696445038/1419640000609386496/1420377508683186258
+  https://discord.com/channels/1303735196696445038/1305995870046650368/1410741801467510867
+  - how to implement? the playground examples use typescript & webgpu
+    https://github.com/shader-slang/slang-playground/blob/1b97fa8bdf2a6cb2b18ca2d8e8d5e4b54b6eba51/public/demos/image-from-url.slang
+    https://github.com/shader-slang/slang-playground/blob/main/engine/slang-compilation-engine/src/slang/playground.slang
+
 
 * Roc Questions
 - [ ] are ref-counted platform resource heaps still going to be a thing?
