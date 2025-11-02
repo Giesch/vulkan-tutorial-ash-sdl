@@ -2,23 +2,11 @@ use std::ffi::CString;
 
 use ash::vk;
 
-pub use crate::generated::shader_atlas::depth_texture::*;
+pub use crate::generated::shader_atlas::*;
 
 use crate::renderer::LayoutDescription;
 
 use super::json::ReflectedPipelineLayout;
-
-pub struct ShaderAtlas {
-    pub depth_texture: DepthTextureShader,
-}
-
-impl ShaderAtlas {
-    pub fn init() -> Self {
-        Self {
-            depth_texture: DepthTextureShader::init(),
-        }
-    }
-}
 
 pub trait ShaderAtlasEntry {
     // dev only

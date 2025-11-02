@@ -24,7 +24,7 @@
         this needs a smarter solution; maybe a trait?
         some way for the impl code to live outside a template
         maybe methods on ReflectionJson?
-  - [ ] full ShaderAtlas
+  - [X] full ShaderAtlas
     one entry per slang file
   - [ ] generated docs
     - [ ] module doc w/source file name

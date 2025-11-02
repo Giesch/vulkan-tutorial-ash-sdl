@@ -222,9 +222,18 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
 
     let shader_names = [shader_name];
     let module_names = shader_names.iter().map(|s| s.to_string()).collect();
+    let entries = shader_names
+        .iter()
+        .map(|name| (name.to_string(), name.to_pascal_case()))
+        .collect();
     let shader_atlas_module = GeneratedFile {
         file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
-        content: ShaderAtlasModule { module_names }.render().unwrap(),
+        content: ShaderAtlasModule {
+            module_names,
+            entries,
+        }
+        .render()
+        .unwrap(),
     };
 
     let top_generated_module = GeneratedFile {
@@ -243,6 +252,8 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
 #[template(path = "shader_atlas.rs.askama", escape = "none")]
 struct ShaderAtlasModule {
     module_names: Vec<String>,
+    /// field name and type name prefix
+    entries: Vec<(String, String)>,
 }
 
 #[derive(Template)]
