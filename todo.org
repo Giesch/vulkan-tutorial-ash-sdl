@@ -1,11 +1,6 @@
 #+title: Todo
 
 * Current
-- [ ] add tests/assertions that generated struct fields are ordered correctly
-  assert before source gen (leave the game runnable)
-  assertions before codegen or generated unit tests?
-  unit tests from shader examples? ie testing generator, not generated code
-
 
 * Next
 - [ ] signed distance fields / animated rick example
@@ -13,6 +8,15 @@
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
 - [ ] add sprite batch example from SDL_gpu
+
+- [ ] add assertions/tests that struct fields are laid out correctly
+  - this needs a more complex example, probably with nested structs
+    align(16) solves the problem for the depth texture shader
+  - what's the right way to get the size of a vector or matrix?
+    std::mem::size_of::<glam::Vec3>() ?
+    the offset_of! macro that VertexDescription uses?
+  - assert on order before writing generated source (leave the game runnable)
+  - unit test this with a 'bad' slang file
 
 - [ ] change ShaderAtlasEntry to allow optional vert/frag entry points
   how does that work with vertex descriptions
