@@ -151,7 +151,7 @@ pub struct DepthTextureGame {
 
 #[allow(unused)]
 impl DepthTextureGame {
-    fn load_vertices() -> Result<(Vec<Vertex>, Vec<u32>), anyhow::Error> {
+    fn load_vertices() -> anyhow::Result<(Vec<Vertex>, Vec<u32>)> {
         let vertices = vec![
             Vertex {
                 position: Vec3::new(-0.5, -0.5, 0.0),

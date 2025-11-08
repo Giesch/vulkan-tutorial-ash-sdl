@@ -14,7 +14,7 @@ pub struct ShaderChanges {
 impl ShaderChanges {
     /// gathers all shader source edit events since the last frame
     /// (or since this function was last called)
-    pub fn events(&mut self) -> std::result::Result<Vec<notify::Event>, anyhow::Error> {
+    pub fn events(&mut self) -> anyhow::Result<Vec<notify::Event>> {
         let events: notify::Result<Vec<notify::Event>> = self.receiver.try_iter().collect();
         let mut events = events?;
 

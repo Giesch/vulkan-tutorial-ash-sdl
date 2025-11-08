@@ -19,7 +19,7 @@ pub struct ReflectedShader {
     pub reflection_json: ReflectionJson,
 }
 
-fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
+fn prepare_reflected_shader(source_file_name: &str) -> anyhow::Result<ReflectedShader> {
     let global_session = slang::GlobalSession::new().unwrap();
     let search_path = CString::new("shaders/source").unwrap();
 
@@ -87,7 +87,7 @@ fn prepare_reflected_shader(source_file_name: &str) -> Result<ReflectedShader, a
 }
 
 #[cfg(debug_assertions)]
-pub fn dev_compile_slang_shaders(source_file_name: &str) -> Result<ReflectedShader, anyhow::Error> {
+pub fn dev_compile_slang_shaders(source_file_name: &str) -> anyhow::Result<ReflectedShader> {
     prepare_reflected_shader(source_file_name)
 }
 
@@ -119,7 +119,7 @@ fn compile_shader(
     entry_point: &slang::EntryPoint,
     session: &slang::Session,
     module: &slang::Module,
-) -> Result<CompiledShader, anyhow::Error> {
+) -> anyhow::Result<CompiledShader> {
     let program = session.create_composite_component_type(&[
         module.downcast().clone(),
         entry_point.downcast().clone(),

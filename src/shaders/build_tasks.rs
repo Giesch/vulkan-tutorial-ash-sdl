@@ -7,7 +7,7 @@ use crate::util::*;
 
 use super::{ReflectedShader, json::*, prepare_reflected_shader};
 
-pub fn write_precompiled_shaders(generate_rust_source: bool) -> Result<(), anyhow::Error> {
+pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<()> {
     let shaders_source_dir = manifest_path(["shaders", "source"]);
     let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
         .filter_map(|entry_res| entry_res.ok())
