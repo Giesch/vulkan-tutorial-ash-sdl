@@ -40,11 +40,12 @@
   https://docs.shader-slang.org/en/latest/shader-cursors.html
   can we do a strongly-typed version of this?
 
-
-- [ ] add sprite batch example from SDL_gpu
+- [ ] sprite batch example from SDL_gpu
 - [ ] go through 'learn opengl' with this renderer
 - [ ] do the official vulkan compute shader tutorial
   make it one of the examples here
+- [ ] 3D SDF example
+  https://www.youtube.com/watch?v=-Xb3Kk3HhIw
 
 - [ ] add assertions/tests that struct fields are laid out correctly
   - this needs a more complex example, probably with nested structs

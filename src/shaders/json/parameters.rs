@@ -82,6 +82,7 @@ pub struct SemanticScalarEntryPointParameter {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StructField {
+    Scalar(ScalarStructField),
     Vector(VectorStructField),
     Struct(StructStructField),
     Matrix(MatrixStructField),
@@ -130,6 +131,14 @@ pub struct SemanticVectorStructField {
     pub semantic_name: String,
     pub element_count: usize,
     pub element_type: VectorElementType,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ScalarStructField {
+    pub field_name: String,
+    pub binding: Binding,
+    pub scalar_type: ScalarType,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -1,14 +1,18 @@
 pub mod depth_texture;
 pub use depth_texture::*;
+pub mod pixel_rick;
+pub use pixel_rick::*;
 
 pub struct ShaderAtlas {
     pub depth_texture: DepthTextureShader,
+    pub pixel_rick: PixelRickShader,
 }
 
 impl ShaderAtlas {
     pub fn init() -> Self {
         Self {
             depth_texture: DepthTextureShader::init(),
+            pixel_rick: PixelRickShader::init(),
         }
     }
 }

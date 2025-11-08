@@ -20,6 +20,37 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
         })
         .collect();
 
+    // generate top-level modules
+    if generate_rust_source {
+        let module_names: Vec<String> = slang_file_names
+            .iter()
+            .map(|file_name| file_name.replace(".slang", ""))
+            .collect();
+        let entries: Vec<(String, String)> = module_names
+            .iter()
+            .map(|name| (name.clone(), name.to_pascal_case()))
+            .collect();
+
+        let shader_atlas_module = ShaderAtlasModule {
+            module_names,
+            entries,
+        };
+
+        let shader_atlas_file = GeneratedFile {
+            file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
+            content: shader_atlas_module.render().unwrap(),
+        };
+
+        write_generated_file(&shader_atlas_file)?;
+
+        let top_generated_module = GeneratedFile {
+            file_path: manifest_path(["src", "generated.rs"]),
+            content: "pub mod shader_atlas;".to_string(),
+        };
+
+        write_generated_file(&top_generated_module)?;
+    }
+
     for slang_file_name in &slang_file_names {
         let ReflectedShader {
             vertex_shader,
@@ -28,11 +59,8 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
         } = prepare_reflected_shader(slang_file_name)?;
 
         if generate_rust_source {
-            let generated_files = build_generated_source_files(&reflection_json);
-            for source_file in &generated_files {
-                std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
-                std::fs::write(&source_file.file_path, &source_file.content)?;
-            }
+            let source_file = build_generated_source_file(&reflection_json);
+            write_generated_file(&source_file)?;
         }
 
         let source_file_name = &reflection_json.source_file_name;
@@ -57,7 +85,7 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
     Ok(())
 }
 
-fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<GeneratedFile> {
+fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFile {
     let mut struct_defs = vec![];
     let mut vertex_impl_blocks = vec![];
     let mut required_resources = vec![
@@ -209,7 +237,8 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         resources_texture_fields,
         resources_uniform_buffer_fields,
     };
-    let shader_atlas_entry_file = GeneratedFile {
+
+    GeneratedFile {
         file_path,
         content: ShaderAtlasEntryModule {
             module_doc_lines: vec![format!(
@@ -222,34 +251,7 @@ fn build_generated_source_files(reflection_json: &ReflectionJson) -> Vec<Generat
         }
         .render()
         .unwrap(),
-    };
-
-    let shader_names = [shader_name];
-    let module_names = shader_names.iter().map(|s| s.to_string()).collect();
-    let entries = shader_names
-        .iter()
-        .map(|name| (name.to_string(), name.to_pascal_case()))
-        .collect();
-    let shader_atlas_module = GeneratedFile {
-        file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
-        content: ShaderAtlasModule {
-            module_names,
-            entries,
-        }
-        .render()
-        .unwrap(),
-    };
-
-    let top_generated_module = GeneratedFile {
-        file_path: manifest_path(["src", "generated.rs"]),
-        content: "pub mod shader_atlas;".to_string(),
-    };
-
-    vec![
-        shader_atlas_entry_file,
-        shader_atlas_module,
-        top_generated_module,
-    ]
+    }
 }
 
 #[derive(Template)]
@@ -285,6 +287,18 @@ fn gather_struct_defs(
 ) -> Option<GeneratedStructFieldDefinition> {
     match field {
         StructField::Resource(_) => None,
+
+        StructField::Scalar(scalar) => {
+            let field_type = match scalar.scalar_type {
+                ScalarType::Float32 => "f32",
+                ScalarType::Uint32 => "u32",
+            };
+
+            Some(GeneratedStructFieldDefinition {
+                field_name: scalar.field_name.to_snake_case(),
+                type_name: field_type.to_string(),
+            })
+        }
 
         StructField::Vector(VectorStructField::Semantic(_)) => None,
         StructField::Vector(VectorStructField::Bound(vector)) => {
@@ -385,6 +399,12 @@ struct GeneratedFile {
     content: String,
 }
 
+fn write_generated_file(source_file: &GeneratedFile) -> anyhow::Result<()> {
+    std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
+    std::fs::write(&source_file.file_path, &source_file.content)?;
+    Ok(())
+}
+
 struct VertexImplBlock {
     type_name: String,
     attribute_descriptions: Vec<VertexAttributeDescription>,
@@ -414,23 +434,24 @@ mod tests {
 
     #[test]
     fn generated_files() {
-        let shader = prepare_reflected_shader("depth_texture.slang").unwrap();
-        let mut generated_files = build_generated_source_files(&shader.reflection_json);
+        panic!("FIXME");
+        // let shader = prepare_reflected_shader("depth_texture.slang").unwrap();
+        // let mut generated_files = build_generated_source_file(&shader.reflection_json);
 
-        for source_file in &mut generated_files {
-            source_file.file_path = source_file
-                .file_path
-                .strip_prefix(env!("CARGO_MANIFEST_DIR"))
-                .unwrap()
-                .to_owned();
+        // for source_file in &mut generated_files {
+        //     source_file.file_path = source_file
+        //         .file_path
+        //         .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+        //         .unwrap()
+        //         .to_owned();
 
-            let info = serde_json::json!({
-                "file_path": &source_file.file_path
-            });
+        //     let info = serde_json::json!({
+        //         "file_path": &source_file.file_path
+        //     });
 
-            insta::with_settings!({ info => &info, omit_expression => true }, {
-                insta::assert_snapshot!(source_file.content);
-            });
-        }
+        //     insta::with_settings!({ info => &info, omit_expression => true }, {
+        //         insta::assert_snapshot!(source_file.content);
+        //     });
+        // }
     }
 }

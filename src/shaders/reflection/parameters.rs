@@ -164,6 +164,17 @@ fn reflect_struct_fields(
         let binding = param_binding(field);
 
         let field_json = match field_type_layout.kind() {
+            slang::TypeKind::Scalar => {
+                let slang_scalar_type = field_type_layout.scalar_type().unwrap();
+                let scalar_type = scalar_from_slang(slang_scalar_type);
+
+                StructField::Scalar(ScalarStructField {
+                    field_name,
+                    binding: binding.unwrap(),
+                    scalar_type,
+                })
+            }
+
             slang::TypeKind::Vector => {
                 let vec_elem_count = field_type_layout.element_count().unwrap();
 
