@@ -3,7 +3,7 @@ mod game;
 mod generated;
 mod renderer;
 mod shaders;
-mod util;
+pub mod util;
 
 #[cfg(debug_assertions)]
 mod shader_watcher;

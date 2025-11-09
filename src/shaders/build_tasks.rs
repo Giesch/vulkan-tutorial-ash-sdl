@@ -1,15 +1,21 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use askama::Template;
 use heck::{ToPascalCase, ToSnakeCase};
 
-use crate::util::*;
+use crate::util::relative_path;
 
 use super::{ReflectedShader, json::*, prepare_reflected_shader};
 
-pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<()> {
-    let shaders_source_dir = manifest_path(["shaders", "source"]);
-    let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
+pub struct Config {
+    pub generate_rust_source: bool,
+    pub rust_source_dir: PathBuf,
+    pub shaders_source_dir: PathBuf,
+    pub compiled_shaders_dir: PathBuf,
+}
+
+pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
+    let slang_file_names: Vec<_> = std::fs::read_dir(&config.shaders_source_dir)?
         .filter_map(|entry_res| entry_res.ok())
         .map(|dir_entry| dir_entry.path())
         .filter(|path| path.extension().is_some_and(|ext| ext == "slang"))
@@ -23,8 +29,12 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
     let mut generated_source_files = vec![];
 
     // generate top-level rust modules
-    if generate_rust_source {
-        add_top_level_rust_modules(&slang_file_names, &mut generated_source_files);
+    if config.generate_rust_source {
+        add_top_level_rust_modules(
+            &config.rust_source_dir,
+            &slang_file_names,
+            &mut generated_source_files,
+        );
     }
 
     // generate per-shader files
@@ -35,27 +45,27 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
             reflection_json,
         } = prepare_reflected_shader(slang_file_name)?;
 
-        if generate_rust_source {
-            let source_file = build_generated_source_file(&reflection_json);
+        if config.generate_rust_source {
+            let source_file =
+                build_generated_source_file(&config.rust_source_dir, &reflection_json);
             generated_source_files.push(source_file);
         }
 
         let source_file_name = &reflection_json.source_file_name;
 
-        let compiled_shaders_dir = manifest_path(["shaders", "compiled"]);
-        std::fs::create_dir_all(&compiled_shaders_dir)?;
+        std::fs::create_dir_all(&config.compiled_shaders_dir)?;
 
         let reflection_json = serde_json::to_string_pretty(&reflection_json)?;
         let reflection_json_file_name = source_file_name.replace(".slang", ".json");
-        let json_path = manifest_path(["shaders", "compiled", &reflection_json_file_name]);
+        let json_path = &config.compiled_shaders_dir.join(&reflection_json_file_name);
         std::fs::write(json_path, reflection_json)?;
 
         let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
-        let vert_path = manifest_path(["shaders", "compiled", &spv_vert_file_name]);
+        let vert_path = &config.compiled_shaders_dir.join(&spv_vert_file_name);
         std::fs::write(vert_path, vertex_shader.shader_bytecode.as_slice())?;
 
         let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
-        let frag_path = manifest_path(["shaders", "compiled", &spv_frag_file_name]);
+        let frag_path = &config.compiled_shaders_dir.join(&spv_frag_file_name);
         std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
     }
 
@@ -67,6 +77,7 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
 }
 
 fn add_top_level_rust_modules(
+    rust_src_dir: &Path,
     slang_file_names: &[String],
     generated_source_files: &mut Vec<GeneratedFile>,
 ) {
@@ -85,19 +96,22 @@ fn add_top_level_rust_modules(
     };
 
     let shader_atlas_file = GeneratedFile {
-        absolute_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
+        absolute_path: rust_src_dir.join(relative_path(["generated", "shader_atlas.rs"])),
         content: shader_atlas_module.render().unwrap(),
     };
     generated_source_files.push(shader_atlas_file);
 
     let top_generated_module = GeneratedFile {
-        absolute_path: manifest_path(["src", "generated.rs"]),
+        absolute_path: rust_src_dir.join(relative_path(["generated.rs"])),
         content: "pub mod shader_atlas;".to_string(),
     };
     generated_source_files.push(top_generated_module);
 }
 
-fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFile {
+fn build_generated_source_file(
+    rust_src_dir: &Path,
+    reflection_json: &ReflectionJson,
+) -> GeneratedFile {
     let mut struct_defs = vec![];
     let mut vertex_impl_blocks = vec![];
     let mut required_resources = vec![
@@ -226,7 +240,7 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
 
     let shader_name = reflection_json.source_file_name.replace(".slang", "");
     let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
-    let file_path = manifest_path(["src", "generated", "shader_atlas", &file_name]);
+    let file_path = rust_src_dir.join(relative_path(["generated", "shader_atlas", &file_name]));
 
     // NOTE these must be in descriptor set layout order in the reflection json
     let resources_texture_fields: Vec<String> = required_resources
@@ -407,6 +421,7 @@ struct GeneratedStructFieldDefinition {
 }
 
 struct GeneratedFile {
+    // TODO change this to relative
     absolute_path: PathBuf,
     content: String,
 }
@@ -444,7 +459,11 @@ enum RequiredResourceType {
 mod tests {
     use super::*;
 
+    use crate::util::manifest_path;
+
     fn build_generated_rust_files() -> anyhow::Result<Vec<GeneratedFile>> {
+        let rust_source_dir = manifest_path(["src"]);
+
         let shaders_source_dir = manifest_path(["shaders", "source"]);
         let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
             .filter_map(|entry_res| entry_res.ok())
@@ -460,12 +479,17 @@ mod tests {
         let mut generated_source_files = vec![];
 
         // generate top-level rust modules
-        add_top_level_rust_modules(&slang_file_names, &mut generated_source_files);
+        add_top_level_rust_modules(
+            &rust_source_dir,
+            &slang_file_names,
+            &mut generated_source_files,
+        );
 
         // generate per-shader files
         for slang_file_name in &slang_file_names {
             let shader = prepare_reflected_shader(slang_file_name)?;
-            let source_file = build_generated_source_file(&shader.reflection_json);
+            let source_file =
+                build_generated_source_file(&rust_source_dir, &shader.reflection_json);
             generated_source_files.push(source_file);
         }
 
