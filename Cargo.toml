@@ -25,7 +25,8 @@ heck = "0.5.0"
 askama = "0.14.0"
 
 [dev-dependencies]
-insta = { version = "1.43.2", features = ["json"] }
+insta = { version = "1.43.2", features = ["json", "glob"] }
+uuid = { version = "1.18.1", features = ["v4"] }
 
 [profile.dev.package."*"]
 opt-level = 3

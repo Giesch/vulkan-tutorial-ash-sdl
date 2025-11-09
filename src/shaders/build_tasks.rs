@@ -20,37 +20,14 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
         })
         .collect();
 
-    // generate top-level modules
+    let mut generated_source_files = vec![];
+
+    // generate top-level rust modules
     if generate_rust_source {
-        let module_names: Vec<String> = slang_file_names
-            .iter()
-            .map(|file_name| file_name.replace(".slang", ""))
-            .collect();
-        let entries: Vec<(String, String)> = module_names
-            .iter()
-            .map(|name| (name.clone(), name.to_pascal_case()))
-            .collect();
-
-        let shader_atlas_module = ShaderAtlasModule {
-            module_names,
-            entries,
-        };
-
-        let shader_atlas_file = GeneratedFile {
-            file_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
-            content: shader_atlas_module.render().unwrap(),
-        };
-
-        write_generated_file(&shader_atlas_file)?;
-
-        let top_generated_module = GeneratedFile {
-            file_path: manifest_path(["src", "generated.rs"]),
-            content: "pub mod shader_atlas;".to_string(),
-        };
-
-        write_generated_file(&top_generated_module)?;
+        add_top_level_rust_modules(&slang_file_names, &mut generated_source_files);
     }
 
+    // generate per-shader files
     for slang_file_name in &slang_file_names {
         let ReflectedShader {
             vertex_shader,
@@ -60,7 +37,7 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
 
         if generate_rust_source {
             let source_file = build_generated_source_file(&reflection_json);
-            write_generated_file(&source_file)?;
+            generated_source_files.push(source_file);
         }
 
         let source_file_name = &reflection_json.source_file_name;
@@ -82,7 +59,42 @@ pub fn write_precompiled_shaders(generate_rust_source: bool) -> anyhow::Result<(
         std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
     }
 
+    for source_file in &generated_source_files {
+        write_generated_file(source_file)?;
+    }
+
     Ok(())
+}
+
+fn add_top_level_rust_modules(
+    slang_file_names: &[String],
+    generated_source_files: &mut Vec<GeneratedFile>,
+) {
+    let module_names: Vec<String> = slang_file_names
+        .iter()
+        .map(|file_name| file_name.replace(".slang", ""))
+        .collect();
+    let entries: Vec<(String, String)> = module_names
+        .iter()
+        .map(|name| (name.clone(), name.to_pascal_case()))
+        .collect();
+
+    let shader_atlas_module = ShaderAtlasModule {
+        module_names,
+        entries,
+    };
+
+    let shader_atlas_file = GeneratedFile {
+        absolute_path: manifest_path(["src", "generated", "shader_atlas.rs"]),
+        content: shader_atlas_module.render().unwrap(),
+    };
+    generated_source_files.push(shader_atlas_file);
+
+    let top_generated_module = GeneratedFile {
+        absolute_path: manifest_path(["src", "generated.rs"]),
+        content: "pub mod shader_atlas;".to_string(),
+    };
+    generated_source_files.push(top_generated_module);
 }
 
 fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFile {
@@ -239,7 +251,7 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
     };
 
     GeneratedFile {
-        file_path,
+        absolute_path: file_path,
         content: ShaderAtlasEntryModule {
             module_doc_lines: vec![format!(
                 "generated from slang shader: {}",
@@ -395,13 +407,13 @@ struct GeneratedStructFieldDefinition {
 }
 
 struct GeneratedFile {
-    file_path: PathBuf,
+    absolute_path: PathBuf,
     content: String,
 }
 
 fn write_generated_file(source_file: &GeneratedFile) -> anyhow::Result<()> {
-    std::fs::create_dir_all(source_file.file_path.parent().unwrap())?;
-    std::fs::write(&source_file.file_path, &source_file.content)?;
+    std::fs::create_dir_all(source_file.absolute_path.parent().unwrap())?;
+    std::fs::write(&source_file.absolute_path, &source_file.content)?;
     Ok(())
 }
 
@@ -432,26 +444,67 @@ enum RequiredResourceType {
 mod tests {
     use super::*;
 
+    fn build_generated_rust_files() -> anyhow::Result<Vec<GeneratedFile>> {
+        let shaders_source_dir = manifest_path(["shaders", "source"]);
+        let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
+            .filter_map(|entry_res| entry_res.ok())
+            .map(|dir_entry| dir_entry.path())
+            .filter(|path| path.extension().is_some_and(|ext| ext == "slang"))
+            .filter_map(|path| {
+                path.file_name()
+                    .and_then(|os_str| os_str.to_str())
+                    .map(|s| s.to_string())
+            })
+            .collect();
+
+        let mut generated_source_files = vec![];
+
+        // generate top-level rust modules
+        add_top_level_rust_modules(&slang_file_names, &mut generated_source_files);
+
+        // generate per-shader files
+        for slang_file_name in &slang_file_names {
+            let shader = prepare_reflected_shader(slang_file_name)?;
+            let source_file = build_generated_source_file(&shader.reflection_json);
+            generated_source_files.push(source_file);
+        }
+
+        Ok(generated_source_files)
+    }
+
     #[test]
     fn generated_files() {
-        panic!("FIXME");
-        // let shader = prepare_reflected_shader("depth_texture.slang").unwrap();
-        // let mut generated_files = build_generated_source_file(&shader.reflection_json);
+        let generated_rust_files = build_generated_rust_files().unwrap();
 
-        // for source_file in &mut generated_files {
-        //     source_file.file_path = source_file
-        //         .file_path
-        //         .strip_prefix(env!("CARGO_MANIFEST_DIR"))
-        //         .unwrap()
-        //         .to_owned();
+        // this temp file song and dance
+        // allows the generated snapshot files to have names instead of numbers,
+        // which means the test won't fail on changing file order
+        let tmp_prefix = format!("shader-test-{}", uuid::Uuid::new_v4());
+        let tmp_dir = std::env::temp_dir().join(tmp_prefix);
+        for source_file in &generated_rust_files {
+            let relative_path = source_file
+                .absolute_path
+                .strip_prefix(env!("CARGO_MANIFEST_DIR"))
+                .unwrap()
+                .to_owned();
 
-        //     let info = serde_json::json!({
-        //         "file_path": &source_file.file_path
-        //     });
+            let tmp_path = tmp_dir.join(&relative_path);
+            std::fs::create_dir_all(&tmp_path.parent().unwrap()).unwrap();
+            std::fs::write(tmp_path, &source_file.content).unwrap();
+        }
 
-        //     insta::with_settings!({ info => &info, omit_expression => true }, {
-        //         insta::assert_snapshot!(source_file.content);
-        //     });
-        // }
+        insta::glob!(&tmp_dir, "**/*.rs", |tmp_path| {
+            let relative_path = tmp_path.strip_prefix(&tmp_dir).unwrap().to_owned();
+
+            let info = serde_json::json!({
+                "relative_path": &relative_path
+            });
+
+            let content = std::fs::read_to_string(tmp_path).unwrap();
+
+            insta::with_settings!({ info => &info, omit_expression => true }, {
+                insta::assert_snapshot!(content);
+            });
+        });
     }
 }
