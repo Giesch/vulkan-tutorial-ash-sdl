@@ -1,7 +1,7 @@
 ---
 source: src/shaders/build_tasks.rs
 info:
-  file_path: /tmp/shaders-test/src/generated/shader_atlas.rs
+  relative_path: src/generated/shader_atlas.rs
 ---
 pub mod depth_texture;
 pub use depth_texture::*;

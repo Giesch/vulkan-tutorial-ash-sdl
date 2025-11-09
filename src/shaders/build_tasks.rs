@@ -465,64 +465,22 @@ mod tests {
 
     use crate::util::manifest_path;
 
-    fn build_generated_rust_files() -> anyhow::Result<Vec<GeneratedFile>> {
-        let rust_source_dir = manifest_path(["src"]);
-
-        let shaders_source_dir = manifest_path(["shaders", "source"]);
-        let slang_file_names: Vec<_> = std::fs::read_dir(shaders_source_dir)?
-            .filter_map(|entry_res| entry_res.ok())
-            .map(|dir_entry| dir_entry.path())
-            .filter(|path| path.extension().is_some_and(|ext| ext == "slang"))
-            .filter_map(|path| {
-                path.file_name()
-                    .and_then(|os_str| os_str.to_str())
-                    .map(|s| s.to_string())
-            })
-            .collect();
-
-        let mut generated_source_files = vec![];
-
-        // generate top-level rust modules
-        add_top_level_rust_modules(
-            &rust_source_dir,
-            &slang_file_names,
-            &mut generated_source_files,
-        );
-
-        // generate per-shader files
-        for slang_file_name in &slang_file_names {
-            let shader = prepare_reflected_shader(slang_file_name)?;
-            let source_file =
-                build_generated_source_file(&rust_source_dir, &shader.reflection_json);
-            generated_source_files.push(source_file);
-        }
-
-        Ok(generated_source_files)
-    }
-
     #[test]
     fn generated_files() {
-        let generated_rust_files = build_generated_rust_files().unwrap();
-
-        // this temp file song and dance
-        // allows the generated snapshot files to have names instead of numbers,
-        // which means the test won't fail on changing file order
         let tmp_prefix = format!("shader-test-{}", uuid::Uuid::new_v4());
-        let tmp_dir = std::env::temp_dir().join(tmp_prefix);
-        for source_file in &generated_rust_files {
-            let relative_path = source_file
-                .absolute_path
-                .strip_prefix(env!("CARGO_MANIFEST_DIR"))
-                .unwrap()
-                .to_owned();
+        let tmp_dir_path = std::env::temp_dir().join(tmp_prefix);
 
-            let tmp_path = tmp_dir.join(&relative_path);
-            std::fs::create_dir_all(tmp_path.parent().unwrap()).unwrap();
-            std::fs::write(tmp_path, &source_file.content).unwrap();
-        }
+        let config = Config {
+            generate_rust_source: true,
+            rust_source_dir: tmp_dir_path.join("src"),
+            shaders_source_dir: manifest_path(["shaders", "source"]),
+            compiled_shaders_dir: tmp_dir_path.join(relative_path(["shaders", "compiled"])),
+        };
 
-        insta::glob!(&tmp_dir, "**/*.rs", |tmp_path| {
-            let relative_path = tmp_path.strip_prefix(&tmp_dir).unwrap().to_owned();
+        write_precompiled_shaders(config).unwrap();
+
+        insta::glob!(&tmp_dir_path, "**/*.{rs,json}", |tmp_path| {
+            let relative_path = tmp_path.strip_prefix(&tmp_dir_path).unwrap().to_owned();
 
             let info = serde_json::json!({
                 "relative_path": &relative_path

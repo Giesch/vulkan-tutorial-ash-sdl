@@ -1,11 +1,11 @@
 ---
 source: src/shaders/build_tasks.rs
 info:
-  file_path: /tmp/shaders-test/src/generated/shader_atlas/depth_texture.rs
+  relative_path: src/generated/shader_atlas/pixel_rick.rs
 ---
 // GENERATED FILE (do not edit directly)
 
-//! generated from slang shader: depth_texture.slang
+//! generated from slang shader: pixel_rick.slang
 
 use std::ffi::CString;
 use std::io::Cursor;
@@ -22,41 +22,39 @@ use crate::shaders::json::{ReflectedPipelineLayout, ReflectionJson};
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
-pub struct DepthTexture {
-    pub mvp: MVPMatrices,
+pub struct PixelRick {
+    pub circle: Circle,
 }
 
-impl GPUWrite for DepthTexture {}
+impl GPUWrite for PixelRick {}
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
-pub struct MVPMatrices {
-    pub model: glam::Mat4,
-    pub view: glam::Mat4,
-    pub proj: glam::Mat4,
+pub struct Circle {
+    pub position: glam::Vec2,
+    pub radius: f32,
 }
 
-impl GPUWrite for MVPMatrices {}
+impl GPUWrite for Circle {}
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
-pub struct Vertex {
+pub struct PixelRickVertex {
     pub position: glam::Vec3,
     pub color: glam::Vec3,
     pub tex_coord: glam::Vec2,
 }
 
-impl GPUWrite for Vertex {}
+impl GPUWrite for PixelRickVertex {}
 
 
-pub struct DepthTextureResources<'a> {
-    pub vertices: Vec<Vertex>,
+pub struct PixelRickResources<'a> {
+    pub vertices: Vec<PixelRickVertex>,
     pub indices: Vec<u32>,
-    pub texture: &'a TextureHandle,
-    pub depth_texture_buffer: &'a UniformBufferHandle<DepthTexture>,
+    pub pixel_rick_buffer: &'a UniformBufferHandle<PixelRick>,
 }
 
-impl VertexDescription for Vertex {
+impl VertexDescription for PixelRickVertex {
     fn binding_descriptions() -> Vec<ash::vk::VertexInputBindingDescription> {
         let binding_description = ash::vk::VertexInputBindingDescription::default()
             .binding(0)
@@ -69,17 +67,17 @@ impl VertexDescription for Vertex {
     fn attribute_descriptions() -> Vec<ash::vk::VertexInputAttributeDescription> {
         vec![
             ash::vk::VertexInputAttributeDescription::default()
-                .offset(std::mem::offset_of!(Vertex, position) as u32)
+                .offset(std::mem::offset_of!(PixelRickVertex, position) as u32)
                 .format(ash::vk::Format::R32G32B32_SFLOAT)
                 .binding(0)
                 .location(0),
             ash::vk::VertexInputAttributeDescription::default()
-                .offset(std::mem::offset_of!(Vertex, color) as u32)
+                .offset(std::mem::offset_of!(PixelRickVertex, color) as u32)
                 .format(ash::vk::Format::R32G32B32_SFLOAT)
                 .binding(0)
                 .location(1),
             ash::vk::VertexInputAttributeDescription::default()
-                .offset(std::mem::offset_of!(Vertex, tex_coord) as u32)
+                .offset(std::mem::offset_of!(PixelRickVertex, tex_coord) as u32)
                 .format(ash::vk::Format::R32G32_SFLOAT)
                 .binding(0)
                 .location(2),
@@ -87,15 +85,15 @@ impl VertexDescription for Vertex {
     }
 }
 
-pub struct DepthTextureShader {
+pub struct PixelRickShader {
     pub reflection_json: ReflectionJson,
 }
 
-impl DepthTextureShader {
+impl PixelRickShader {
     pub fn init() -> Self {
         let json_str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.json"
+            "/shaders/compiled/pixel_rick.json"
         ));
 
         let reflection_json: ReflectionJson = serde_json::from_str(json_str).unwrap();
@@ -105,18 +103,17 @@ impl DepthTextureShader {
 
     pub fn pipeline_config(
         self,
-        resources: DepthTextureResources<'_>,
-    ) -> PipelineConfig<'_, Vertex> {
+        resources: PixelRickResources<'_>,
+    ) -> PipelineConfig<'_, PixelRickVertex> {
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let texture_handles = vec![
-            resources.texture,
         ];
 
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let uniform_buffer_handles = vec![
-            RawUniformBufferHandle::from_typed(resources.depth_texture_buffer),
+            RawUniformBufferHandle::from_typed(resources.pixel_rick_buffer),
         ];
 
         PipelineConfig {
@@ -151,7 +148,7 @@ impl DepthTextureShader {
     fn vert_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.vert.spv"
+            "/shaders/compiled/pixel_rick.vert.spv"
         ));
         let byte_reader = &mut Cursor::new(bytes);
         read_spv(byte_reader).expect("failed to convert spv byte layout")
@@ -160,28 +157,28 @@ impl DepthTextureShader {
     fn frag_spv(&self) -> Vec<u32> {
         let bytes = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/shaders/compiled/depth_texture.frag.spv"
+            "/shaders/compiled/pixel_rick.frag.spv"
         ));
         let byte_reader = &mut Cursor::new(bytes);
         read_spv(byte_reader).expect("failed to convert spv byte layout")
     }
 }
 
-impl ShaderAtlasEntry for DepthTextureShader {
+impl ShaderAtlasEntry for PixelRickShader {
     fn source_file_name(&self) -> &str {
         &self.reflection_json.source_file_name
     }
 
     fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<DepthTexture>() as u64]
+        vec![std::mem::size_of::<PixelRick>() as u64]
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
-        Vertex::binding_descriptions()
+        PixelRickVertex::binding_descriptions()
     }
 
     fn vertex_attribute_descriptions(&self) -> Vec<vk::VertexInputAttributeDescription> {
-        Vertex::attribute_descriptions()
+        PixelRickVertex::attribute_descriptions()
     }
 
     fn layout_bindings(&self) -> Vec<Vec<LayoutDescription>> {

@@ -1,10 +1,10 @@
 #+title: Todo
 
 * Current
-- [-] improve generated file tests
+- [X] improve generated file tests
   - [X] make durable to order changes
-  - [ ] include shader json
-  - [ ] try to use a more real code path
+  - [X] include shader json
+  - [X] try to use a more real code path
 
 - [ ] signed distance fields / animated rick example
   [[https://danielchasehooper.com/posts/code-animated-rick]]
