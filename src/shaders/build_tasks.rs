@@ -517,7 +517,7 @@ mod tests {
                 .to_owned();
 
             let tmp_path = tmp_dir.join(&relative_path);
-            std::fs::create_dir_all(&tmp_path.parent().unwrap()).unwrap();
+            std::fs::create_dir_all(tmp_path.parent().unwrap()).unwrap();
             std::fs::write(tmp_path, &source_file.content).unwrap();
         }
 
