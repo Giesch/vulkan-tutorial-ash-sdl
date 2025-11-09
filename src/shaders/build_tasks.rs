@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use askama::Template;
 use heck::{ToPascalCase, ToSnakeCase};
@@ -34,11 +34,7 @@ pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
 
     // generate top-level rust modules
     if config.generate_rust_source {
-        add_top_level_rust_modules(
-            &config.rust_source_dir,
-            &slang_file_names,
-            &mut generated_source_files,
-        );
+        add_top_level_rust_modules(&slang_file_names, &mut generated_source_files);
     }
 
     // generate per-shader files
@@ -50,8 +46,7 @@ pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
         } = prepare_reflected_shader(slang_file_name)?;
 
         if config.generate_rust_source {
-            let source_file =
-                build_generated_source_file(&config.rust_source_dir, &reflection_json);
+            let source_file = build_generated_source_file(&reflection_json);
             generated_source_files.push(source_file);
         }
 
@@ -74,14 +69,13 @@ pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
     }
 
     for source_file in &generated_source_files {
-        write_generated_file(source_file)?;
+        write_generated_file(&config, source_file)?;
     }
 
     Ok(())
 }
 
 fn add_top_level_rust_modules(
-    rust_src_dir: &Path,
     slang_file_names: &[String],
     generated_source_files: &mut Vec<GeneratedFile>,
 ) {
@@ -100,22 +94,19 @@ fn add_top_level_rust_modules(
     };
 
     let shader_atlas_file = GeneratedFile {
-        absolute_path: rust_src_dir.join(relative_path(["generated", "shader_atlas.rs"])),
+        relative_path: relative_path(["generated", "shader_atlas.rs"]),
         content: shader_atlas_module.render().unwrap(),
     };
     generated_source_files.push(shader_atlas_file);
 
     let top_generated_module = GeneratedFile {
-        absolute_path: rust_src_dir.join(relative_path(["generated.rs"])),
+        relative_path: relative_path(["generated.rs"]),
         content: "pub mod shader_atlas;".to_string(),
     };
     generated_source_files.push(top_generated_module);
 }
 
-fn build_generated_source_file(
-    rust_src_dir: &Path,
-    reflection_json: &ReflectionJson,
-) -> GeneratedFile {
+fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFile {
     let mut struct_defs = vec![];
     let mut vertex_impl_blocks = vec![];
     let mut required_resources = vec![
@@ -244,7 +235,7 @@ fn build_generated_source_file(
 
     let shader_name = reflection_json.source_file_name.replace(".slang", "");
     let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
-    let file_path = rust_src_dir.join(relative_path(["generated", "shader_atlas", &file_name]));
+    let relative_file_path = relative_path(["generated", "shader_atlas", &file_name]);
 
     // NOTE these must be in descriptor set layout order in the reflection json
     let resources_texture_fields: Vec<String> = required_resources
@@ -269,7 +260,7 @@ fn build_generated_source_file(
     };
 
     GeneratedFile {
-        absolute_path: file_path,
+        relative_path: relative_file_path,
         content: ShaderAtlasEntryModule {
             module_doc_lines: vec![format!(
                 "generated from slang shader: {}",
@@ -425,14 +416,17 @@ struct GeneratedStructFieldDefinition {
 }
 
 struct GeneratedFile {
-    // TODO change this to relative
-    absolute_path: PathBuf,
+    /// the path relative to the rust 'src' dir
+    relative_path: PathBuf,
     content: String,
 }
 
-fn write_generated_file(source_file: &GeneratedFile) -> anyhow::Result<()> {
-    std::fs::create_dir_all(source_file.absolute_path.parent().unwrap())?;
-    std::fs::write(&source_file.absolute_path, &source_file.content)?;
+fn write_generated_file(config: &Config, source_file: &GeneratedFile) -> anyhow::Result<()> {
+    let absolute_path = config.rust_source_dir.join(&source_file.relative_path);
+
+    std::fs::create_dir_all(absolute_path.parent().unwrap())?;
+    std::fs::write(&absolute_path, &source_file.content)?;
+
     Ok(())
 }
 
