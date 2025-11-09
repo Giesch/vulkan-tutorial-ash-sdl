@@ -8,9 +8,13 @@ use crate::util::relative_path;
 use super::{ReflectedShader, json::*, prepare_reflected_shader};
 
 pub struct Config {
+    /// whether to write rust code (or only shader spirv & json)
     pub generate_rust_source: bool,
+    /// the directory to write the 'generated' module into
     pub rust_source_dir: PathBuf,
+    /// the directory to read slang files from
     pub shaders_source_dir: PathBuf,
+    /// the directory to write shader spriv & json to
     pub compiled_shaders_dir: PathBuf,
 }
 
