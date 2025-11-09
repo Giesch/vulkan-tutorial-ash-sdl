@@ -474,7 +474,7 @@ mod tests {
         write_precompiled_shaders(config).unwrap();
 
         insta::glob!(&tmp_dir_path, "**/*.{rs,json}", |tmp_path| {
-            let relative_path = tmp_path.strip_prefix(&tmp_dir_path).unwrap().to_owned();
+            let relative_path = tmp_path.strip_prefix(&tmp_dir_path).unwrap();
 
             let info = serde_json::json!({
                 "relative_path": &relative_path

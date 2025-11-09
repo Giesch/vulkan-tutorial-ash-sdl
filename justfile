@@ -44,7 +44,7 @@ test:
 alias t := test
 
 # run and review snapshot tests interactively
-insta: shaders
+insta:
   cargo insta test --review
 alias i := insta
 
