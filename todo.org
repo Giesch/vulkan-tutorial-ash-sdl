@@ -1,11 +1,28 @@
 #+title: Todo
 
 * Current
-- [X] improve generated file tests
-  - [X] make durable to order changes
-  - [X] include shader json
-  - [X] try to use a more real code path
+- [ ] update generated code to make entry points optional
+  ie; the interface used by renderer
+  - [ ] update in place
+    - [ ] vertex
+    - [ ] fragment
+  - [ ] update templates & regenerate
 
+- [ ] update reflection to make entry points optional
+  - [ ] vertex
+  - [ ] fragment
+  - [ ] require at least one in codegen?
+
+- [ ] solid color example
+  - [ ] make vertex entry point optional
+    - [ ] conditionally remove vertex/index buffers
+
+- [ ] basic triangle example
+  - [ ] make fragment entry point optional
+  - [ ] make ParameterBlock optional
+    - [ ] conditionally remove uniform buffer in Resources
+
+* Next
 - [ ] signed distance fields / animated rick example
   [[https://danielchasehooper.com/posts/code-animated-rick]]
   - this will be an example that needs no extra resources
@@ -18,13 +35,6 @@
   - could there be a good way to control the sdf shapes from the cpu?
     ie provide storage/structured buffer(s) circles/ellipses/etc
 
-  - [ ] avoid requiring a uniform buffer (from ParameterBlock)
-  - [ ] avoid requiring a ParameterBlock at all
-  - [ ] avoid requiring vertex & index buffers if possible
-    will this example end up needing them?
-
-
-* Next
 - [ ] is align(16) doing the right thing for Vertex?
   or is it doing anything?
 - [ ] do we not have to be doing align(16)?
