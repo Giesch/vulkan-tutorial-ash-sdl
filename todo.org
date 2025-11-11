@@ -7,8 +7,8 @@
     - [X] make renderer coompile with empty resources
     - [X] make the example runnable
 
-- [ ] delete files in generated module on regen
-- [ ] delete json & spv on regen
+- [X] delete files in generated module on regen
+- [X] delete json & spv on regen
 
 - [ ] track window aspect ratio in renderer, not game
   have App handle resize
