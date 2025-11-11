@@ -2,6 +2,8 @@
 
 module depth_texture;
 
+import mvp;
+
 // modified from the official tutorial example here:
 // https://docs.vulkan.org/tutorial/latest/_attachments/27_shader_depth.slang
 
@@ -12,12 +14,6 @@ struct DepthTexture {
     Sampler2D texture;
 }
 
-struct MVPMatrices {
-    float4x4 model;
-    float4x4 view;
-    float4x4 proj;
-};
-
 struct Vertex {
     float3 position;
     float3 color;
@@ -26,23 +22,14 @@ struct Vertex {
 
 [shader("vertex")]
 FragVertex vertMain(uint vertexIndex : SV_VertexID, Vertex vertex) {
-    let mvp = depthTexture.mvp;
-
-    FragVertex output;
-
-    let homogenousPosition = float4(vertex.position, 1.0);
-    let mvpMatrix = mul(mvp.proj, mul(mvp.view, mvp.model));
-    output.position = mul(mvpMatrix, homogenousPosition);
+    let position = depthTexture.mvp.project(vertex.position);
 
     if (vertexIndex == 0) {
         // this is intended as a demo/test of shader printf; it's pretty noisy
-        printf("first vertex position: %u, %u, %u\n", output.position.x, output.position.y, output.position.z);
+        printf("first vertex position: %u, %u, %u\n", position.x, position.y, position.z);
     }
 
-    output.texCoord = vertex.texCoord;
-    output.color = vertex.color; // unused in viking room example
-
-    return output;
+    return FragVertex(position, vertex.color, vertex.texCoord);
 }
 
 struct FragVertex

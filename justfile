@@ -22,8 +22,8 @@ alias d := dev
 
 # run with shader printf and vk validation layers at 'info'
 [unix]
-shader-debug:
-    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run
+shader-debug example="viking_room":
+    RUST_LOG=info VK_LAYER_PRINTF_ONLY_PRESET=1 cargo run --example {{example}}
 
 
 # run a release build

@@ -1,8 +1,11 @@
 #+title: Todo
 
 * Current
-- [ ] handle slang modules in codegen
+- [-] handle slang modules in codegen
   ie, allow a shared MVPMatrices type
+  - [X] use a suffix to designate which slang files are shaders
+  - [X] move MVP types to a module
+  - [ ] generate a single rust type for the module
 
 * Next
 - [ ] signed distance fields / animated rick example
