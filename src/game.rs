@@ -16,8 +16,6 @@ pub use traits::{Game, WindowDescription};
 
 #[allow(unused)]
 pub struct BasicTriangle {
-    aspect_ratio: f32,
-    renderer: Renderer,
     pipeline: PipelineHandle,
     uniform_buffer: UniformBufferHandle<basic_triangle::BasicTriangle>,
 }
@@ -46,14 +44,11 @@ impl BasicTriangle {
 }
 
 impl Game for BasicTriangle {
-    fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
         let (vertices, indices) = Self::load_vertices()?;
-
-        let shader_atlas = ShaderAtlas::init();
-        let shader = shader_atlas.basic_triangle;
 
         let uniform_buffer = renderer.create_uniform_buffer::<basic_triangle::BasicTriangle>()?;
 
@@ -63,50 +58,31 @@ impl Game for BasicTriangle {
             basic_triangle_buffer: &uniform_buffer,
         };
 
+        let shader = ShaderAtlas::init().basic_triangle;
         let pipeline_config = shader.pipeline_config(resources);
         let pipeline = renderer.create_pipeline(pipeline_config)?;
 
-        let window_desc = Self::window_description();
-        let aspect_ratio = window_desc.width as f32 / window_desc.height as f32;
-
         Ok(Self {
-            aspect_ratio,
-            renderer,
             pipeline,
             uniform_buffer,
         })
     }
 
-    fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.renderer.draw_frame(&self.pipeline, |gpu| {
-            let mvp = make_basic_mvp_matrices(self.aspect_ratio, COLUMN_MAJOR);
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        let aspect_ratio = renderer.aspect_ratio();
+        renderer.draw_frame(&self.pipeline, |gpu| {
+            let mvp = make_basic_mvp_matrices(aspect_ratio, COLUMN_MAJOR);
             gpu.write_uniform(
                 &mut self.uniform_buffer,
                 basic_triangle::BasicTriangle { mvp },
             );
         })
     }
-
-    fn on_resize(&mut self) -> anyhow::Result<()> {
-        self.renderer.recreate_swapchain()?;
-
-        let (width, height) = self.renderer.current_extent();
-        self.aspect_ratio = width as f32 / height as f32;
-
-        Ok(())
-    }
-
-    fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
-        self.renderer.drain_gpu()?;
-        Ok(())
-    }
 }
 
 #[allow(unused)]
 pub struct VikingRoom {
     start_time: Instant,
-    aspect_ratio: f32,
-    renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
     uniform_buffer: UniformBufferHandle<depth_texture::DepthTexture>,
@@ -165,7 +141,7 @@ impl Game for VikingRoom {
         "Viking Room"
     }
 
-    fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -189,50 +165,31 @@ impl Game for VikingRoom {
         let pipeline = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
-        let window_desc = Self::window_description();
-        let aspect_ratio = window_desc.width as f32 / window_desc.height as f32;
 
         Ok(Self {
             start_time,
-            aspect_ratio,
-            renderer,
             pipeline,
             texture,
             uniform_buffer,
         })
     }
 
-    fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.renderer.draw_frame(&self.pipeline, |gpu| {
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        let aspect_ratio = renderer.aspect_ratio();
+        renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
-            let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            let mvp = make_mvp_matrices(elapsed, aspect_ratio, COLUMN_MAJOR);
             gpu.write_uniform(
                 &mut self.uniform_buffer,
                 depth_texture::DepthTexture { mvp },
             );
         })
     }
-
-    fn on_resize(&mut self) -> anyhow::Result<()> {
-        self.renderer.recreate_swapchain()?;
-
-        let (width, height) = self.renderer.current_extent();
-        self.aspect_ratio = width as f32 / height as f32;
-
-        Ok(())
-    }
-
-    fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
-        self.renderer.drain_gpu()?;
-        Ok(())
-    }
 }
 
 #[allow(unused)]
 pub struct DepthTextureGame {
     start_time: Instant,
-    aspect_ratio: f32,
-    renderer: Renderer,
     pipeline: PipelineHandle,
     texture: TextureHandle,
     uniform_buffer: UniformBufferHandle<depth_texture::DepthTexture>,
@@ -299,7 +256,7 @@ impl Game for DepthTextureGame {
         "Depth Texture"
     }
 
-    fn setup(mut renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -323,42 +280,25 @@ impl Game for DepthTextureGame {
         let pipeline = renderer.create_pipeline(pipeline_config)?;
 
         let start_time = Instant::now();
-        let window_desc = Self::window_description();
-        let aspect_ratio = window_desc.width as f32 / window_desc.height as f32;
 
         Ok(Self {
             start_time,
-            aspect_ratio,
-            renderer,
             pipeline,
             texture,
             uniform_buffer,
         })
     }
 
-    fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.renderer.draw_frame(&self.pipeline, |gpu| {
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        let aspect_ratio = renderer.aspect_ratio();
+        renderer.draw_frame(&self.pipeline, |gpu| {
             let elapsed = Instant::now() - self.start_time;
-            let mvp = make_mvp_matrices(elapsed, self.aspect_ratio, COLUMN_MAJOR);
+            let mvp = make_mvp_matrices(elapsed, aspect_ratio, COLUMN_MAJOR);
             gpu.write_uniform(
                 &mut self.uniform_buffer,
                 depth_texture::DepthTexture { mvp },
             );
         })
-    }
-
-    fn on_resize(&mut self) -> anyhow::Result<()> {
-        self.renderer.recreate_swapchain()?;
-
-        let (width, height) = self.renderer.current_extent();
-        self.aspect_ratio = width as f32 / height as f32;
-
-        Ok(())
-    }
-
-    fn deinit(mut self: Box<Self>) -> anyhow::Result<()> {
-        self.renderer.drain_gpu()?;
-        Ok(())
     }
 }
 

@@ -4,16 +4,19 @@ use sdl3::keyboard::Keycode;
 use sdl3::sys::timer::SDL_DelayPrecise;
 
 use crate::game::traits::RuntimeGame;
+use crate::renderer::Renderer;
 
 pub struct App {
+    renderer: Renderer,
     pub game: Box<dyn RuntimeGame>,
     pub minimized: bool,
     pub quit: bool,
 }
 
 impl App {
-    pub fn init(game: impl RuntimeGame + 'static) -> anyhow::Result<App> {
+    pub fn init(renderer: Renderer, game: impl RuntimeGame + 'static) -> anyhow::Result<App> {
         Ok(Self {
+            renderer,
             game: Box::new(game),
             minimized: false,
             quit: false,
@@ -30,14 +33,14 @@ impl App {
             }
 
             if !self.minimized {
-                self.game.draw_frame()?;
+                self.game.draw_frame(&mut self.renderer)?;
             }
 
             let frame_delay = self.game.frame_delay().as_nanos() as u64;
             unsafe { SDL_DelayPrecise(frame_delay) };
         }
 
-        self.game.deinit()?;
+        self.renderer.drain_gpu()?;
 
         Ok(())
     }
@@ -58,7 +61,7 @@ impl App {
                 Event::Window { win_event, .. } => match win_event {
                     WindowEvent::Resized(_new_width, _new_height) => {
                         // we take the new dimensions off the renderer's window ref
-                        self.game.on_resize()?;
+                        self.renderer.on_resize()?;
                     }
                     WindowEvent::Minimized => {
                         self.minimized = true;

@@ -10,8 +10,11 @@
 - [X] delete files in generated module on regen
 - [X] delete json & spv on regen
 
-- [ ] track window aspect ratio in renderer, not game
+- [X] track window aspect ratio in renderer, not game
   have App handle resize
+
+- [ ] update naming convention in shader atlas entries
+  remove stutter prefix
 
 * Next
 - [ ] signed distance fields / animated rick example

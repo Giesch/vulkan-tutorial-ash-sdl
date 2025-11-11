@@ -9,15 +9,11 @@ const DEFAULT_WINDOW_TITLE: &str = "Game";
 
 /// This is the only trait from this module to implement directly.
 pub trait Game {
-    fn setup(renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized;
 
-    fn draw_frame(&mut self) -> anyhow::Result<()>;
-
-    fn on_resize(&mut self) -> anyhow::Result<()>;
-
-    fn deinit(self: Box<Self>) -> anyhow::Result<()>;
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()>;
 
     fn window_title() -> &'static str {
         DEFAULT_WINDOW_TITLE
@@ -58,9 +54,9 @@ pub trait Game {
             .vulkan()
             .build()?;
 
-        let renderer = Renderer::init(window)?;
-        let game = Self::setup(renderer)?;
-        let app = App::init(game)?;
+        let mut renderer = Renderer::init(window)?;
+        let game = Self::setup(&mut renderer)?;
+        let app = App::init(renderer, game)?;
 
         let event_pump = sdl.event_pump()?;
         app.run_loop(event_pump)
@@ -78,7 +74,7 @@ pub struct WindowDescription {
 pub trait GameSetup {
     fn window_description() -> WindowDescription;
 
-    fn setup(renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized;
 }
@@ -86,13 +82,9 @@ pub trait GameSetup {
 /// methods used after initialization
 /// this trait needs to be object-safe
 pub trait RuntimeGame {
-    fn draw_frame(&mut self) -> anyhow::Result<()>;
-
-    fn on_resize(&mut self) -> anyhow::Result<()>;
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()>;
 
     fn frame_delay(&self) -> Duration;
-
-    fn deinit(self: Box<Self>) -> anyhow::Result<()>;
 }
 
 impl<G> GameSetup for G
@@ -103,7 +95,7 @@ where
         G::window_description()
     }
 
-    fn setup(renderer: Renderer) -> anyhow::Result<Self>
+    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
     where
         Self: Sized,
     {
@@ -115,19 +107,11 @@ impl<G> RuntimeGame for G
 where
     G: Game,
 {
-    fn draw_frame(&mut self) -> anyhow::Result<()> {
-        self.draw_frame()
-    }
-
-    fn on_resize(&mut self) -> anyhow::Result<()> {
-        self.on_resize()
+    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()> {
+        self.draw_frame(renderer)
     }
 
     fn frame_delay(&self) -> Duration {
         self.frame_delay()
-    }
-
-    fn deinit(self: Box<Self>) -> anyhow::Result<()> {
-        self.deinit()
     }
 }

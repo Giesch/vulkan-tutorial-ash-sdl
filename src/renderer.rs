@@ -45,6 +45,7 @@ const MAX_FRAMES_IN_FLIGHT: usize = 2;
 
 pub struct Renderer {
     // fields that are created once
+    aspect_ratio: f32,
     total_frames: usize,
     #[cfg(debug_assertions)]
     shader_changes: shader_watcher::ShaderChanges,
@@ -106,6 +107,9 @@ impl Renderer {
     pub fn init(window: Window) -> Result<Self, anyhow::Error> {
         #[cfg(debug_assertions)]
         let shader_changes = shader_watcher::watch()?;
+
+        let (window_width, window_height) = window.size();
+        let aspect_ratio = window_width as f32 / window_height as f32;
 
         let entry = ash::Entry::linked();
 
@@ -235,6 +239,7 @@ impl Renderer {
         let uniform_buffers = UniformBufferStorage::new();
 
         Ok(Self {
+            aspect_ratio,
             total_frames: 0,
             #[cfg(debug_assertions)]
             shader_changes,
@@ -602,11 +607,6 @@ impl Renderer {
             .unwrap()
     }
 
-    /// width and height
-    pub fn current_extent(&self) -> (u32, u32) {
-        (self.image_extent.width, self.image_extent.height)
-    }
-
     pub fn draw_frame(
         &mut self,
         pipeline_handle: &PipelineHandle,
@@ -886,6 +886,19 @@ impl Renderer {
         info!("finished recompiling shaders");
 
         Ok(())
+    }
+
+    pub fn on_resize(&mut self) -> anyhow::Result<()> {
+        self.recreate_swapchain()?;
+
+        let (width, height) = (self.image_extent.width, self.image_extent.height);
+        self.aspect_ratio = width as f32 / height as f32;
+
+        Ok(())
+    }
+
+    pub fn aspect_ratio(&self) -> f32 {
+        self.aspect_ratio
     }
 }
 
