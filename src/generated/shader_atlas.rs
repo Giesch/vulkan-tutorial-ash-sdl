@@ -1,14 +1,16 @@
+pub mod basic_triangle;
 pub mod depth_texture;
-pub use depth_texture::*;
 
 pub struct ShaderAtlas {
-    pub depth_texture: DepthTextureShader,
+    pub basic_triangle: basic_triangle::BasicTriangleShader,
+    pub depth_texture: depth_texture::DepthTextureShader,
 }
 
 impl ShaderAtlas {
     pub fn init() -> Self {
         Self {
-            depth_texture: DepthTextureShader::init(),
+            basic_triangle: basic_triangle::BasicTriangleShader::init(),
+            depth_texture: depth_texture::DepthTextureShader::init(),
         }
     }
 }

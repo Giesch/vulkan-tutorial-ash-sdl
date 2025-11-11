@@ -85,7 +85,13 @@ fn add_top_level_rust_modules(
         .collect();
     let entries: Vec<(String, String)> = module_names
         .iter()
-        .map(|name| (name.clone(), name.to_pascal_case()))
+        .map(|module_name| {
+            let field_name = module_name.clone();
+            // TODO replace 'depth_texture::DepthTextureShader'
+            // with 'depth_texture::Shader'
+            let type_prefix = format!("{}::{}", module_name, module_name.to_pascal_case());
+            (field_name, type_prefix)
+        })
         .collect();
 
     let shader_atlas_module = ShaderAtlasModule {

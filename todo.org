@@ -1,26 +1,17 @@
 #+title: Todo
 
 * Current
-- [ ] update generated code to make entry points optional
-  ie; the interface used by renderer
-  - [ ] update in place
-    - [ ] vertex
-    - [ ] fragment
-  - [ ] update templates & regenerate
+- [X] basic triangle example
+  - [X] conditionally remove vertex/index buffers
+    - [X] fix template formatting
+    - [X] make renderer coompile with empty resources
+    - [X] make the example runnable
 
-- [ ] update reflection to make entry points optional
-  - [ ] vertex
-  - [ ] fragment
-  - [ ] require at least one in codegen?
+- [ ] delete files in generated module on regen
+- [ ] delete json & spv on regen
 
-- [ ] solid color example
-  - [ ] make vertex entry point optional
-    - [ ] conditionally remove vertex/index buffers
-
-- [ ] basic triangle example
-  - [ ] make fragment entry point optional
-  - [ ] make ParameterBlock optional
-    - [ ] conditionally remove uniform buffer in Resources
+- [ ] track window aspect ratio in renderer, not game
+  have App handle resize
 
 * Next
 - [ ] signed distance fields / animated rick example
@@ -34,6 +25,10 @@
 
   - could there be a good way to control the sdf shapes from the cpu?
     ie provide storage/structured buffer(s) circles/ellipses/etc
+
+- [ ] move to using a cargo workspace
+  - new git repo
+  - plan for supporting roc
 
 - [ ] is align(16) doing the right thing for Vertex?
   or is it doing anything?
@@ -131,6 +126,8 @@
   - could be similar to this wgpu bug?
     https://github.com/gfx-rs/wgpu/issues/4842#issuecomment-1858018132
 
+- [ ] split shader println into its own example
+- [ ] split up depth texture & viking room shaders
 
 
 * Future
