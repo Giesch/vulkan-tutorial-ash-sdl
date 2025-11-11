@@ -1,6 +1,6 @@
 // GENERATED FILE (do not edit directly)
 
-//! generated from slang shader: basic_triangle.slang
+//! generated from slang shader: basic_triangle.shader.slang
 
 use std::ffi::CString;
 use std::io::Cursor;

@@ -1,6 +1,6 @@
 // GENERATED FILE (do not edit directly)
 
-//! generated from slang shader: depth_texture.slang
+//! generated from slang shader: depth_texture.shader.slang
 
 use std::ffi::CString;
 use std::io::Cursor;

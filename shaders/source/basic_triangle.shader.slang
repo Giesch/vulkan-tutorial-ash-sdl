@@ -8,8 +8,6 @@ struct BasicTriangle {
     MVPMatrices mvp;
 }
 
-// TODO make this a slang module,
-// figure out how to make codegen handle that
 struct MVPMatrices {
     float4x4 model;
     float4x4 view;

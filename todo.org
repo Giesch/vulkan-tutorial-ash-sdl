@@ -1,20 +1,8 @@
 #+title: Todo
 
 * Current
-- [X] basic triangle example
-  - [X] conditionally remove vertex/index buffers
-    - [X] fix template formatting
-    - [X] make renderer coompile with empty resources
-    - [X] make the example runnable
-
-- [X] delete files in generated module on regen
-- [X] delete json & spv on regen
-
-- [X] track window aspect ratio in renderer, not game
-  have App handle resize
-
-- [ ] update naming convention in shader atlas entries
-  remove stutter prefix
+- [ ] handle slang modules in codegen
+  ie, allow a shared MVPMatrices type
 
 * Next
 - [ ] signed distance fields / animated rick example

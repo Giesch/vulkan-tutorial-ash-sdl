@@ -18,11 +18,17 @@ pub struct Config {
     pub compiled_shaders_dir: PathBuf,
 }
 
+const SHADER_FILE_SUFFIX: &str = ".shader.slang";
+
 pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
     let slang_file_names: Vec<_> = std::fs::read_dir(&config.shaders_source_dir)?
         .filter_map(|entry_res| entry_res.ok())
         .map(|dir_entry| dir_entry.path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "slang"))
+        .filter(|path| {
+            // path.extension().is_some_and(|ext| ext == "slang")
+            let file_name = path.file_name().unwrap().to_str().unwrap();
+            file_name.ends_with(SHADER_FILE_SUFFIX)
+        })
         .filter_map(|path| {
             path.file_name()
                 .and_then(|os_str| os_str.to_str())
@@ -59,15 +65,15 @@ pub fn write_precompiled_shaders(config: Config) -> anyhow::Result<()> {
         std::fs::create_dir_all(&config.compiled_shaders_dir)?;
 
         let reflection_json = serde_json::to_string_pretty(&reflection_json)?;
-        let reflection_json_file_name = source_file_name.replace(".slang", ".json");
+        let reflection_json_file_name = source_file_name.replace(SHADER_FILE_SUFFIX, ".json");
         let json_path = &config.compiled_shaders_dir.join(&reflection_json_file_name);
         std::fs::write(json_path, reflection_json)?;
 
-        let spv_vert_file_name = source_file_name.replace(".slang", ".vert.spv");
+        let spv_vert_file_name = source_file_name.replace(SHADER_FILE_SUFFIX, ".vert.spv");
         let vert_path = &config.compiled_shaders_dir.join(&spv_vert_file_name);
         std::fs::write(vert_path, vertex_shader.shader_bytecode.as_slice())?;
 
-        let spv_frag_file_name = source_file_name.replace(".slang", ".frag.spv");
+        let spv_frag_file_name = source_file_name.replace(SHADER_FILE_SUFFIX, ".frag.spv");
         let frag_path = &config.compiled_shaders_dir.join(&spv_frag_file_name);
         std::fs::write(frag_path, fragment_shader.shader_bytecode.as_slice())?;
     }
@@ -90,7 +96,7 @@ fn add_top_level_rust_modules(
 ) {
     let module_names: Vec<String> = slang_file_names
         .iter()
-        .map(|file_name| file_name.replace(".slang", ""))
+        .map(|file_name| file_name.replace(SHADER_FILE_SUFFIX, ""))
         .collect();
     let entries: Vec<(String, String)> = module_names
         .iter()
@@ -217,7 +223,7 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
     let vertex_type_name = vertex_type_name.expect("no struct parameter for vertex entry point");
     let shader_prefix = reflection_json
         .source_file_name
-        .replace(".slang", "")
+        .replace(SHADER_FILE_SUFFIX, "")
         .to_pascal_case();
     let resources_fields = required_resources
         .iter()
@@ -246,8 +252,12 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
     };
     struct_defs.push(resources_struct);
 
-    let shader_name = reflection_json.source_file_name.replace(".slang", "");
-    let file_name = reflection_json.source_file_name.replace(".slang", ".rs");
+    let shader_name = reflection_json
+        .source_file_name
+        .replace(SHADER_FILE_SUFFIX, "");
+    let file_name = reflection_json
+        .source_file_name
+        .replace(SHADER_FILE_SUFFIX, ".rs");
     let relative_file_path = relative_path(["generated", "shader_atlas", &file_name]);
 
     // NOTE these must be in descriptor set layout order in the reflection json

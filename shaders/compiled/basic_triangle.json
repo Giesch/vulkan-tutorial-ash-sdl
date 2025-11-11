@@ -1,5 +1,5 @@
 {
-  "sourceFileName": "basic_triangle.slang",
+  "sourceFileName": "basic_triangle.shader.slang",
   "globalParameters": [
     {
       "kind": "parameterBlock",

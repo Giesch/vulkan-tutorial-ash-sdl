@@ -4,7 +4,7 @@ info:
   relative_path: shaders/compiled/depth_texture.json
 ---
 {
-  "sourceFileName": "depth_texture.slang",
+  "sourceFileName": "depth_texture.shader.slang",
   "globalParameters": [
     {
       "kind": "parameterBlock",

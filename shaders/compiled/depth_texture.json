@@ -1,5 +1,5 @@
 {
-  "sourceFileName": "depth_texture.slang",
+  "sourceFileName": "depth_texture.shader.slang",
   "globalParameters": [
     {
       "kind": "parameterBlock",
