@@ -96,9 +96,7 @@ fn add_top_level_rust_modules(
         .iter()
         .map(|module_name| {
             let field_name = module_name.clone();
-            // TODO replace 'depth_texture::DepthTextureShader'
-            // with 'depth_texture::Shader'
-            let type_prefix = format!("{}::{}", module_name, module_name.to_pascal_case());
+            let type_prefix = format!("{module_name}::");
             (field_name, type_prefix)
         })
         .collect();
@@ -241,7 +239,7 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
         .collect();
 
     let resources_struct = GeneratedStructDefinition {
-        type_name: format!("{shader_prefix}Resources<'a>"),
+        type_name: "Resources<'a>".to_string(),
         fields: resources_fields,
         gpu_write: false,
         trait_derives: vec![],
@@ -266,10 +264,9 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
 
     let shader_impl = GeneratedShaderImpl {
         shader_name: shader_name.clone(),
-        shader_type_name: format!("{}Shader", shader_name.to_pascal_case()),
+        shader_type_name: "Shader".to_string(),
         vertex_type_name,
         uniform_buffer_type_name: shader_name.to_pascal_case(),
-        shader_type_prefix: shader_prefix,
         resources_texture_fields,
         resources_uniform_buffer_fields,
     };
@@ -312,7 +309,6 @@ struct GeneratedShaderImpl {
     shader_type_name: String,
     vertex_type_name: String,
     uniform_buffer_type_name: String,
-    shader_type_prefix: String,
     resources_texture_fields: Vec<String>,
     resources_uniform_buffer_fields: Vec<String>,
 }

@@ -52,7 +52,7 @@ impl Game for BasicTriangle {
 
         let uniform_buffer = renderer.create_uniform_buffer::<basic_triangle::BasicTriangle>()?;
 
-        let resources = basic_triangle::BasicTriangleResources {
+        let resources = basic_triangle::Resources {
             vertices,
             indices,
             basic_triangle_buffer: &uniform_buffer,
@@ -155,7 +155,7 @@ impl Game for VikingRoom {
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let uniform_buffer = renderer.create_uniform_buffer::<depth_texture::DepthTexture>()?;
-        let resources = depth_texture::DepthTextureResources {
+        let resources = depth_texture::Resources {
             vertices,
             indices,
             texture: &texture,
@@ -270,7 +270,7 @@ impl Game for DepthTextureGame {
 
         let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
         let uniform_buffer = renderer.create_uniform_buffer::<depth_texture::DepthTexture>()?;
-        let resources = depth_texture::DepthTextureResources {
+        let resources = depth_texture::Resources {
             vertices,
             indices,
             texture: &texture,

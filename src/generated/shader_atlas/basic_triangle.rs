@@ -42,7 +42,7 @@ pub struct Vertex {
 
 impl GPUWrite for Vertex {}
 
-pub struct BasicTriangleResources<'a> {
+pub struct Resources<'a> {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
     pub basic_triangle_buffer: &'a UniformBufferHandle<BasicTriangle>,
@@ -74,11 +74,11 @@ impl VertexDescription for Vertex {
     }
 }
 
-pub struct BasicTriangleShader {
+pub struct Shader {
     pub reflection_json: ReflectionJson,
 }
 
-impl BasicTriangleShader {
+impl Shader {
     pub fn init() -> Self {
         let json_str = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -90,10 +90,7 @@ impl BasicTriangleShader {
         Self { reflection_json }
     }
 
-    pub fn pipeline_config(
-        self,
-        resources: BasicTriangleResources<'_>,
-    ) -> PipelineConfig<'_, Vertex> {
+    pub fn pipeline_config(self, resources: Resources<'_>) -> PipelineConfig<'_, Vertex> {
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let texture_handles = vec![
@@ -153,7 +150,7 @@ impl BasicTriangleShader {
     }
 }
 
-impl ShaderAtlasEntry for BasicTriangleShader {
+impl ShaderAtlasEntry for Shader {
     fn source_file_name(&self) -> &str {
         &self.reflection_json.source_file_name
     }
