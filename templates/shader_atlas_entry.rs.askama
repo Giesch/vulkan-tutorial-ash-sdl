@@ -148,10 +148,6 @@ impl ShaderAtlasEntry for {{ shader_impl.shader_type_name }} {
         &self.reflection_json.source_file_name
     }
 
-    fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<{{ shader_impl.uniform_buffer_type_name }}>() as u64]
-    }
-
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
         {{ shader_impl.vertex_type_name }}::binding_descriptions()
     }

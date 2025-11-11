@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use askama::Template;
-use heck::{ToPascalCase, ToSnakeCase};
+use heck::ToSnakeCase;
 
 use crate::util::relative_path;
 
@@ -212,28 +212,26 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
 
         // the default-added parameter block uniform buffer
         let param_name = parameter_block.parameter_name.to_snake_case();
+        let element_type_name = parameter_block.element_type.type_name.clone();
         required_resources.push(RequiredResource {
             field_name: format!("{param_name}_buffer"),
-            resource_type: RequiredResourceType::UniformBuffer,
+            // TODO type name
+            resource_type: RequiredResourceType::UniformBuffer(element_type_name),
         })
     }
 
     struct_defs.reverse();
 
     let vertex_type_name = vertex_type_name.expect("no struct parameter for vertex entry point");
-    let shader_prefix = reflection_json
-        .source_file_name
-        .replace(SHADER_FILE_SUFFIX, "")
-        .to_pascal_case();
     let resources_fields = required_resources
         .iter()
         .map(|r| {
-            let type_name = match r.resource_type {
+            let type_name = match &r.resource_type {
                 RequiredResourceType::VertexBuffer => format!("Vec<{vertex_type_name}>"),
                 RequiredResourceType::IndexBuffer => "Vec<u32>".to_string(),
                 RequiredResourceType::Texture => "&'a TextureHandle".to_string(),
-                RequiredResourceType::UniformBuffer => {
-                    format!("&'a UniformBufferHandle<{shader_prefix}>")
+                RequiredResourceType::UniformBuffer(element_type_name) => {
+                    format!("&'a UniformBufferHandle<{element_type_name}>")
                 }
             };
 
@@ -268,7 +266,7 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
         .collect();
     let resources_uniform_buffer_fields: Vec<String> = required_resources
         .iter()
-        .filter(|r| matches!(r.resource_type, RequiredResourceType::UniformBuffer))
+        .filter(|r| matches!(r.resource_type, RequiredResourceType::UniformBuffer(_)))
         .map(|r| r.field_name.clone())
         .collect();
 
@@ -276,7 +274,6 @@ fn build_generated_source_file(reflection_json: &ReflectionJson) -> GeneratedFil
         shader_name: shader_name.clone(),
         shader_type_name: "Shader".to_string(),
         vertex_type_name,
-        uniform_buffer_type_name: shader_name.to_pascal_case(),
         resources_texture_fields,
         resources_uniform_buffer_fields,
     };
@@ -318,7 +315,6 @@ struct GeneratedShaderImpl {
     shader_name: String,
     shader_type_name: String,
     vertex_type_name: String,
-    uniform_buffer_type_name: String,
     resources_texture_fields: Vec<String>,
     resources_uniform_buffer_fields: Vec<String>,
 }
@@ -471,7 +467,7 @@ enum RequiredResourceType {
     VertexBuffer,
     IndexBuffer,
     Texture,
-    UniformBuffer,
+    UniformBuffer(String),
 }
 
 #[cfg(test)]

@@ -17,7 +17,7 @@ pub use traits::{Game, WindowDescription};
 #[allow(unused)]
 pub struct BasicTriangle {
     pipeline: PipelineHandle,
-    uniform_buffer: UniformBufferHandle<basic_triangle::BasicTriangle>,
+    uniform_buffer: UniformBufferHandle<basic_triangle::MVPMatrices>,
 }
 
 impl BasicTriangle {
@@ -50,12 +50,12 @@ impl Game for BasicTriangle {
     {
         let (vertices, indices) = Self::load_vertices()?;
 
-        let uniform_buffer = renderer.create_uniform_buffer::<basic_triangle::BasicTriangle>()?;
+        let uniform_buffer = renderer.create_uniform_buffer::<basic_triangle::MVPMatrices>()?;
 
         let resources = basic_triangle::Resources {
             vertices,
             indices,
-            basic_triangle_buffer: &uniform_buffer,
+            mvp_buffer: &uniform_buffer,
         };
 
         let shader = ShaderAtlas::init().basic_triangle;
@@ -72,10 +72,7 @@ impl Game for BasicTriangle {
         let aspect_ratio = renderer.aspect_ratio();
         renderer.draw_frame(&self.pipeline, |gpu| {
             let mvp = make_basic_mvp_matrices(aspect_ratio, COLUMN_MAJOR);
-            gpu.write_uniform(
-                &mut self.uniform_buffer,
-                basic_triangle::BasicTriangle { mvp },
-            );
+            gpu.write_uniform(&mut self.uniform_buffer, mvp);
         })
     }
 }

@@ -17,14 +17,6 @@ use crate::shaders::json::{ReflectedPipelineLayout, ReflectionJson};
 
 #[derive(Debug, Clone, Serialize)]
 #[repr(C, align(16))]
-pub struct BasicTriangle {
-    pub mvp: MVPMatrices,
-}
-
-impl GPUWrite for BasicTriangle {}
-
-#[derive(Debug, Clone, Serialize)]
-#[repr(C, align(16))]
 pub struct MVPMatrices {
     pub model: glam::Mat4,
     pub view: glam::Mat4,
@@ -45,7 +37,7 @@ impl GPUWrite for Vertex {}
 pub struct Resources<'a> {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
-    pub basic_triangle_buffer: &'a UniformBufferHandle<BasicTriangle>,
+    pub mvp_buffer: &'a UniformBufferHandle<MVPMatrices>,
 }
 
 impl VertexDescription for Vertex {
@@ -99,7 +91,7 @@ impl Shader {
         // NOTE this must be in descriptor set layout order in the reflection json
         #[rustfmt::skip]
         let uniform_buffer_handles = vec![
-            RawUniformBufferHandle::from_typed(resources.basic_triangle_buffer),
+            RawUniformBufferHandle::from_typed(resources.mvp_buffer),
         ];
 
         PipelineConfig {
@@ -153,10 +145,6 @@ impl Shader {
 impl ShaderAtlasEntry for Shader {
     fn source_file_name(&self) -> &str {
         &self.reflection_json.source_file_name
-    }
-
-    fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<BasicTriangle>() as u64]
     }
 
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {

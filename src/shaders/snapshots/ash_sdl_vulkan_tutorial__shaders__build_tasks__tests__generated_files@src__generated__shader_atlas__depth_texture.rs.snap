@@ -172,10 +172,6 @@ impl ShaderAtlasEntry for Shader {
         &self.reflection_json.source_file_name
     }
 
-    fn uniform_buffer_sizes(&self) -> Vec<u64> {
-        vec![std::mem::size_of::<DepthTexture>() as u64]
-    }
-
     fn vertex_binding_descriptions(&self) -> Vec<vk::VertexInputBindingDescription> {
         Vertex::binding_descriptions()
     }

@@ -4,7 +4,7 @@ module basic_triangle;
 
 import mvp;
 
-ParameterBlock<BasicTriangle> basicTriangle;
+ParameterBlock<MVPMatrices> mvp;
 
 struct BasicTriangle {
     MVPMatrices mvp;
@@ -22,7 +22,7 @@ struct FragVertex {
 
 [shader("vertex")]
 FragVertex vertexMain(Vertex vertex) {
-    let position = basicTriangle.mvp.project(vertex.position);
+    let position = mvp.project(vertex.position);
     return FragVertex(position, vertex.color);
 }
 
