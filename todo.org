@@ -1,11 +1,16 @@
 #+title: Todo
 
 * Current
-- [-] handle slang modules in codegen
-  ie, allow a shared MVPMatrices type
-  - [X] use a suffix to designate which slang files are shaders
-  - [X] move MVP types to a module
-  - [ ] generate a single rust type for the module
+- [ ] split into crate workspace
+  - [ ] make codegen runnable if game doesn't compile
+  - [ ] move game code into examples
+  - [ ] aim for supporting roc/mun/luau
+
+- [ ] support more parameter types
+  - [ ] write-only storage buffers
+  - [ ] read-write storage buffers
+    for supporting 'picking' / mouse interaction
+  - [ ] push constants?
 
 * Next
 - [ ] signed distance fields / animated rick example
@@ -20,9 +25,12 @@
   - could there be a good way to control the sdf shapes from the cpu?
     ie provide storage/structured buffer(s) circles/ellipses/etc
 
-- [ ] move to using a cargo workspace
-  - new git repo
-  - plan for supporting roc
+- [-] handle slang modules in codegen
+  ie, allow a shared MVPMatrices type
+  - [X] use a suffix to designate which slang files are shaders
+  - [X] move MVP types to a module
+  - [ ] generate a single rust type for the module
+    https://discord.com/channels/1303735196696445038/1437915884034326608/1437915884034326608
 
 - [ ] is align(16) doing the right thing for Vertex?
   or is it doing anything?
