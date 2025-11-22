@@ -27,7 +27,7 @@ FragVertex vertMain(uint vertexIndex : SV_VertexID, Vertex vertex) {
     if (vertexIndex == 0) {
         // this is intended as a demo/test of shader printf; it's pretty noisy
         printf(
-          "first vertex position: %u, %u, %u\n",
+          "first vertex position: %f, %f, %f\n",
           position.x, position.y, position.z
         );
     }
