@@ -1,13 +1,11 @@
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use anyhow::Context;
 use glam::{Mat4, Vec2, Vec3};
-use image::{DynamicImage, ImageReader};
 
 use crate::renderer::{PipelineHandle, Renderer, TextureHandle, UniformBufferHandle};
 use crate::shaders::atlas::*;
-use crate::util::manifest_path;
+use crate::util::*;
 
 use super::shaders::COLUMN_MAJOR;
 
@@ -119,131 +117,6 @@ impl Game for VikingRoom {
             );
         })
     }
-}
-
-#[allow(unused)]
-pub struct DepthTextureGame {
-    start_time: Instant,
-    pipeline: PipelineHandle,
-    texture: TextureHandle,
-    uniform_buffer: UniformBufferHandle<depth_texture::DepthTexture>,
-}
-
-#[allow(unused)]
-impl DepthTextureGame {
-    fn load_vertices() -> anyhow::Result<(Vec<depth_texture::Vertex>, Vec<u32>)> {
-        let vertices = vec![
-            depth_texture::Vertex {
-                position: Vec3::new(-0.5, -0.5, 0.0),
-                color: Vec3::new(1.0, 0.0, 0.0),
-                tex_coord: Vec2::new(1.0, 0.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(0.5, -0.5, 0.0),
-                color: Vec3::new(0.0, 1.0, 0.0),
-                tex_coord: Vec2::new(0.0, 0.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(0.5, 0.5, 0.0),
-                color: Vec3::new(0.0, 0.0, 1.0),
-                tex_coord: Vec2::new(0.0, 1.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(-0.5, 0.5, 0.0),
-                color: Vec3::new(1.0, 1.0, 1.0),
-                tex_coord: Vec2::new(1.0, 1.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(-0.5, -0.5, -0.5),
-                color: Vec3::new(1.0, 0.0, 0.0),
-                tex_coord: Vec2::new(1.0, 0.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(0.5, -0.5, -0.5),
-                color: Vec3::new(0.0, 1.0, 0.0),
-                tex_coord: Vec2::new(0.0, 0.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(0.5, 0.5, -0.5),
-                color: Vec3::new(0.0, 0.0, 1.0),
-                tex_coord: Vec2::new(0.0, 1.0),
-            },
-            depth_texture::Vertex {
-                position: Vec3::new(-0.5, 0.5, -0.5),
-                color: Vec3::new(1.0, 1.0, 1.0),
-                tex_coord: Vec2::new(1.0, 1.0),
-            },
-        ];
-
-        #[rustfmt::skip]
-        let indices = vec![
-            0, 1, 2, 2, 3, 0,
-            4, 5, 6, 6, 7, 4,
-        ];
-
-        Ok((vertices, indices))
-    }
-}
-
-impl Game for DepthTextureGame {
-    fn window_title() -> &'static str {
-        "Depth Texture"
-    }
-
-    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        let (vertices, indices) = Self::load_vertices()?;
-
-        const IMAGE_FILE_NAME: &str = "texture.jpg";
-        let image = load_image(IMAGE_FILE_NAME)?;
-
-        let shader_atlas = ShaderAtlas::init();
-        let shader = shader_atlas.depth_texture;
-
-        let texture = renderer.create_texture(IMAGE_FILE_NAME, &image)?;
-        let uniform_buffer = renderer.create_uniform_buffer::<depth_texture::DepthTexture>()?;
-        let resources = depth_texture::Resources {
-            vertices,
-            indices,
-            texture: &texture,
-            depth_texture_buffer: &uniform_buffer,
-        };
-        let pipeline_config = shader.pipeline_config(resources);
-        let pipeline = renderer.create_pipeline(pipeline_config)?;
-
-        let start_time = Instant::now();
-
-        Ok(Self {
-            start_time,
-            pipeline,
-            texture,
-            uniform_buffer,
-        })
-    }
-
-    fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()> {
-        let aspect_ratio = renderer.aspect_ratio();
-        renderer.draw_frame(&self.pipeline, |gpu| {
-            let elapsed = Instant::now() - self.start_time;
-            let mvp = make_mvp_matrices(elapsed, aspect_ratio, COLUMN_MAJOR);
-            gpu.write_uniform(
-                &mut self.uniform_buffer,
-                depth_texture::DepthTexture { mvp },
-            );
-        })
-    }
-}
-
-fn load_image(file_name: &str) -> anyhow::Result<DynamicImage> {
-    let file_path = manifest_path(["textures", file_name]);
-    let image = ImageReader::open(&file_path)
-        .with_context(|| format!("failed to open image: {file_path:?}"))?
-        .decode()
-        .with_context(|| format!("failed to decode image: {file_path:?}"))?;
-
-    Ok(image)
 }
 
 fn make_mvp_matrices(

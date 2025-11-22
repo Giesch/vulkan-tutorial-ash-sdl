@@ -4,7 +4,7 @@
 - [-] split into crate workspace
   - [-] move game code into examples
     - [X] basic triangle
-    - [ ] depth texture
+    - [X] depth texture
     - [ ] viking room
   - [ ] move generated example code into example dirs
   - [ ] make codegen runnable if game doesn't compile

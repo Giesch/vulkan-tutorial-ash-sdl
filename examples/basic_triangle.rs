@@ -3,8 +3,9 @@ use glam::{Mat4, Vec3};
 use ash_sdl_vulkan_tutorial::game::Game;
 use ash_sdl_vulkan_tutorial::renderer::{PipelineHandle, Renderer, UniformBufferHandle};
 use ash_sdl_vulkan_tutorial::shaders::COLUMN_MAJOR;
-use ash_sdl_vulkan_tutorial::shaders::atlas::basic_triangle::*;
-use ash_sdl_vulkan_tutorial::shaders::atlas::*;
+use ash_sdl_vulkan_tutorial::shaders::atlas::ShaderAtlas;
+
+use ash_sdl_vulkan_tutorial::generated::shader_atlas::basic_triangle::*;
 
 fn main() -> Result<(), anyhow::Error> {
     BasicTriangle::run()
@@ -20,27 +21,11 @@ impl Game for BasicTriangle {
     where
         Self: Sized,
     {
-        let vertices = vec![
-            Vertex {
-                position: Vec3::new(-1.0, -1.0, 0.0),
-                color: Vec3::new(1.0, 0.0, 0.0),
-            },
-            Vertex {
-                position: Vec3::new(1.0, -1.0, 0.0),
-                color: Vec3::new(0.0, 1.0, 0.0),
-            },
-            Vertex {
-                position: Vec3::new(0.0, 1.0, 0.0),
-                color: Vec3::new(0.0, 0.0, 1.0),
-            },
-        ];
-        let indices = vec![0, 1, 2];
-
         let uniform_buffer = renderer.create_uniform_buffer::<MVPMatrices>()?;
 
         let resources = Resources {
-            vertices,
-            indices,
+            vertices: VERTICES.to_vec(),
+            indices: INDICES.to_vec(),
             mvp_buffer: &uniform_buffer,
         };
 
@@ -63,6 +48,23 @@ impl Game for BasicTriangle {
         })
     }
 }
+
+const VERTICES: [Vertex; 3] = [
+    Vertex {
+        position: Vec3::new(-1.0, -1.0, 0.0),
+        color: Vec3::new(1.0, 0.0, 0.0),
+    },
+    Vertex {
+        position: Vec3::new(1.0, -1.0, 0.0),
+        color: Vec3::new(0.0, 1.0, 0.0),
+    },
+    Vertex {
+        position: Vec3::new(0.0, 1.0, 0.0),
+        color: Vec3::new(0.0, 0.0, 1.0),
+    },
+];
+
+const INDICES: [u32; 3] = [0, 1, 2];
 
 fn make_basic_mvp_matrices(aspect_ratio: f32, column_major: bool) -> MVPMatrices {
     let model = Mat4::IDENTITY;
