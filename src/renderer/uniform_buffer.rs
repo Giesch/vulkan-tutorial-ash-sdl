@@ -6,7 +6,7 @@ use ash::vk;
 #[derive(Debug)]
 pub struct UniformBufferHandle<T> {
     index: usize,
-    phantom_data: PhantomData<T>,
+    _phantom_data: PhantomData<T>,
 }
 
 pub(super) struct RawUniformBuffer {
@@ -27,7 +27,7 @@ impl UniformBufferStorage {
     pub fn add<T>(&mut self, buffers_per_frame: Vec<RawUniformBuffer>) -> UniformBufferHandle<T> {
         let handle = UniformBufferHandle {
             index: self.0.len(),
-            phantom_data: PhantomData::<T>,
+            _phantom_data: PhantomData::<T>,
         };
 
         self.0.push(Some(buffers_per_frame));
