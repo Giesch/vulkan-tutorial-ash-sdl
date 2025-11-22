@@ -1,9 +1,13 @@
 #+title: Todo
 
 * Current
-- [ ] split into crate workspace
+- [-] split into crate workspace
+  - [-] move game code into examples
+    - [X] basic triangle
+    - [ ] depth texture
+    - [ ] viking room
+  - [ ] move generated example code into example dirs
   - [ ] make codegen runnable if game doesn't compile
-  - [ ] move game code into examples
   - [ ] aim for supporting roc/mun/luau
 
 - [ ] support more parameter types
@@ -11,6 +15,9 @@
   - [ ] read-write storage buffers
     for supporting 'picking' / mouse interaction
   - [ ] push constants?
+
+- [ ] use do_not_recommend for Game subtraits
+  https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/#hiding-trait-implementations-from-diagnostics
 
 * Next
 - [ ] signed distance fields / animated rick example

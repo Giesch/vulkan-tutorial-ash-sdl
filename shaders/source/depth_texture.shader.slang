@@ -26,14 +26,16 @@ FragVertex vertMain(uint vertexIndex : SV_VertexID, Vertex vertex) {
 
     if (vertexIndex == 0) {
         // this is intended as a demo/test of shader printf; it's pretty noisy
-        printf("first vertex position: %u, %u, %u\n", position.x, position.y, position.z);
+        printf(
+          "first vertex position: %u, %u, %u\n",
+          position.x, position.y, position.z
+        );
     }
 
     return FragVertex(position, vertex.color, vertex.texCoord);
 }
 
-struct FragVertex
-{
+struct FragVertex {
     float4 position : SV_Position;
     float3 color;
     float2 texCoord;

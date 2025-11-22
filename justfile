@@ -15,8 +15,8 @@ alias c := check
 
 
 # run dev build with shader hot reload
-dev:
-    cargo run
+dev example="basic_triangle":
+    cargo run --example {{example}}
 alias d := dev
 
 

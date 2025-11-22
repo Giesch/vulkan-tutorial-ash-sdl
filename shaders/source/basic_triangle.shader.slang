@@ -6,10 +6,6 @@ import mvp;
 
 ParameterBlock<MVPMatrices> mvp;
 
-struct BasicTriangle {
-    MVPMatrices mvp;
-}
-
 struct Vertex {
     float3 position;
     float3 color;

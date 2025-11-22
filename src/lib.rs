@@ -1,8 +1,8 @@
-mod app;
-mod game;
-mod generated;
-mod renderer;
-mod shaders;
+pub mod app;
+pub mod game;
+pub mod generated;
+pub mod renderer;
+pub mod shaders;
 pub mod util;
 
 #[cfg(debug_assertions)]
