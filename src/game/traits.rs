@@ -70,37 +70,12 @@ pub struct WindowDescription {
     pub height: u32,
 }
 
-/// methods called during initial window setup
-pub trait GameSetup {
-    fn window_description() -> WindowDescription;
-
-    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
-    where
-        Self: Sized;
-}
-
 /// methods used after initialization
 /// this trait needs to be object-safe
 pub trait RuntimeGame {
     fn draw_frame(&mut self, renderer: &mut Renderer) -> anyhow::Result<()>;
 
     fn frame_delay(&self) -> Duration;
-}
-
-impl<G> GameSetup for G
-where
-    G: Game,
-{
-    fn window_description() -> WindowDescription {
-        G::window_description()
-    }
-
-    fn setup(renderer: &mut Renderer) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        G::setup(renderer)
-    }
 }
 
 impl<G> RuntimeGame for G

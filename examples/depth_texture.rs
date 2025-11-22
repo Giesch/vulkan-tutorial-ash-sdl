@@ -7,9 +7,9 @@ use ash_sdl_vulkan_tutorial::renderer::{
     PipelineHandle, Renderer, TextureHandle, UniformBufferHandle,
 };
 use ash_sdl_vulkan_tutorial::shaders::COLUMN_MAJOR;
-use ash_sdl_vulkan_tutorial::shaders::atlas::ShaderAtlas;
 use ash_sdl_vulkan_tutorial::util::load_image;
 
+use ash_sdl_vulkan_tutorial::generated::shader_atlas::ShaderAtlas;
 use ash_sdl_vulkan_tutorial::generated::shader_atlas::depth_texture::*;
 
 fn main() -> Result<(), anyhow::Error> {

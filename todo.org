@@ -2,10 +2,10 @@
 
 * Current
 - [-] split into crate workspace
-  - [-] move game code into examples
+  - [X] move game code into examples
     - [X] basic triangle
     - [X] depth texture
-    - [ ] viking room
+    - [X] viking room
   - [ ] move generated example code into example dirs
   - [ ] make codegen runnable if game doesn't compile
   - [ ] aim for supporting roc/mun/luau

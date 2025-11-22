@@ -2,8 +2,6 @@ use std::ffi::CString;
 
 use ash::vk;
 
-pub use crate::generated::shader_atlas::*;
-
 use crate::renderer::LayoutDescription;
 
 use super::json::ReflectedPipelineLayout;
