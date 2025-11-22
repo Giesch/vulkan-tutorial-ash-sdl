@@ -1,26 +1,16 @@
 #+title: Todo
 
 * Current
-- [-] split into crate workspace
-  - [X] move game code into examples
-    - [X] basic triangle
-    - [X] depth texture
-    - [X] viking room
-  - [ ] move generated example code into example dirs
-  - [ ] make codegen runnable if game doesn't compile
-  - [ ] aim for supporting roc/mun/luau
-
 - [ ] support more parameter types
   - [ ] write-only storage buffers
   - [ ] read-write storage buffers
-    for supporting 'picking' / mouse interaction
   - [ ] push constants?
 
 - [ ] use do_not_recommend for Game subtraits
   https://blog.rust-lang.org/2025/02/20/Rust-1.85.0/#hiding-trait-implementations-from-diagnostics
 
 * Next
-- [ ] signed distance fields / animated rick example
+- [ ] 2D signed distance fields / animated rick example
   [[https://danielchasehooper.com/posts/code-animated-rick]]
   - this will be an example that needs no extra resources
     at least as written
@@ -32,12 +22,18 @@
   - could there be a good way to control the sdf shapes from the cpu?
     ie provide storage/structured buffer(s) circles/ellipses/etc
 
+- [ ] 3D signed distance fields / shape up clone
+  - requires read/write storage buffers (for gpu-based object picking)
+
 - [-] handle slang modules in codegen
   ie, allow a shared MVPMatrices type
   - [X] use a suffix to designate which slang files are shaders
   - [X] move MVP types to a module
   - [ ] generate a single rust type for the module
     https://discord.com/channels/1303735196696445038/1437915884034326608/1437915884034326608
+    got no response; is there a workaround?
+    - recognize when an equivalent struct is generated multiple times
+      move all shared rust structs to one shared rust module
 
 - [ ] is align(16) doing the right thing for Vertex?
   or is it doing anything?
